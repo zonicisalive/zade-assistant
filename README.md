@@ -17,7 +17,7 @@ Train the "Zade" wake word: see `docs/superpowers/plans/2026-09-23-zade-v1.md`, 
 
 ## Run
 
-- Foreground: `uv run zade`
+- Foreground: `uv run python -m zade`
 - Service: `cp systemd/zade.service ~/.config/systemd/user/ && systemctl --user enable --now zade`, logs with `journalctl --user -u zade -f`
 - Tests: `uv run pytest`
 
