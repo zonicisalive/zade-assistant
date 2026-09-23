@@ -24,6 +24,12 @@ CREATE TABLE IF NOT EXISTS declined (
   action TEXT NOT NULL,
   PRIMARY KEY (text, action)
 );
+CREATE TABLE IF NOT EXISTS reminders (
+  id       INTEGER PRIMARY KEY,
+  due      REAL    NOT NULL,          -- unix time
+  message  TEXT    NOT NULL,
+  repeat_s REAL                       -- NULL = once; 86400 = daily
+);
 CREATE TABLE IF NOT EXISTS facts (
   id      INTEGER PRIMARY KEY,
   fact    TEXT NOT NULL UNIQUE,
@@ -110,3 +116,35 @@ def forget_fact(conn, query):
 
 def facts(conn, limit=50):
     return [f for (f,) in conn.execute("SELECT fact FROM facts ORDER BY id DESC LIMIT ?", (limit,))]
+
+
+def add_reminder(conn, due, message, repeat_s=None):
+    conn.execute("INSERT INTO reminders (due, message, repeat_s) VALUES (?, ?, ?)", (due, message, repeat_s))
+    conn.commit()
+
+
+def due_reminders(conn, now):
+    """Messages due by `now`; one-off reminders are removed, repeating ones move to their next time."""
+    rows = conn.execute("SELECT id, due, message, repeat_s FROM reminders WHERE due <= ? ORDER BY due",
+                        (now,)).fetchall()
+    for rid, due, _, repeat_s in rows:
+        if repeat_s:
+            while due <= now:
+                due += repeat_s
+            conn.execute("UPDATE reminders SET due = ? WHERE id = ?", (due, rid))
+        else:
+            conn.execute("DELETE FROM reminders WHERE id = ?", (rid,))
+    conn.commit()
+    return [m for _, _, m, _ in rows]
+
+
+def reminders(conn):
+    return conn.execute("SELECT due, message, repeat_s FROM reminders ORDER BY due").fetchall()
+
+
+def cancel_reminder(conn, query):
+    if not query.strip():
+        return 0
+    cur = conn.execute("DELETE FROM reminders WHERE message LIKE ?", (f"%{query.strip()}%",))
+    conn.commit()
+    return cur.rowcount

@@ -71,6 +71,17 @@ def parse_pattern(text, find_app):
         return {"name": "set_timer", "args": {"seconds": _seconds(m[1], m[2]), "message": m[3]}}
     if m := re.fullmatch(r"(?:what's |what is |how's |how is )?(?:the )?weather(?: like)?(?: (today|tomorrow))?", text):
         return {"name": "weather", "args": {"day": 1} if m[1] == "tomorrow" else {}}
+    if m := re.fullmatch(r"(?:how hot is|how's|how is|what's using|what is using|check)?(?: my| the)? ?"
+                         r"(gpu|cpu|processor|graphics card|ram|memory)(?: temperature| temp| usage| load)?"
+                         r"(?: is free| free| left| doing)?", text):
+        what = {"processor": "cpu", "graphics card": "gpu", "memory": "ram"}.get(m[1], m[1])
+        return {"name": "system_status", "args": {"what": what}}
+    if m := re.fullmatch(r"how much (ram|memory)(?: is)?(?: free| used| left)?", text):
+        return {"name": "system_status", "args": {"what": "ram"}}
+    if re.fullmatch(r"(?:system|pc|computer) (?:status|stats|health)", text):
+        return {"name": "system_status", "args": {"what": "all"}}
+    if re.fullmatch(r"(?:what are|list|read|show)(?: me)? my reminders", text):
+        return {"name": "list_reminders", "args": {}}
     if re.fullmatch(r"(?:sync|refresh|rescan)(?: my| the)?(?: apps| applications| games)?", text):
         return {"name": "sync_apps", "args": {}}
     if m := re.fullmatch(r"type (.+)", text):

@@ -119,21 +119,40 @@ def test_safe_handle_survives_any_error():
 def test_info_tools_and_timer(monkeypatch):
     from zade import info
 
-    said, timers = [], []
+    said = []
     monkeypatch.setattr(info, "weather", lambda place="", day=0: f"weather {place} {day}")
     ctx = make(said, ask=lambda text, facts, cfg, run_tool, history=(): " | ".join([
         run_tool("weather", {"place": "Mumbai", "day": 1}),
         run_tool("set_timer", {"seconds": 300, "message": "check the oven"}),
-    ]), start_timer=lambda s, fn: timers.append((s, fn)))
+    ]))
     z.handle(ctx, "weather tomorrow and remind me in 5 minutes")
     assert said == ["weather Mumbai 1 | Timer set for 5 minutes."]
-    assert timers[0][0] == 300
-    sent = []
-    monkeypatch.setattr(actions, "_call", sent.append)
-    timers[0][1]()  # the timer fires
-    assert ctx.alerts == ["check the oven"]
-    assert sent == []  # spoken + overlay only, no desktop notification
+    (due, message, repeat), = memory.reminders(ctx.conn)  # stored, so it survives a restart
+    assert message == "check the oven" and repeat is None
+    assert z.pump_reminders(ctx, due + 1) == 1 and ctx.alerts == ["check the oven"]
     assert memory.last_actions(ctx.conn) == [{"name": "weather", "args": {"place": "Mumbai", "day": 1}}]  # timer not learned
+
+
+def test_next_time():
+    import datetime as dt
+
+    now = dt.datetime(2026, 9, 23, 22, 30)
+    assert z.next_time("17:00", now) == dt.datetime(2026, 9, 24, 17, 0)  # already passed today
+    assert z.next_time("23:15", now) == dt.datetime(2026, 9, 23, 23, 15)
+    assert z.next_time("5 pm", now) == dt.datetime(2026, 9, 24, 17, 0)
+    assert z.next_time("9:30 am", now) == dt.datetime(2026, 9, 24, 9, 30)
+
+
+def test_daily_reminder_list_and_cancel():
+    said = []
+    ctx = make(said, ask=lambda text, facts, cfg, run_tool, history=(): run_tool(
+        "set_reminder", {"message": "drink water", "at": "9 am", "daily": True}))
+    z.handle(ctx, "every day at 9 remind me to drink water")
+    assert said[-1].startswith("Every day at 9:00 AM I'll remind you to drink water")
+    (_, _, repeat), = memory.reminders(ctx.conn)
+    assert repeat == 86400
+    assert "drink water" in z.dispatch(ctx, {"name": "list_reminders", "args": {}})[0]
+    assert z.dispatch(ctx, {"name": "cancel_reminder", "args": {"query": "water"}})[0] == "Cancelled 1 reminder."
 
 
 def test_followup_uses_recent_history():

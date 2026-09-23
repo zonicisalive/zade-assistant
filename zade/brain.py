@@ -66,6 +66,12 @@ TOOLS = [
     _t("brightness", "Monitor brightness: set to 0-100, or change by delta.",
        set={"type": "integer"}, delta={"type": "integer"}),
     _t("screenshot", "Take a screenshot of the screen."),
+    _t("set_reminder", "Remind the user at a clock time. at is like \"17:00\" or \"5 pm\"; daily repeats it "
+       "every day.", ["message", "at"], message=S, at=S, daily={"type": "boolean"}),
+    _t("list_reminders", "List the user's reminders."),
+    _t("cancel_reminder", "Cancel reminders whose text contains these words.", ["query"], query=S),
+    _t("system_status", "CPU/GPU temperature and load, memory use, top process.", ["what"],
+       what={"type": "string", "enum": ["all", "cpu", "gpu", "ram"]}),
     _t("sync_apps", "Rescan installed apps and games so their names are recognised."),
     _t("power", "Suspend, restart, shut down or log out. The user must confirm.", ["action"],
        action={"type": "string", "enum": ["suspend", "reboot", "shutdown", "logout"]}),

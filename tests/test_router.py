@@ -131,3 +131,14 @@ def test_time_and_date_patterns():
         assert P(t, find) == {"name": "time", "args": {}}, t
     for t in ["what's the date", "what's today's date", "what day is it", "what is the date today"]:
         assert P(t, find) == {"name": "date", "args": {}}, t
+
+
+def test_system_status_patterns():
+    P = router.parse_pattern
+    assert P("how hot is my gpu", find) == {"name": "system_status", "args": {"what": "gpu"}}
+    assert P("gpu temperature", find) == {"name": "system_status", "args": {"what": "gpu"}}
+    assert P("how hot is my cpu", find) == {"name": "system_status", "args": {"what": "cpu"}}
+    assert P("what's using my cpu", find) == {"name": "system_status", "args": {"what": "cpu"}}
+    assert P("how much ram is free", find) == {"name": "system_status", "args": {"what": "ram"}}
+    assert P("system status", find) == {"name": "system_status", "args": {"what": "all"}}
+    assert P("what are my reminders", find) == {"name": "list_reminders", "args": {}}

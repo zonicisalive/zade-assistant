@@ -73,3 +73,21 @@ def test_use_shortcut_counts(conn):
     memory.add_shortcut(conn, "dev", A)
     memory.use_shortcut(conn, "dev")
     assert conn.execute("SELECT uses FROM shortcuts WHERE phrase='dev'").fetchone()[0] == 1
+
+
+def test_reminders_fire_once_or_repeat(conn):
+    memory.add_reminder(conn, 100.0, "check the oven")
+    memory.add_reminder(conn, 150.0, "drink water", repeat_s=86400)
+    assert memory.due_reminders(conn, 99.0) == []
+    assert memory.due_reminders(conn, 200.0) == ["check the oven", "drink water"]
+    assert memory.due_reminders(conn, 201.0) == []  # one-off gone, repeat moved to tomorrow
+    assert [m for _, m, _ in memory.reminders(conn)] == ["drink water"]
+    assert memory.due_reminders(conn, 150.0 + 86400) == ["drink water"]
+
+
+def test_cancel_reminder(conn):
+    memory.add_reminder(conn, 100.0, "drink water", repeat_s=86400)
+    memory.add_reminder(conn, 100.0, "call mom")
+    assert memory.cancel_reminder(conn, "water") == 1
+    assert memory.cancel_reminder(conn, "  ") == 0
+    assert [m for _, m, _ in memory.reminders(conn)] == ["call mom"]

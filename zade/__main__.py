@@ -1,4 +1,5 @@
 import atexit
+import datetime
 import logging
 import os
 import pathlib
@@ -17,14 +18,8 @@ from . import actions, brain, config, info, memory, router
 log = logging.getLogger("zade")
 # Tools whose calls are never learned as shortcuts (memory, one-off content, or risky).
 STOP_WORDS = {"stop", "cancel", "never mind", "nevermind", "shut up", "quiet", "be quiet", "nothing"}
-MEMORY_TOOLS = {"sync_apps", "remember", "forget", "list_facts", "make_shortcut", "sleep", "set_timer", "note_add",
+MEMORY_TOOLS = {"system_status", "set_reminder", "list_reminders", "cancel_reminder", "sync_apps", "remember", "forget", "list_facts", "make_shortcut", "sleep", "set_timer", "note_add",
                 "notes_read", "web_answer", "clipboard_read", "clipboard_copy", "type_text", "power", "shell"}
-
-
-def _start_timer(seconds, fn):
-    t = threading.Timer(seconds, fn)
-    t.daemon = True
-    t.start()
 
 
 def _duration(seconds):
@@ -44,7 +39,6 @@ class Ctx:
     find_app: Callable = actions.find_app
     ask: Callable = brain.ask
     run_action: Callable = actions.run
-    start_timer: Callable = _start_timer
     alerts: list = field(default_factory=list)  # due reminders, spoken by the main loop when idle
     history: list = field(default_factory=list)  # (time, user text, reply) for follow-ups
     turn: list = field(default_factory=list)  # actions done so far in the current request
@@ -58,6 +52,28 @@ def fact_words(facts):
         for m in re.finditer(r"(?:name is|is called|called) (\w+)", f, re.IGNORECASE):
             out.append(m[1].capitalize())
     return list(dict.fromkeys(out))
+
+
+def next_time(at, now=None):
+    """Next occurrence of a clock time like "17:00", "5 pm" or "9:30 am"."""
+    m = re.fullmatch(r"\s*(\d{1,2})(?:[:.](\d{2}))?\s*([ap])?\.?\s*m?\.?\s*", at.lower())
+    if not m:
+        raise ValueError(f"I don't understand the time {at}.")
+    hour, minute = int(m[1]), int(m[2] or 0)
+    if m[3] == "p" and hour < 12:
+        hour += 12
+    if m[3] == "a" and hour == 12:
+        hour = 0
+    now = now or datetime.datetime.now()
+    t = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
+    return t if t > now else t + datetime.timedelta(days=1)
+
+
+def pump_reminders(ctx, now=None):
+    """Move due reminders into ctx.alerts (the main loop speaks them when idle). Returns how many."""
+    due = memory.due_reminders(ctx.conn, time.time() if now is None else now)
+    ctx.alerts.extend(due)
+    return len(due)
 
 
 def recent(ctx, now=None):
@@ -90,6 +106,10 @@ def dispatch(ctx, action):
         if name == "sleep":
             brain.unload(ctx.cfg)
             return "Going to sleep.", True
+        if name == "system_status":
+            from . import system
+
+            return system.status(a.get("what", "all")), True
         if name == "sync_apps":
             ctx.app_words[:] = actions.app_names()
             return f"Synced {actions.all_app_count()} apps.", True
@@ -103,12 +123,26 @@ def dispatch(ctx, action):
             return info.notes_read(ctx.cfg), True
         if name == "set_timer":
             seconds, message = int(a["seconds"]), a.get("message") or "Time's up."
-
-            def fire():  # spoken (and shown in the overlay) by the main loop when idle
-                ctx.alerts.append(message)
-
-            ctx.start_timer(seconds, fire)
+            memory.add_reminder(ctx.conn, time.time() + seconds, message)
             return f"Timer set for {_duration(seconds)}.", True
+        if name == "set_reminder":
+            t = next_time(a["at"])
+            daily = bool(a.get("daily"))
+            memory.add_reminder(ctx.conn, t.timestamp(), a["message"], 86400 if daily else None)
+            when = f"{t:%-I:%M %p}"
+            if daily:
+                return f"Every day at {when} I'll remind you to {a['message']}.", True
+            return f"At {when}{' tomorrow' if t.date() > datetime.date.today() else ''} I'll remind you to {a['message']}.", True
+        if name == "list_reminders":
+            rows = memory.reminders(ctx.conn)
+            if not rows:
+                return "You have no reminders.", True
+            items = [f"{m} {'every day at' if r else 'at'} {datetime.datetime.fromtimestamp(d):%-I:%M %p}"
+                     for d, m, r in rows]
+            return "Your reminders: " + "; ".join(items) + ".", True
+        if name == "cancel_reminder":
+            n = memory.cancel_reminder(ctx.conn, a["query"])
+            return (f"Cancelled {n} reminder{'s' if n != 1 else ''}." if n else "I found no reminder like that."), n > 0
         return ctx.run_action(action, ctx.confirm), True
     except actions.Failed as e:
         return str(e), False
@@ -277,7 +311,12 @@ def main():
     if overlay:
         atexit.register(overlay.terminate)
 
+    last_check = [0.0]
+
     def poll():
+        if time.monotonic() - last_check[0] >= 1:  # check stored reminders once a second
+            last_check[0] = time.monotonic()
+            pump_reminders(ctx)
         if ctx.alerts:
             return "alert"
         if trigger.is_set():
