@@ -75,8 +75,8 @@ ShellRoot {
 
     PanelWindow {
         anchors.top: true
-        exclusiveZone: 0                      // sit just below the bar, reserve nothing
-        margins.top: 4
+        exclusionMode: ExclusionMode.Ignore   // start at the very top edge, in line with the bar
+        margins.top: 0
         implicitWidth: 720
         implicitHeight: 280
         color: "transparent"
@@ -102,7 +102,7 @@ ShellRoot {
         Rectangle {
             id: island
             anchors.horizontalCenter: parent.horizontalCenter
-            y: root.shown ? 10 : -6
+            y: root.shown ? 8 : -height - 12  // drops down from above the screen edge
             width: root.expanded ? Math.min(560, Math.max(300, textCol.implicitWidth + 84)) : 128
             height: root.expanded ? Math.max(62, textCol.implicitHeight + 34) : 44
             radius: root.expanded ? 26 : 22
@@ -110,7 +110,7 @@ ShellRoot {
             border.width: 1
             border.color: Qt.alpha(root.c.outline_variant, 0.55)
             opacity: root.shown ? 1 : 0
-            scale: root.shown ? 1 : 0.9
+            scale: 1
             clip: true
 
             Behavior on width { SpringAnimation { spring: 3.2; damping: 0.32; epsilon: 0.3 } }
@@ -118,7 +118,7 @@ ShellRoot {
             Behavior on radius { NumberAnimation { duration: 260; easing.type: Easing.OutCubic } }
             Behavior on opacity { NumberAnimation { duration: 200 } }
             Behavior on scale { NumberAnimation { duration: 320; easing.type: Easing.OutBack } }
-            Behavior on y { NumberAnimation { duration: 320; easing.type: Easing.OutCubic } }
+            Behavior on y { NumberAnimation { duration: 380; easing.type: Easing.OutBack; easing.overshoot: 0.9 } }
 
             // The orb: breathes, swells with your voice, orbits while thinking, ripples while speaking.
             Item {
