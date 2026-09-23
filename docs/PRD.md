@@ -49,7 +49,7 @@ Zade must be fast, private by default, and light on the GPU. It uses no VRAM whi
  wake word (openWakeWord, CPU)  ── idle state, ~1–2% of one core
    │ detected ──────────────────────────► warm-up: preload Qwen if VRAM free (async)
    ▼
- record until silence (Silero VAD via openWakeWord)
+ record until silence (frame energy / RMS threshold)
    │
    ▼
  speech-to-text (faster-whisper small.en, CPU int8)
@@ -57,6 +57,7 @@ Zade must be fast, private by default, and light on the GPU. It uses no VRAM whi
    ▼
  router
    ├─ 1. shortcut match (rapidfuzz, score ≥ 90)            → action, instant
+   ├─ 1b. pattern match ("open X", "volume to N", "search for X") → action, instant
    ├─ 2. Laya decision over known actions + shortcuts
    │      conf ≥ 0.90  → action
    │      0.60–0.90    → "Did you mean X?" → yes/no
@@ -78,7 +79,7 @@ Zade must be fast, private by default, and light on the GPU. It uses no VRAM whi
 | Stage | Model | Device | Memory |
 |---|---|---|---|
 | Wake word | openWakeWord, custom-trained `zade` model | CPU | ~50 MB RAM |
-| VAD | Silero (bundled) | CPU | small |
+| End of speech | Frame energy (RMS) threshold | CPU | none |
 | STT | faster-whisper `small.en`, int8 | CPU | ~500 MB RAM |
 | Router | Laya (421M, `convaiinnovations/laya`), bf16 | CPU | ~0.9 GB RAM + ~0.4 GB PyTorch |
 | LLM | `qwen3:4b` Q4_K_M, thinking off, `num_ctx=4096` | GPU, CPU fallback | ~3.5 GB VRAM, only while active |
@@ -187,7 +188,7 @@ CREATE TABLE history (
   ts         TEXT    NOT NULL DEFAULT (datetime('now')),
   text       TEXT    NOT NULL,          -- normalized utterance
   action     TEXT    NOT NULL,          -- JSON: {"name": "open_app", "args": {...}}
-  source     TEXT    NOT NULL CHECK (source IN ('shortcut','laya','qwen')),
+  source     TEXT    NOT NULL CHECK (source IN ('shortcut','pattern','laya','llm')),
   ok         INTEGER NOT NULL
 );
 CREATE INDEX history_text ON history(text);
