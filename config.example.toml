@@ -50,6 +50,10 @@ enabled = true
 key = "KEY_LEFTMETA"        # the Win/Super key; e.g. KEY_RIGHTCTRL
 hold_s = 2.0                # keep holding after the beep while you talk; release = done
 
+[ui]
+# Top-center overlay (Quickshell) showing what Zade hears and says; follows your wallpaper colors.
+enabled = true
+
 [followup]
 # When Zade's reply is a question, listen this long for an answer (soft beep, no wake word).
 enabled = true

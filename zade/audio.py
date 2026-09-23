@@ -75,7 +75,7 @@ def wait_for_wake(stream, model, threshold, poll=None):
             return "wake"
 
 
-def record(stream, cfg, start_timeout_s=None, released=None, cancelled=None):
+def record(stream, cfg, start_timeout_s=None, released=None, cancelled=None, on_level=None):
     """Record one utterance. With `released` (push-to-talk), stop when it returns True, not on silence.
     `cancelled` returning True drops the recording (returns None)."""
     a = cfg["audio"]
@@ -85,6 +85,8 @@ def record(stream, cfg, start_timeout_s=None, released=None, cancelled=None):
         f = read(stream)
         frames.append(f)
         levels.append(rms(f))
+        if on_level is not None:
+            on_level(levels[-1] / (thr * 3))  # roughly 0..1 for the overlay's waveform
         if released is not None:
             if cancelled is not None and cancelled():
                 return None

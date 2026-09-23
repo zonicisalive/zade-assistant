@@ -41,6 +41,7 @@ DEFAULTS = {
     "hotkey": {"enabled": True, "key": "KEY_LEFTMETA", "hold_s": 2.0},
     "web": {"searxng_url": "http://127.0.0.1:8080"},
     "followup": {"enabled": True, "listen_s": 5.0, "history_turns": 3, "history_s": 120},
+    "ui": {"enabled": True},
     "learning": {"promote_after": 3},
     "paths": {"data": "~/.local/share/zade"},
 }

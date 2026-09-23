@@ -1,3 +1,4 @@
+import atexit
 import logging
 import os
 import pathlib
@@ -190,7 +191,7 @@ def laya_predictor(cfg):
 
 
 def main():
-    from . import audio, stt, tts
+    from . import audio, stt, tts, ui
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     cfg = config.load()
@@ -213,8 +214,15 @@ def main():
         ptt = hotkey.watch(cfg, trigger)
 
     def hear(timeout=None, released=None, cancelled=None):
-        a = audio.record(stream, cfg, timeout, released, cancelled)
-        return None if a is None else stt.transcribe(a, cfg, hotwords=list(memory.shortcuts(conn)))
+        ui.show("listening", heard="", reply="")
+        a = audio.record(stream, cfg, timeout, released, cancelled, on_level=ui.level)
+        if a is None:
+            ui.show("idle")
+            return None
+        ui.show("thinking")
+        text = stt.transcribe(a, cfg, hotwords=list(memory.shortcuts(conn)))
+        ui.show("thinking", heard=text.strip())
+        return text
 
     spoke_at = []
     barge = []  # why speech was interrupted ("wake" or "hotkey"); empty when not interrupted
@@ -236,8 +244,10 @@ def main():
             return
         spoke_at.append(time.perf_counter())
         wake.reset()
+        ui.show("speaking", reply=tts.clean(text))
         if not tts.speak(text, cfg, interrupt=interrupted):
             audio.drain(stream)
+        ui.show("done")
 
     def confirm(question):
         say(question)
@@ -246,6 +256,9 @@ def main():
         return actions.is_yes(hear(5.0) or "")
 
     ctx = Ctx(cfg, conn, say, confirm, predict=laya_predictor(cfg))
+    overlay = ui.start(cfg)
+    if overlay:
+        atexit.register(overlay.terminate)
 
     def poll():
         if ctx.alerts:
@@ -259,6 +272,8 @@ def main():
         t = time.perf_counter()
         spoke_at.clear()
         reply = safe_handle(ctx, text)
+        if not spoke_at:  # stayed silent (nothing said, or "stop"): hide the overlay
+            ui.show("idle")
         log.info("heard %r, replied after %.2fs (speech threshold %d)", text,
                  (spoke_at[0] if spoke_at else time.perf_counter()) - t,
                  audio.speech_threshold(audio.noise, cfg["audio"]["rms_threshold"], cfg["audio"]["noise_factor"]))
