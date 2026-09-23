@@ -15,6 +15,7 @@ dependencies = [
   "openai>=1.40",
   "laya",
   "torch",
+  "kokoro-onnx>=0.6.1",
 ]
 
 [project.scripts]

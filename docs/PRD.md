@@ -68,7 +68,7 @@ Zade must be fast, private by default, and light on the GPU. It uses no VRAM whi
  actions (allowlist runs directly; shell commands need spoken confirmation)
    │
    ▼
- text-to-speech (Piper, CPU) → speakers
+ text-to-speech (Kokoro, CPU; Piper fallback) → speakers
    │
    ▼
  memory (SQLite): log history, update counts, propose shortcuts
@@ -83,7 +83,7 @@ Zade must be fast, private by default, and light on the GPU. It uses no VRAM whi
 | STT | faster-whisper `base.en`, int8 | CPU | ~200 MB RAM |
 | Router | Laya (421M, `convaiinnovations/laya`), bf16 | CPU | ~0.9 GB RAM + ~0.4 GB PyTorch |
 | LLM | `qwen3:4b-instruct` Q4_K_M (non-thinking), `num_ctx=4096` | GPU, CPU fallback | ~3.5 GB VRAM, only while active |
-| TTS | Piper `en_US-lessac-medium` | CPU | ~100 MB RAM |
+| TTS | Kokoro (`kokoro-onnx`, voice `af_heart`, speed 1.2), Piper as fallback | CPU | ~400 MB RAM |
 
 faster-whisper (CTranslate2) has no ROCm backend, so STT runs on the CPU; `base.en` transcribes a short command in about 250 ms (measured; `small.en` took ~730 ms). Laya also runs on the CPU so that it never takes VRAM. The M0 spike (section 12) measures its latency; if it is too slow on the CPU, running it on the GPU costs under 1 GB.
 
@@ -108,7 +108,7 @@ Each stage has a `provider` setting. The default is local for all three.
 |---|---|---|
 | STT | `whisper` (faster-whisper) | `openai` — any OpenAI-compatible `/audio/transcriptions` endpoint (OpenAI, Groq) |
 | LLM | `ollama` | `anthropic` — Claude through the official `anthropic` Python SDK; `openai` — any OpenAI-compatible chat endpoint (OpenAI, Google Gemini's OpenAI-compatible endpoint, OpenRouter, Groq, DeepSeek, Mistral) |
-| TTS | `piper` | `openai` — any OpenAI-compatible `/audio/speech` endpoint |
+| TTS | `kokoro` (Piper as fallback) | `openai` — any OpenAI-compatible `/audio/speech` endpoint |
 
 - One `openai` provider covers most vendors: each one is just a `base_url`, an API key environment variable and a model name. Gemini goes through its OpenAI-compatible endpoint (`https://generativelanguage.googleapis.com/v1beta/openai/`), so it needs no separate client.
 - Claude uses the native `anthropic` SDK rather than an OpenAI-compatible shim, for reliable tool calling. Its default model in the example config is `claude-opus-5`; a faster, cheaper model such as `claude-haiku-4-5` can be set in `llm.model` if latency matters more than capability.

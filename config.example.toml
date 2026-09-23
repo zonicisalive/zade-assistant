@@ -19,7 +19,9 @@ fallback = "cpu"            # cpu | none | anthropic | openai
 provider = "whisper"        # whisper | openai
 
 [tts]
-provider = "piper"          # piper | openai
+provider = "kokoro"         # kokoro | piper | openai
+voice = "af_heart"          # Kokoro voice; b* voices (bf_emma, bm_george) are British
+speed = 1.2
 
 [providers.anthropic]
 model = "claude-opus-5"

@@ -32,7 +32,7 @@ DEFAULTS = {
             "tts_voice": "alloy",
         },
     },
-    "tts": {"provider": "piper", "voice": "en_US-lessac-medium"},
+    "tts": {"provider": "kokoro", "voice": "af_heart", "speed": 1.2, "piper_voice": "en_US-lessac-medium"},
     "learning": {"promote_after": 3},
     "paths": {"data": "~/.local/share/zade"},
 }

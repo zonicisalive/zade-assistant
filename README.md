@@ -10,6 +10,7 @@ ollama pull qwen3:4b-instruct
 uv python install 3.11 && uv sync
 mkdir -p ~/.local/share/zade/voices ~/.config/zade
 uv run python -m piper.download_voices en_US-lessac-medium --data-dir ~/.local/share/zade/voices
+mkdir -p ~/.local/share/zade/kokoro && for f in kokoro-v1.0.onnx voices-v1.0.bin; do curl -L -o ~/.local/share/zade/kokoro/$f https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/$f; done
 cp config.example.toml ~/.config/zade/config.toml
 ```
 
