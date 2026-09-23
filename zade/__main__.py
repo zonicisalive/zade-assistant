@@ -213,6 +213,8 @@ def main():
 
         ptt = hotkey.watch(cfg, trigger)
 
+    app_words = actions.app_names()  # your installed apps and games, so Whisper expects their names
+
     def hear(timeout=None, released=None, cancelled=None):
         ui.show("listening", heard="", reply="")
         a = audio.record(stream, cfg, timeout, released, cancelled, on_level=ui.level)
@@ -220,7 +222,7 @@ def main():
             ui.show("idle")
             return None
         ui.show("thinking")
-        text = stt.transcribe(a, cfg, hotwords=list(memory.shortcuts(conn)))
+        text = stt.transcribe(a, cfg, hotwords=[*memory.shortcuts(conn), *app_words])
         ui.show("thinking", heard=text.strip())
         return text
 

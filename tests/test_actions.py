@@ -163,3 +163,19 @@ def test_open_app_falls_back_to_website(monkeypatch):
     monkeypatch.setattr(actions, "find_app", lambda name: None)
     actions.run({"name": "open_app", "args": {"name": "Netflix"}}, lambda q: True)
     assert calls == [["xdg-open", "https://www.netflix.com"]]
+
+
+def test_user_app_names_for_hotwords(tmp_path):
+    (tmp_path / "game.desktop").write_text(
+        "[Desktop Entry]\nName=MECCHA CHAMELEON\nExec=steam steam://rungameid/4704690\n")
+    (tmp_path / "tg.desktop").write_text("[Desktop Entry]\nName=Telegram\nExec=telegram-desktop\n")
+    (tmp_path / "hidden.desktop").write_text("[Desktop Entry]\nName=Hidden\nExec=x\nNoDisplay=true\n")
+    assert sorted(actions.app_names([tmp_path])) == ["MECCHA CHAMELEON", "Telegram"]
+
+
+def test_closing_a_steam_game_never_kills_steam(monkeypatch):
+    calls = _calls(monkeypatch)
+    monkeypatch.setattr(actions, "find_app", lambda name: ("MECCHA CHAMELEON", "steam"))
+    with pytest.raises(actions.Failed, match="Steam"):
+        actions.run({"name": "close_app", "args": {"name": "meccha chameleon"}}, lambda q: True)
+    assert calls == []

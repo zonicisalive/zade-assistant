@@ -61,6 +61,25 @@ def find_app(name, dirs=APP_DIRS):
     return apps[m[0]] if m else None
 
 
+USER_APP_DIRS = [pathlib.Path("~/.local/share/applications").expanduser()]
+
+
+def app_names(dirs=USER_APP_DIRS):
+    """Names of user-installed apps and games (e.g. Steam), for speech-recognition hotwords."""
+    names = []
+    for d in dirs:
+        for f in sorted(d.glob("*.desktop")) if d.exists() else []:
+            cp = configparser.ConfigParser(interpolation=None, strict=False)
+            try:
+                cp.read(f, encoding="utf-8")
+                e = cp["Desktop Entry"]
+            except (configparser.Error, KeyError, UnicodeDecodeError):
+                continue
+            if e.get("NoDisplay") != "true" and e.get("Name"):
+                names.append(e["Name"])
+    return list(dict.fromkeys(names))
+
+
 def _call(cmd):
     subprocess.run(cmd, check=False, capture_output=True)
 
@@ -133,6 +152,8 @@ def run(action, confirm):
             raise Failed(f"I couldn't find {a['name']}.")
         if name == "open_app":
             _spawn(["gtk-launch", app[0]])
+        elif app[1] == "steam":  # a Steam game's launcher is Steam itself; pkill would close all of Steam
+            raise Failed(f"I can't close Steam games yet. Close {a['name']} from the game.")
         else:
             _call(["pkill", "-x", app[1]])
         return ""
