@@ -9,7 +9,7 @@ DEFAULTS = {
     "router": {"shortcut_min_score": 90, "laya_accept": 0.90, "laya_confirm": 0.60, "laya_enabled": True},
     "llm": {
         "provider": "ollama",
-        "model": "qwen3:4b",
+        "model": "qwen3:4b-instruct",
         "host": "http://127.0.0.1:11434",
         "num_ctx": 4096,
         "keep_alive": "60s",

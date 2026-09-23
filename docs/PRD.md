@@ -82,12 +82,12 @@ Zade must be fast, private by default, and light on the GPU. It uses no VRAM whi
 | End of speech | Frame energy (RMS) threshold | CPU | none |
 | STT | faster-whisper `small.en`, int8 | CPU | ~500 MB RAM |
 | Router | Laya (421M, `convaiinnovations/laya`), bf16 | CPU | ~0.9 GB RAM + ~0.4 GB PyTorch |
-| LLM | `qwen3:4b` Q4_K_M, thinking off, `num_ctx=4096` | GPU, CPU fallback | ~3.5 GB VRAM, only while active |
+| LLM | `qwen3:4b-instruct` Q4_K_M (non-thinking), `num_ctx=4096` | GPU, CPU fallback | ~3.5 GB VRAM, only while active |
 | TTS | Piper `en_US-lessac-medium` | CPU | ~100 MB RAM |
 
 faster-whisper (CTranslate2) has no ROCm backend, so STT runs on the CPU; `small.en` transcribes a short command in about 300 ms. Laya also runs on the CPU so that it never takes VRAM. The M0 spike (section 12) measures its latency; if it is too slow on the CPU, running it on the GPU costs under 1 GB.
 
-The LLM choice lives in `config.toml`. `qwen2.5:3b` (~2.5 GB) is the fallback if `qwen3:4b` is too slow or unreliable in testing.
+The LLM choice lives in `config.toml`. `qwen2.5:3b` (~2.5 GB) is the fallback if `qwen3:4b-instruct` is too slow or unreliable in testing.
 
 ### 5.3 GPU lifecycle
 
@@ -233,7 +233,7 @@ laya_confirm = 0.60
 
 [llm]
 provider = "ollama"             # ollama | anthropic | openai
-model = "qwen3:4b"
+model = "qwen3:4b-instruct"
 num_ctx = 4096
 keep_alive = "60s"
 vram_min_free_gb = 4.0

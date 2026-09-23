@@ -10,7 +10,7 @@ rms_threshold = 500         # raise if background noise keeps recordings open
 
 [llm]
 provider = "ollama"         # ollama | anthropic | openai
-model = "qwen3:4b"
+model = "qwen3:4b-instruct"   # non-thinking; plain qwen3:4b is thinking-only and slow
 keep_alive = "60s"          # "0" unloads right after each answer
 fallback = "cpu"            # cpu | none | anthropic | openai
 

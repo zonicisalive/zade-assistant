@@ -11,4 +11,4 @@ def test_override_keeps_siblings(tmp_path):
     cfg = config.load(p)
     assert cfg["llm"]["model"] == "qwen2.5:3b"
     assert cfg["llm"]["keep_alive"] == "60s"
-    assert config.DEFAULTS["llm"]["model"] == "qwen3:4b"  # defaults not mutated
+    assert config.DEFAULTS["llm"]["model"] == "qwen3:4b-instruct"  # defaults not mutated
