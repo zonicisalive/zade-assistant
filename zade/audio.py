@@ -76,8 +76,9 @@ def wait_for_wake(stream, model, threshold, trigger=None):
             return "wake"
 
 
-def record(stream, cfg, start_timeout_s=None, released=None):
-    """Record one utterance. With `released` (push-to-talk), stop when it returns True, not on silence."""
+def record(stream, cfg, start_timeout_s=None, released=None, cancelled=None):
+    """Record one utterance. With `released` (push-to-talk), stop when it returns True, not on silence.
+    `cancelled` returning True drops the recording (returns None)."""
     a = cfg["audio"]
     thr = speech_threshold(noise, a["rms_threshold"], a["noise_factor"])
     frames, levels = [], []
@@ -86,6 +87,8 @@ def record(stream, cfg, start_timeout_s=None, released=None):
         frames.append(f)
         levels.append(rms(f))
         if released is not None:
+            if cancelled is not None and cancelled():
+                return None
             if released() or len(frames) >= round(a["max_s"] / FRAME_S):
                 return np.concatenate(frames)
             continue

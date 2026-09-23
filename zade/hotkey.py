@@ -32,6 +32,10 @@ class HoldDetector:
     def held(self):
         return self.since is not None
 
+    def cancelled(self):
+        """Another key went down during this hold: it was a shortcut, not a request."""
+        return not self.clean
+
     def due(self, t):
         if self.since is not None and self.clean and not self.fired and t - self.since >= self.hold_s:
             self.fired = True

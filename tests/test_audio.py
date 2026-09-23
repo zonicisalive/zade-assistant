@@ -99,3 +99,22 @@ def test_push_to_talk_ends_on_release_not_silence(monkeypatch):
     held = lambda: reads["n"] < 45  # key released after 45 frames
     out = audio.record(object(), cfg, released=lambda: not held())
     assert len(out) == 45 * audio.FRAME
+
+
+def test_push_to_talk_cancel_returns_nothing(monkeypatch):
+    import copy
+
+    from zade import config
+
+    _fake_mic(monkeypatch, [3000] * 50)
+    n = {"reads": 0}
+    real_read = audio.read
+
+    def counting(stream):
+        n["reads"] += 1
+        return real_read(stream)
+
+    monkeypatch.setattr(audio, "read", counting)
+    out = audio.record(object(), copy.deepcopy(config.DEFAULTS),
+                       released=lambda: False, cancelled=lambda: n["reads"] >= 10)
+    assert out is None

@@ -26,3 +26,11 @@ def test_release_resets():
     d.key(META, 1, 3.0)
     d.key(META, 2, 3.5)  # key-repeat events must not restart the timer
     assert d.due(5.0)
+
+
+def test_other_key_after_trigger_cancels():
+    d = HoldDetector(META, hold_s=2.0)
+    d.key(META, 1, 0.0)
+    assert d.due(2.0) and not d.cancelled()
+    d.key(Z, 1, 3.0)  # a Win shortcut pressed after the beep
+    assert d.cancelled()

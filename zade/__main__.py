@@ -143,8 +143,8 @@ def main():
 
         ptt = hotkey.watch(cfg, trigger)
 
-    def hear(timeout=None, released=None):
-        a = audio.record(stream, cfg, timeout, released)
+    def hear(timeout=None, released=None, cancelled=None):
+        a = audio.record(stream, cfg, timeout, released, cancelled)
         return None if a is None else stt.transcribe(a, cfg)
 
     spoke_at = []
@@ -166,8 +166,9 @@ def main():
         audio.cue(stream)
         threading.Thread(target=brain.warm_up, args=(cfg,), daemon=True).start()
         # Push-to-talk: while the key is still held, record until it is released.
-        released = (lambda: not ptt.held()) if source == "hotkey" and ptt and ptt.held() else None
-        text = hear(released=released)
+        ptt_active = source == "hotkey" and ptt and ptt.held()
+        text = hear(released=(lambda: not ptt.held()) if ptt_active else None,
+                    cancelled=ptt.cancelled if ptt_active else None)
         if text is None:
             audio.drain(stream)
             continue
