@@ -48,3 +48,35 @@ def test_route_order():
     assert (r.kind, r.source) == ("run", "pattern")
     assert router.route("what is tcp", {}, CFG).kind == "llm"
     assert router.route("", {}, CFG).kind == "none"
+
+
+def fake(label, conf):
+    return lambda state, questions: {"answers": {"action": {"choice": label, "confidence": conf}}}
+
+
+def test_laya_accept():
+    r = router.route("pause the music", {}, CFG, fake("play or pause media", 0.95))
+    assert (r.kind, r.source) == ("run", "laya")
+    assert r.actions == [{"name": "media", "args": {"cmd": "play-pause"}}]
+
+
+def test_laya_confirm_band():
+    r = router.route("pause the music", {}, CFG, fake("play or pause media", 0.7))
+    assert (r.kind, r.label) == ("confirm", "play or pause media")
+
+
+def test_laya_low_or_other_goes_to_llm():
+    assert router.route("pause the music", {}, CFG, fake("play or pause media", 0.4)).kind == "llm"
+    assert router.route("what is tcp", {}, CFG, fake(router.OTHER, 0.99)).kind == "llm"
+
+
+def test_laya_picks_shortcut():
+    r = router.route("fire up my dev stuff", {"dev": DEV}, CFG, fake("shortcut: dev", 0.95))
+    assert (r.kind, r.actions, r.phrase) == ("run", DEV, "dev")
+
+
+def test_laya_error_falls_through():
+    def boom(state, questions):
+        raise RuntimeError("model missing")
+
+    assert router.route("pause the music", {}, CFG, boom).kind == "llm"

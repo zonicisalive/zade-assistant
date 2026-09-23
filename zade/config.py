@@ -6,7 +6,7 @@ DEFAULTS = {
     "wake": {"model": "hey_jarvis", "threshold": 0.5, "verifier": "", "verifier_threshold": 0.3},
     "audio": {"rms_threshold": 500, "silence_s": 0.8, "max_s": 10.0, "start_timeout_s": 4.0},
     "stt": {"provider": "whisper", "model": "small.en", "device": "cpu"},
-    "router": {"shortcut_min_score": 90, "laya_accept": 0.90, "laya_confirm": 0.60, "laya_enabled": True},
+    "router": {"shortcut_min_score": 90, "laya_accept": 0.90, "laya_confirm": 0.60, "laya_enabled": False},
     "llm": {
         "provider": "ollama",
         "model": "qwen3:4b-instruct",

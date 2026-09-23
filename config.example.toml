@@ -34,3 +34,8 @@ fallbacks = "default"       # set to "" for models without server-side fallbacks
 base_url = "https://api.openai.com/v1"
 model = "gpt-5-mini"
 api_key_env = "OPENAI_API_KEY"
+
+[router]
+# Laya spike 2026-09-23 on this PC (CPU): 18/24 correct, p50 448 ms, wrong picks up to 0.79 confidence.
+# Below the 90% / 150 ms gate, so it is off. Re-run scripts/spike_laya.py after a Laya update before enabling.
+laya_enabled = false

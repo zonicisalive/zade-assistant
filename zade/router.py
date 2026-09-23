@@ -1,7 +1,10 @@
+import logging
 import re
 from dataclasses import dataclass, field
 
 from rapidfuzz import fuzz
+
+log = logging.getLogger("zade")
 
 FILLER = re.compile(r"\b(zade|hey|please|can you|could you|would you|um+|uh+)\b")
 HALLUCINATIONS = {"you", "thank you", "thanks for watching", "bye"}
@@ -39,6 +42,39 @@ def parse_pattern(text, find_app):
     return None
 
 
+OTHER = "something else"
+BUILTINS = {
+    "mute": ("mute or unmute the sound", {"name": "mute", "args": {}}),
+    "play or pause media": ("play, pause, resume or stop music or video",
+                            {"name": "media", "args": {"cmd": "play-pause"}}),
+    "next track": ("skip to the next song or video", {"name": "media", "args": {"cmd": "next"}}),
+    "previous track": ("go back to the previous song", {"name": "media", "args": {"cmd": "previous"}}),
+    "tell the time": ("say what time it is", {"name": "time", "args": {}}),
+    "tell the date": ("say what day or date it is", {"name": "date", "args": {}}),
+    "lock the screen": ("lock the computer or screen", {"name": "lock_screen", "args": {}}),
+    "go to sleep": ("free the GPU, unload the language model", {"name": "sleep", "args": {}}),
+    "list facts": ("say what you know or remember about the user", {"name": "list_facts", "args": {}}),
+}
+
+
+def laya_pick(predict, text, table):
+    choices = {label: desc for label, (desc, _) in BUILTINS.items()}
+    choices |= {f"shortcut: {p}": f"run the user's saved shortcut called '{p}'" for p in table}
+    choices[OTHER] = "a question, a request not listed above, or anything else"
+    res = predict({"utterance": text}, {"action": {
+        "type": "choice",
+        "instructions": "Which of these does the user want the assistant to do?",
+        "criteria": choices,
+    }})
+    ans = res["answers"]["action"]
+    label, conf = ans["choice"], float(ans["confidence"])
+    if label in BUILTINS:
+        return [BUILTINS[label][1]], label, conf
+    if label.startswith("shortcut: ") and label[10:] in table:
+        return table[label[10:]], label, conf
+    return None, label, conf
+
+
 @dataclass
 class Route:
     kind: str
@@ -56,4 +92,14 @@ def route(text, table, cfg, predict=None, find_app=lambda name: None):
         return Route("run", table[phrase], "shortcut", phrase, phrase)
     if action := parse_pattern(text, find_app):
         return Route("run", [action], "pattern", action["name"])
+    if predict:
+        try:
+            actions, label, conf = laya_pick(predict, text, table)
+        except Exception as e:  # any Laya failure must fall through to the LLM, never crash the loop
+            log.warning("Laya failed: %s", e)
+            actions = None
+        if actions is not None and conf >= cfg["laya_confirm"]:
+            kind = "run" if conf >= cfg["laya_accept"] else "confirm"
+            phrase = label[10:] if label.startswith("shortcut: ") else None
+            return Route(kind, actions, "laya", label, phrase, conf)
     return Route("llm")

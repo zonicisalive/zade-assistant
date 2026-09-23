@@ -1,0 +1,24 @@
+pause the music | play or pause media
+resume playback | play or pause media
+stop the song | play or pause media
+skip this song | next track
+next one | next track
+go back a song | previous track
+what time is it | tell the time
+what's the time | tell the time
+what day is it | tell the date
+what's today's date | tell the date
+lock my computer | lock the screen
+lock it | lock the screen
+mute | mute
+unmute the sound | mute
+free up the gpu | go to sleep
+go to sleep | go to sleep
+what do you know about me | list facts
+dev | shortcut: dev
+fire up my dev stuff | shortcut: dev
+what's the capital of france | something else
+explain tcp vs udp | something else
+show disk usage of my home folder | something else
+remember my editor is nvim | something else
+write a haiku about linux | something else
