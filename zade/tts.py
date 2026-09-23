@@ -3,6 +3,7 @@ import logging
 import pathlib
 import re
 import time
+import unicodedata
 
 import numpy as np
 import openai
@@ -58,6 +59,14 @@ def _play(samples, rate, interrupt=None):
     return _wait(interrupt)
 
 
+def clean(text):
+    """Drop what should never be read aloud: emoji and symbols (else "smiling face with smiling eyes"), markdown."""
+    text = "".join(c for c in text if unicodedata.category(c) not in ("So", "Cs", "Cf") and c != "\ufe0f")
+    text = re.sub(r"^\s*[-*•]\s+", "", text, flags=re.MULTILINE)
+    text = re.sub(r"[*_#`]", "", text)
+    return " ".join(text.split())
+
+
 def sentences(text):
     return [s for s in re.split(r"(?<=[.!?])\s+", text.strip()) if s]
 
@@ -85,7 +94,8 @@ def _speak_piper(text, cfg, interrupt=None):
 
 def speak(text, cfg, interrupt=None):
     """Speak text. Returns True if `interrupt()` cut it short (barge-in)."""
-    if not text or not text.strip():
+    text = clean(text or "")
+    if not text:
         return False
     t = cfg["tts"]
     if t["provider"] == "openai":

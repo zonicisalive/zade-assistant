@@ -55,3 +55,10 @@ def test_speech_can_be_interrupted(monkeypatch):
     checks = iter([False, False, True])
     assert tts.speak("One. Two. Three.", copy.deepcopy(config.DEFAULTS), interrupt=lambda: next(checks)) is True
     assert stopped and len(played) == 1  # stopped during the first sentence, the rest never played
+
+
+def test_emoji_and_markdown_are_not_spoken():
+    assert tts.clean("Hey! 😊 What's up? 🚀🔥") == "Hey! What's up?"
+    assert tts.clean("**Done.** Brightness set to `20%` ✅") == "Done. Brightness set to 20%"
+    assert tts.clean("- first\n- second") == "first second"
+    assert tts.clean("😊") == ""
