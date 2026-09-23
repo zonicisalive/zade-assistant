@@ -57,7 +57,7 @@ def _keyboards(ecodes, evdev, hold_code):
     return out
 
 
-def watch(cfg, trigger):
+def watch(key, hold_s, trigger):
     """Background thread: set `trigger` whenever the hold key is held alone long enough.
     Returns the HoldDetector (its held() tells when the key is released), or None if unavailable."""
     try:
@@ -66,14 +66,13 @@ def watch(cfg, trigger):
     except ImportError as e:
         log.warning("hold-to-talk disabled, evdev missing: %s", e)
         return None
-    h = cfg["hotkey"]
-    code = ecodes.ecodes[h["key"]]
+    code = ecodes.ecodes[key]
     devices = _keyboards(ecodes, evdev, code)
     if not devices:
         log.warning("hold-to-talk disabled: no readable keyboard (is the user in the 'input' group?)")
         return None
 
-    detector = HoldDetector(code, h["hold_s"])
+    detector = HoldDetector(code, hold_s)
 
     def loop():
         while True:
@@ -86,9 +85,9 @@ def watch(cfg, trigger):
                 except OSError:  # keyboard unplugged
                     devices.remove(dev)
             if detector.due(time.monotonic()):
-                log.info("hold-to-talk: %s held %.1fs", h["key"], h["hold_s"])
+                log.info("hotkey: %s held %.1fs", key, hold_s)
                 trigger.set()
 
     threading.Thread(target=loop, daemon=True, name="hotkey").start()
-    log.info("hold-to-talk: hold %s for %.1fs (%d keyboards)", h["key"], h["hold_s"], len(devices))
+    log.info("hotkey: hold %s for %.1fs (%d keyboards)", key, hold_s, len(devices))
     return detector

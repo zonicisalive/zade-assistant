@@ -64,3 +64,9 @@ history_s = 120
 [web]
 # Local SearXNG for web answers. Needs `formats: [html, json]` under `search:` in its settings.yml.
 searxng_url = "http://127.0.0.1:8080"
+
+[dictation]
+# Voice typing: hold this key, speak, release -> the words are typed into the focused window.
+enabled = true
+key = "KEY_RIGHTALT"
+hold_s = 0.3

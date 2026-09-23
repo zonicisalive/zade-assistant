@@ -233,3 +233,9 @@ def test_sync_apps_refreshes_the_word_list(monkeypatch):
 def test_names_in_facts_become_hotwords():
     assert z.fact_words(["user's name is zonic", "my dog's name is bruno", "likes nvim"]) == ["Zonic", "Bruno"]
     assert z.fact_words(["user is called zonic"]) == ["Zonic"]
+
+
+def test_dictation_text_keeps_punctuation_and_drops_noise():
+    assert z.dictation_text("  Hey, are you free at 5? ") == "Hey, are you free at 5? "
+    assert z.dictation_text("Thank you.") == ""  # Whisper's noise phantom
+    assert z.dictation_text("") == ""

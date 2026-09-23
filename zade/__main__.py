@@ -45,6 +45,12 @@ class Ctx:
     app_words: list = field(default_factory=list)  # installed app names, given to Whisper as hotwords
 
 
+def dictation_text(raw):
+    """What voice typing types: Whisper's text as is (capitals, punctuation), minus noise phantoms."""
+    text = raw.strip()
+    return text + " " if router.normalize(text) else ""
+
+
 def fact_words(facts):
     """Names you told Zade ("my name is zonic") as hotwords, so Whisper stops hearing "Sonic"."""
     out = []
@@ -258,11 +264,15 @@ def main():
     signal.signal(signal.SIGUSR1, lambda *_: trigger.set())
     pid_file = pathlib.Path(cfg["paths"]["data"]).expanduser() / "zade.pid"
     pid_file.write_text(str(os.getpid()))
+    from . import hotkey
+
     ptt = None  # push-to-talk key detector
     if cfg["hotkey"]["enabled"]:
-        from . import hotkey
-
-        ptt = hotkey.watch(cfg, trigger)
+        ptt = hotkey.watch(cfg["hotkey"]["key"], cfg["hotkey"]["hold_s"], trigger)
+    dictate = threading.Event()
+    typer = None  # voice-typing key detector
+    if cfg["dictation"]["enabled"]:
+        typer = hotkey.watch(cfg["dictation"]["key"], cfg["dictation"]["hold_s"], dictate)
 
     def hear(timeout=None, released=None, cancelled=None, keep_reply=False):
         # keep_reply: while answering a question, keep it (e.g. a command to approve) on screen
@@ -326,6 +336,9 @@ def main():
         if trigger.is_set():
             trigger.clear()
             return "hotkey"
+        if dictate.is_set():
+            dictate.clear()
+            return "dictate"
         return None
 
     def respond(text):
@@ -347,6 +360,14 @@ def main():
             barge.clear()
         else:
             source = audio.wait_for_wake(stream, wake, cfg["wake"]["threshold"], poll)
+        if source == "dictate":  # voice typing: record while the key is held, type it, no model
+            audio.cue(stream, soft=True)
+            text = hear(released=lambda: not typer.held(), cancelled=typer.cancelled)
+            if text and (typed := dictation_text(text)):
+                actions._call(["wtype", "--", typed])
+                log.info("typed %r", typed)
+            ui.show("idle")
+            continue
         if source == "alert":
             while ctx.alerts:
                 say("Reminder: " + ctx.alerts.pop(0))
