@@ -6,7 +6,7 @@
 
 ## 1. Summary
 
-Zade is a fully local voice assistant for the desktop. You say the wake word, speak a request, and Zade either performs an action on the PC or answers out loud. Zade learns your habits over time, so frequent requests turn into instant shortcuts and a partial phrase is enough to trigger them.
+Zade is a fully local voice assistant for the desktop. You say the wake word "Zade", speak a request, and Zade either performs an action on the PC or answers out loud. Zade learns your habits over time, so frequent requests turn into instant shortcuts and a partial phrase is enough to trigger them.
 
 Zade must be fast, private (no audio or text leaves the machine), and light on the GPU. It uses no VRAM while idle because the GPU is shared with other model workflows.
 
@@ -22,7 +22,6 @@ Zade must be fast, private (no audio or text leaves the machine), and light on t
 
 - A GUI or tray icon
 - Multiple users or speaker identification
-- A custom-trained "hey zade" wake word (v1 uses the built-in `hey_jarvis` model)
 - Continuous conversation mode (every request starts with the wake word; the confirmation reply is the only exception)
 - Languages other than English
 - Smart-home control, mobile apps and remote access
@@ -30,13 +29,13 @@ Zade must be fast, private (no audio or text leaves the machine), and light on t
 
 ## 4. User stories
 
-1. "Hey Jarvis, open Firefox." Firefox opens immediately without the LLM loading.
-2. "Hey Jarvis, volume down a bit." Volume drops by 10%.
-3. "Hey Jarvis, what's the difference between TCP and UDP?" Zade loads Qwen and speaks a short answer.
-4. "Hey Jarvis, show disk usage of my home folder." Zade answers "Run `du -sh ~`?"; you say "yes", it runs the command and reads out the result.
-5. After you have asked for "start my dev setup" (which opens the terminal, editor and browser) three times, Zade asks "Want 'dev' to always mean that?" You say yes. From then on, "Hey Jarvis, dev" runs it instantly.
-6. "Hey Jarvis, remember my projects are in ~/code." Zade stores the fact and uses it in later commands.
-7. "Hey Jarvis, what do you know about me?" Zade lists the stored facts. "Forget my projects folder" deletes that fact.
+1. "Zade, open Firefox." Firefox opens immediately without the LLM loading.
+2. "Zade, volume down a bit." Volume drops by 10%.
+3. "Zade, what's the difference between TCP and UDP?" Zade loads Qwen and speaks a short answer.
+4. "Zade, show disk usage of my home folder." Zade answers "Run `du -sh ~`?"; you say "yes", it runs the command and reads out the result.
+5. After you have asked for "start my dev setup" (which opens the terminal, editor and browser) three times, Zade asks "Want 'dev' to always mean that?" You say yes. From then on, "Zade, dev" runs it instantly.
+6. "Zade, remember my projects are in ~/code." Zade stores the fact and uses it in later commands.
+7. "Zade, what do you know about me?" Zade lists the stored facts. "Forget my projects folder" deletes that fact.
 8. While a 12 GB model from another workflow is loaded, Zade still works: known actions stay instant, and LLM answers run on the CPU (slower) instead of competing for VRAM.
 
 ## 5. Architecture
@@ -78,10 +77,10 @@ Zade must be fast, private (no audio or text leaves the machine), and light on t
 
 | Stage | Model | Device | Memory |
 |---|---|---|---|
-| Wake word | openWakeWord `hey_jarvis` | CPU | ~50 MB RAM |
+| Wake word | openWakeWord, custom-trained `zade` model | CPU | ~50 MB RAM |
 | VAD | Silero (bundled) | CPU | small |
 | STT | faster-whisper `small.en`, int8 | CPU | ~500 MB RAM |
-| Router | Laya (421M, `convaiinnovations/laya`) | CPU | < 1 GB RAM |
+| Router | Laya (421M, `convaiinnovations/laya`), bf16 | CPU | ~0.9 GB RAM + ~0.4 GB PyTorch |
 | LLM | `qwen3:4b` Q4_K_M, thinking off, `num_ctx=4096` | GPU, CPU fallback | ~3.5 GB VRAM, only while active |
 | TTS | Piper `en_US-lessac-medium` | CPU | ~100 MB RAM |
 
@@ -202,7 +201,7 @@ CREATE TABLE facts (
 
 ```toml
 [wake]
-model = "hey_jarvis"
+model = "~/.local/share/zade/zade.onnx"   # custom-trained wake word
 threshold = 0.5
 
 [stt]
@@ -276,7 +275,7 @@ Each module has one job and plain functions. There are no class hierarchies or p
 | # | Milestone | Done when |
 |---|---|---|
 | M0 | **Spikes** | Laya runs on the CPU on this machine and its latency is measured; its interface is documented; `qwen3:4b` tool calling works through Ollama on ROCm; the VRAM sysfs read works |
-| M1 | **Voice loop** | Wake word, recording, STT and TTS echo back what you said |
+| M1 | **Voice loop** | The custom "Zade" wake word is trained (openWakeWord training notebook, synthetic Piper samples plus about 20 recordings of your own voice); wake word, recording, STT and TTS echo back what you said |
 | M2 | **Actions** | Allowlisted actions work by voice through Qwen tool calling, and the shell confirmation gate works |
 | M3 | **Router** | Shortcut match and Laya routing, with NFR-1 met for known actions |
 | M4 | **Memory** | History, facts, shortcut promotion (FR-13 to FR-17) |
@@ -290,5 +289,5 @@ Each module has one job and plain functions. There are no class hierarchies or p
 | Laya is new and its accuracy is contested in independent tests | The M0 spike tests it on about 50 real commands before committing to it. If it misroutes, lower its role to the confirm band only, or remove step 2 and route to Qwen directly |
 | ROCm support for the RDNA4 (gfx1200) card in Ollama | Verify in M0. Ollama's Vulkan backend or the CPU fallback keep Zade working |
 | Whisper mishears short commands | Use `initial_prompt` with shortcut phrases and app names to bias recognition; the confirm band catches the rest |
-| False wake-word triggers | Tune the threshold; train a custom wake word after v1 |
+| False wake-word triggers: "Zade" is one short syllable, so it trips more easily than a longer phrase, and names such as "Jade" or "Wade" sound close to it | Train with negative examples of similar words and tune the threshold. If false triggers stay high, switch to "hey Zade" (a config change plus a retrain) |
 | Qwen writes a harmful command | The confirmation gate, the sudo ban, the 30 s timeout, and running as a normal user |
