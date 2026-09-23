@@ -110,3 +110,14 @@ def test_stops_after_max_rounds(monkeypatch):
     loop = NS(message=NS(content="", tool_calls=[NS(function=NS(name="mute", arguments={}))]))
     monkeypatch.setattr(providers, "_client", lambda name, cfg: NS(chat=lambda **kw: loop))
     assert providers.chat("ollama", "sys", "x", TOOLS, lambda n, a: "ok", CFG, {}) == providers.TOO_MANY
+
+
+def test_history_is_sent_before_the_new_message(monkeypatch):
+    seq = Seq(NS(message=NS(content="Mumbai it is.", tool_calls=None)))
+    monkeypatch.setattr(providers, "_client", lambda name, cfg: NS(chat=seq))
+    providers.chat("ollama", "sys", "Mumbai", TOOLS, lambda n, a: "ok", CFG, {}, [("weather", "Which city?")])
+    assert seq.kwargs[0]["messages"] == [
+        {"role": "system", "content": "sys"},
+        {"role": "user", "content": "weather"}, {"role": "assistant", "content": "Which city?"},
+        {"role": "user", "content": "Mumbai"},
+    ]

@@ -35,14 +35,14 @@ def test_candidates():
 def test_ask_falls_back(monkeypatch):
     seen = []
 
-    def fake(name, system, text, tools, run_tool, c, extra):
+    def fake(name, system, text, tools, run_tool, c, extra, history=()):
         seen.append((name, extra))
         if name == "anthropic":
             raise providers.ProviderError("down")
         return "hi"
 
     monkeypatch.setattr(providers, "chat", fake)
-    assert brain.ask("hello", [], cfg(provider="anthropic"), None, lambda: 8.0) == "hi"
+    assert brain.ask("hello", [], cfg(provider="anthropic"), None, vram=lambda: 8.0) == "hi"
     assert seen == [("anthropic", {}), ("ollama", {"num_gpu": 0})]
 
 
@@ -51,7 +51,7 @@ def test_ask_all_down(monkeypatch):
         raise providers.ProviderError("down")
 
     monkeypatch.setattr(providers, "chat", fake)
-    assert brain.ask("hello", [], cfg(), None, lambda: 8.0) == "My brain is offline right now."
+    assert brain.ask("hello", [], cfg(), None, vram=lambda: 8.0) == "My brain is offline right now."
 
 
 def test_facts_in_prompt(monkeypatch):
@@ -62,7 +62,7 @@ def test_facts_in_prompt(monkeypatch):
         return "ok"
 
     monkeypatch.setattr(providers, "chat", fake)
-    brain.ask("hello", ["likes nvim"], cfg(), None, lambda: 8.0)
+    brain.ask("hello", ["likes nvim"], cfg(), None, vram=lambda: 8.0)
     assert "- likes nvim" in got["system"]
 
 
@@ -74,13 +74,13 @@ def test_tool_names_unique():
 def test_no_fallback_after_a_tool_ran(monkeypatch):
     seen, ran = [], []
 
-    def fake(name, system, text, tools, run_tool, c, extra):
+    def fake(name, system, text, tools, run_tool, c, extra, history=()):
         seen.append(name)
         run_tool("open_app", {"name": "kitty"})
         raise providers.ProviderError("timeout in round 2")
 
     monkeypatch.setattr(providers, "chat", fake)
-    out = brain.ask("open kitty", [], cfg(), lambda n, a: ran.append(n) or "ok", lambda: 8.0)
+    out = brain.ask("open kitty", [], cfg(), lambda n, a: ran.append(n) or "ok", vram=lambda: 8.0)
     assert seen == ["ollama"] and ran == ["open_app"]
     assert out == "I did part of that, then lost my connection."
 
@@ -88,3 +88,9 @@ def test_no_fallback_after_a_tool_ran(monkeypatch):
 def test_resident_model_counts_as_gpu():
     assert brain.candidates(cfg(), lambda: 2.0, lambda c: True) == [("ollama", {}), ("ollama", {"num_gpu": 0})]
     assert brain.candidates(cfg(), lambda: 2.0, lambda c: False) == [("ollama", {"num_gpu": 0})]
+
+
+def test_new_tools_are_defined():
+    names = {t["name"] for t in brain.TOOLS}
+    assert {"weather", "web_answer", "set_timer", "note_add", "notes_read", "window", "open_website",
+            "clipboard_read", "clipboard_copy", "type_text", "brightness", "screenshot", "power"} <= names

@@ -84,3 +84,76 @@ def test_browser_means_the_default_browser(tmp_path, monkeypatch):
     monkeypatch.setattr(actions, "_default_browser", lambda: "firefox.desktop")
     for name in ["browser", "the browser", "web browser", "internet"]:
         assert actions.find_app(name, [tmp_path]) == ("firefox", "firefox"), name
+
+
+def _calls(monkeypatch):
+    calls = []
+    monkeypatch.setattr(actions, "_call", calls.append)
+    monkeypatch.setattr(actions, "_spawn", calls.append)
+    return calls
+
+
+def test_window_actions(monkeypatch):
+    calls = _calls(monkeypatch)
+    actions.run({"name": "window", "args": {"action": "close"}}, lambda q: True)
+    actions.run({"name": "window", "args": {"action": "workspace", "workspace": "bot"}}, lambda q: True)
+    actions.run({"name": "window", "args": {"action": "move_to_workspace", "workspace": 2}}, lambda q: True)
+    assert calls == [
+        ["niri", "msg", "action", "close-window"],
+        ["niri", "msg", "action", "focus-workspace", "bot"],
+        ["niri", "msg", "action", "move-window-to-workspace", "2"],
+    ]
+    with pytest.raises(actions.Failed):
+        actions.run({"name": "window", "args": {"action": "explode"}}, lambda q: True)
+
+
+def test_open_website(monkeypatch):
+    calls = _calls(monkeypatch)
+    for site in ["YouTube", "github.com", "some band"]:
+        actions.run({"name": "open_website", "args": {"site": site}}, lambda q: True)
+    assert calls == [
+        ["xdg-open", "https://www.youtube.com"],
+        ["xdg-open", "https://github.com"],
+        ["xdg-open", "https://duckduckgo.com/?q=some+band"],
+    ]
+
+
+def test_clipboard_and_typing(monkeypatch):
+    fed = []
+    monkeypatch.setattr(actions, "_feed", lambda cmd, text: fed.append((cmd, text)))
+    monkeypatch.setattr(actions, "_output", lambda cmd: "copied text\n")
+    assert actions.run({"name": "clipboard_read", "args": {}}, lambda q: True) == "Your clipboard says: copied text"
+    actions.run({"name": "clipboard_copy", "args": {"text": "hello"}}, lambda q: True)
+    calls = _calls(monkeypatch)
+    actions.run({"name": "type_text", "args": {"text": "hello world"}}, lambda q: True)
+    assert fed == [(["wl-copy"], "hello")]
+    assert calls == [["wtype", "--", "hello world"]]
+
+
+def test_brightness_and_screenshot(monkeypatch):
+    calls = _calls(monkeypatch)
+    actions.run({"name": "brightness", "args": {"set": 150}}, lambda q: True)
+    actions.run({"name": "brightness", "args": {"delta": -20}}, lambda q: True)
+    actions.run({"name": "screenshot", "args": {}}, lambda q: True)
+    assert calls == [
+        ["ddcutil", "setvcp", "10", "100"],
+        ["ddcutil", "setvcp", "10", "-", "20"],
+        ["niri", "msg", "action", "screenshot-screen"],
+    ]
+
+
+def test_power_needs_yes(monkeypatch):
+    calls = _calls(monkeypatch)
+    asked = []
+    with pytest.raises(actions.Failed, match="Cancelled"):
+        actions.run({"name": "power", "args": {"action": "shutdown"}}, lambda q: asked.append(q) or False)
+    assert calls == [] and asked == ["Shut down the computer?"]
+    actions.run({"name": "power", "args": {"action": "suspend"}}, lambda q: True)
+    assert calls == [["systemctl", "suspend"]]
+
+
+def test_open_app_falls_back_to_website(monkeypatch):
+    calls = _calls(monkeypatch)
+    monkeypatch.setattr(actions, "find_app", lambda name: None)
+    actions.run({"name": "open_app", "args": {"name": "Netflix"}}, lambda q: True)
+    assert calls == [["xdg-open", "https://www.netflix.com"]]

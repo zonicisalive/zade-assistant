@@ -27,10 +27,17 @@ def _client(name, cfg):
     return openai.OpenAI(base_url=pc["base_url"], api_key=key, timeout=10, max_retries=1)
 
 
-def _ollama(system, text, tools, run_tool, cfg, extra):
+def _history(history):
+    msgs = []
+    for user, assistant in history:
+        msgs += [{"role": "user", "content": user}, {"role": "assistant", "content": assistant}]
+    return msgs
+
+
+def _ollama(system, text, tools, run_tool, cfg, extra, history):
     llm = cfg["llm"]
     client = _client("ollama", cfg)
-    msgs = [{"role": "system", "content": system}, {"role": "user", "content": text}]
+    msgs = [{"role": "system", "content": system}, *_history(history), {"role": "user", "content": text}]
     specs = [{"type": "function", "function": t} for t in tools]
     for _ in range(MAX_ROUNDS):
         r = client.chat(
@@ -46,7 +53,7 @@ def _ollama(system, text, tools, run_tool, cfg, extra):
     return TOO_MANY
 
 
-def _anthropic(system, text, tools, run_tool, cfg, extra):
+def _anthropic(system, text, tools, run_tool, cfg, extra, history):
     pc = cfg["providers"]["anthropic"]
     client = _client("anthropic", cfg)
     kw = {}
@@ -55,7 +62,7 @@ def _anthropic(system, text, tools, run_tool, cfg, extra):
     if pc.get("fallbacks"):
         kw |= {"betas": ["server-side-fallback-2026-07-01"], "fallbacks": pc["fallbacks"]}
     specs = [{"name": t["name"], "description": t["description"], "input_schema": t["parameters"]} for t in tools]
-    msgs = [{"role": "user", "content": text}]
+    msgs = [*_history(history), {"role": "user", "content": text}]
     for _ in range(MAX_ROUNDS):
         r = client.beta.messages.create(
             model=pc["model"], max_tokens=4096, system=system, tools=specs, messages=msgs, **kw)
@@ -71,11 +78,11 @@ def _anthropic(system, text, tools, run_tool, cfg, extra):
     return TOO_MANY
 
 
-def _openai(system, text, tools, run_tool, cfg, extra):
+def _openai(system, text, tools, run_tool, cfg, extra, history):
     pc = cfg["providers"]["openai"]
     client = _client("openai", cfg)
     specs = [{"type": "function", "function": t} for t in tools]
-    msgs = [{"role": "system", "content": system}, {"role": "user", "content": text}]
+    msgs = [{"role": "system", "content": system}, *_history(history), {"role": "user", "content": text}]
     for _ in range(MAX_ROUNDS):
         m = client.chat.completions.create(model=pc["model"], messages=msgs, tools=specs).choices[0].message
         if not m.tool_calls:
@@ -96,11 +103,11 @@ def _openai(system, text, tools, run_tool, cfg, extra):
     return TOO_MANY
 
 
-def chat(name, system, text, tools, run_tool, cfg, extra):
+def chat(name, system, text, tools, run_tool, cfg, extra, history=()):
     fn = {"ollama": _ollama, "anthropic": _anthropic, "openai": _openai}.get(name)
     if not fn:
         raise ProviderError(f"unknown provider {name}")
     try:
-        return fn(system, text, tools, run_tool, cfg, extra)
+        return fn(system, text, tools, run_tool, cfg, extra, history)
     except ERRORS as e:
         raise ProviderError(f"{name}: {e}") from e

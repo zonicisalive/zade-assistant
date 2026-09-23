@@ -30,7 +30,7 @@ def test_speech_after_long_pause_still_counts():
 
 def test_cue_drops_chime_from_mic_buffer(monkeypatch):
     order = []
-    monkeypatch.setattr(audio, "chime", lambda: order.append("chime"))
+    monkeypatch.setattr(audio, "chime", lambda soft=False: order.append("chime"))
     monkeypatch.setattr(audio, "drain", lambda s: order.append("drain"))
     audio.cue(object())
     assert order == ["chime", "drain"]
@@ -68,7 +68,13 @@ def test_hotkey_trigger_wakes_without_wake_word(monkeypatch):
 
     trigger = threading.Event()
     trigger.set()
-    audio.wait_for_wake(object(), NeverWakes(), 0.5, trigger)  # returns instead of looping forever
+
+    def poll():
+        if trigger.is_set():
+            trigger.clear()
+            return "hotkey"
+
+    assert audio.wait_for_wake(object(), NeverWakes(), 0.5, poll) == "hotkey"  # instead of looping forever
     assert not trigger.is_set()  # consumed, so the next wait needs a new press
 
 

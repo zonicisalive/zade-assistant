@@ -93,3 +93,25 @@ def test_more_volume_phrasings():
     assert router.parse_pattern("increase the volume", find) == {"name": "volume", "args": {"delta": 10}}
     assert router.parse_pattern("lower the volume", find) == {"name": "volume", "args": {"delta": -10}}
     assert router.parse_pattern("turn it down", find) is None
+
+
+def test_new_fast_patterns():
+    P = router.parse_pattern
+    assert P("go to workspace 2", find) == {"name": "window", "args": {"action": "workspace", "workspace": "2"}}
+    assert P("switch to workspace bot", find) == {"name": "window", "args": {"action": "workspace", "workspace": "bot"}}
+    assert P("move this to workspace 3", find) == {
+        "name": "window", "args": {"action": "move_to_workspace", "workspace": "3"}}
+    assert P("close this window", find) == {"name": "window", "args": {"action": "close"}}
+    assert P("open youtube", find) == {"name": "open_website", "args": {"site": "youtube"}}
+    assert P("open my dev setup", find) is None  # unknown app and not a known site: goes to the LLM
+    assert P("set a timer for 5 minutes", find) == {"name": "set_timer", "args": {"seconds": 300}}
+    assert P("timer 90 seconds", find) == {"name": "set_timer", "args": {"seconds": 90}}
+    assert P("remind me in 2 hours to call mom", find) == {
+        "name": "set_timer", "args": {"seconds": 7200, "message": "call mom"}}
+    assert P("what's the weather", find) == {"name": "weather", "args": {}}
+    assert P("weather tomorrow", find) == {"name": "weather", "args": {"day": 1}}
+    assert P("take a screenshot", find) == {"name": "screenshot", "args": {}}
+
+
+def test_type_pattern():
+    assert router.parse_pattern("type good morning", find) == {"name": "type_text", "args": {"text": "good morning"}}

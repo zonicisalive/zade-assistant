@@ -4,6 +4,8 @@ from dataclasses import dataclass, field
 
 from rapidfuzz import fuzz
 
+from .actions import SITES
+
 log = logging.getLogger("zade")
 
 FILLER = re.compile(r"\b(zade|hey|please|can you|could you|would you|um+|uh+)\b")
@@ -31,9 +33,37 @@ def match_shortcut(text, table, min_score):
     return best if best_score >= min_score else None
 
 
+UNITS = {"second": 1, "minute": 60, "min": 60, "hour": 3600}
+
+
+def _seconds(n, unit):
+    return int(n) * UNITS[unit.rstrip("s") if unit.rstrip("s") in UNITS else unit]
+
+
 def parse_pattern(text, find_app):
-    if m := re.fullmatch(r"(?:open|launch|start|run) (?:the )?(.+?)(?: app)?", text):
-        return {"name": "open_app", "args": {"name": m[1]}} if find_app(m[1]) else None
+    if m := re.fullmatch(r"(?:open|launch|start|run) (?:the )?(.+?)(?: app| website)?", text):
+        if find_app(m[1]):
+            return {"name": "open_app", "args": {"name": m[1]}}
+        if m[1].replace(" ", "") in SITES:
+            return {"name": "open_website", "args": {"site": m[1]}}
+        return None
+    if m := re.fullmatch(r"(?:go|switch|move) to workspace (\w+)", text):
+        return {"name": "window", "args": {"action": "workspace", "workspace": m[1]}}
+    if m := re.fullmatch(r"move (?:this|this window|the window|it) to workspace (\w+)", text):
+        return {"name": "window", "args": {"action": "move_to_workspace", "workspace": m[1]}}
+    if re.fullmatch(r"close (?:this|this window|the window|window)", text):
+        return {"name": "window", "args": {"action": "close"}}
+    unit = r"(seconds?|minutes?|mins?|hours?)"
+    if m := re.fullmatch(rf"(?:set )?(?:a )?timer (?:for )?(\d+) {unit}", text):
+        return {"name": "set_timer", "args": {"seconds": _seconds(m[1], m[2])}}
+    if m := re.fullmatch(rf"remind me in (\d+) {unit} to (.+)", text):
+        return {"name": "set_timer", "args": {"seconds": _seconds(m[1], m[2]), "message": m[3]}}
+    if m := re.fullmatch(r"(?:what's |what is |how's |how is )?(?:the )?weather(?: like)?(?: (today|tomorrow))?", text):
+        return {"name": "weather", "args": {"day": 1} if m[1] == "tomorrow" else {}}
+    if m := re.fullmatch(r"type (.+)", text):
+        return {"name": "type_text", "args": {"text": m[1]}}
+    if re.fullmatch(r"(?:take a |take )?screenshot", text):
+        return {"name": "screenshot", "args": {}}
     if m := re.fullmatch(r"(?:close|quit|kill|exit) (?:the )?(.+?)(?: app)?", text):
         return {"name": "close_app", "args": {"name": m[1]}} if find_app(m[1]) else None
     verb = r"(?:set|increase|decrease|raise|lower|turn)(?: up| down)?"

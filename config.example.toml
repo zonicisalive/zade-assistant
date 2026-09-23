@@ -48,3 +48,14 @@ laya_enabled = false
 enabled = true
 key = "KEY_LEFTMETA"        # the Win/Super key; e.g. KEY_RIGHTCTRL
 hold_s = 2.0                # keep holding after the beep while you talk; release = done
+
+[followup]
+# When Zade's reply is a question, listen this long for an answer (soft beep, no wake word).
+enabled = true
+listen_s = 5.0
+history_turns = 3           # recent exchanges the model sees, forgotten after history_s
+history_s = 120
+
+[web]
+# Local SearXNG for web answers. Needs `formats: [html, json]` under `search:` in its settings.yml.
+searxng_url = "http://127.0.0.1:8080"

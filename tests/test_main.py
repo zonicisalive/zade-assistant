@@ -40,7 +40,7 @@ def test_shortcut_runs_without_llm():
 def test_llm_actions_promoted_after_three():
     said = []
 
-    def ask(text, facts, cfg, run_tool):
+    def ask(text, facts, cfg, run_tool, history=()):
         run_tool("open_app", {"name": "kitty"})
         return "Opening kitty."
 
@@ -54,7 +54,7 @@ def test_llm_actions_promoted_after_three():
 def test_memory_tools_not_logged_as_actions():
     said = []
 
-    def ask(text, facts, cfg, run_tool):
+    def ask(text, facts, cfg, run_tool, history=()):
         return run_tool("remember", {"fact": "my editor is nvim"})
 
     ctx = make(said, ask=ask)
@@ -69,7 +69,7 @@ def test_failed_action_spoken_and_not_promoted():
     def fail(action, confirm):
         raise actions.Failed("I couldn't find kitty.")
 
-    def ask(text, facts, cfg, run_tool):
+    def ask(text, facts, cfg, run_tool, history=()):
         return run_tool("open_app", {"name": "kitty"})
 
     ctx = make(said, ask=ask, run_action=fail)
@@ -88,7 +88,7 @@ def test_confirm_band_no_goes_to_llm():
 
 def test_make_shortcut_uses_previous_actions():
     said = []
-    ctx = make(said, ask=lambda text, facts, cfg, run_tool: run_tool("make_shortcut", {"phrase": "Dev"}))
+    ctx = make(said, ask=lambda text, facts, cfg, run_tool, history=(): run_tool("make_shortcut", {"phrase": "Dev"}))
     memory.log(ctx.conn, "start my dev setup", DEV, "llm", True)
     z.handle(ctx, "remember dev means that")
     assert memory.shortcuts(ctx.conn) == {"dev": DEV}
@@ -100,7 +100,7 @@ def test_unexpected_action_error_returns_to_llm():
     def boom(action, confirm):
         raise AttributeError("'NoneType' object has no attribute 'lower'")
 
-    ctx = make(said, ask=lambda text, facts, cfg, run_tool: run_tool("open_app", {"name": None}), run_action=boom)
+    ctx = make(said, ask=lambda text, facts, cfg, run_tool, history=(): run_tool("open_app", {"name": None}), run_action=boom)
     z.handle(ctx, "open something")
     assert said and said[0].startswith("That failed")
 
@@ -113,3 +113,41 @@ def test_safe_handle_survives_any_error():
 
     z.safe_handle(make(said, ask=boom), "what is tcp")
     assert said == ["Something went wrong."]
+
+
+def test_info_tools_and_timer(monkeypatch):
+    from zade import info
+
+    said, timers = [], []
+    monkeypatch.setattr(info, "weather", lambda place="", day=0: f"weather {place} {day}")
+    ctx = make(said, ask=lambda text, facts, cfg, run_tool, history=(): " | ".join([
+        run_tool("weather", {"place": "Mumbai", "day": 1}),
+        run_tool("set_timer", {"seconds": 300, "message": "check the oven"}),
+    ]), start_timer=lambda s, fn: timers.append((s, fn)))
+    z.handle(ctx, "weather tomorrow and remind me in 5 minutes")
+    assert said == ["weather Mumbai 1 | Timer set for 5 minutes."]
+    assert timers[0][0] == 300
+    timers[0][1]()  # the timer fires
+    assert ctx.alerts == ["check the oven"]
+    assert memory.last_actions(ctx.conn) == [{"name": "weather", "args": {"place": "Mumbai", "day": 1}}]  # timer not learned
+
+
+def test_followup_uses_recent_history():
+    said, seen = [], []
+
+    def ask(text, facts, cfg, run_tool, history=()):
+        seen.append(list(history))
+        return "Which city?" if text == "plan a trip" else "Mumbai it is."
+
+    ctx = make(said, ask=ask)
+    assert z.handle(ctx, "plan a trip") == "Which city?"
+    assert z.wants_followup("Which city?") and not z.wants_followup("Done.")
+    z.handle(ctx, "Mumbai")
+    assert seen == [[], [("plan a trip", "Which city?")]]
+
+
+def test_history_expires_and_is_capped():
+    ctx = make([])
+    ctx.cfg["followup"].update(history_turns=2, history_s=120)
+    ctx.history = [(0.0, "old", "x"), (100.0, "a", "1"), (150.0, "b", "2"), (160.0, "c", "3")]
+    assert z.recent(ctx, now=200.0) == [("b", "2"), ("c", "3")]

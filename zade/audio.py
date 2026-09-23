@@ -62,16 +62,15 @@ NOISE_FRAMES = 125  # ~10 s of room sound kept while waiting for the wake word
 noise = []
 
 
-def wait_for_wake(stream, model, threshold, trigger=None):
-    """Return "wake" on the wake word, or "hotkey" when `trigger` (a threading.Event) fires."""
+def wait_for_wake(stream, model, threshold, poll=None):
+    """Return "wake" on the wake word, or whatever `poll()` returns when it is truthy (e.g. "hotkey")."""
     model.reset()
     while True:
         f = read(stream)
         noise.append(rms(f))
         del noise[:-NOISE_FRAMES]
-        if trigger is not None and trigger.is_set():
-            trigger.clear()
-            return "hotkey"
+        if poll is not None and (reason := poll()):
+            return reason
         if max(model.predict(f).values()) >= threshold:
             return "wake"
 
@@ -105,13 +104,15 @@ def drain(stream):
         stream.read(n)
 
 
-def cue(stream):
+def cue(stream, soft=False):
     """Beep, then drop the beep from the mic buffer so it is not recorded as speech."""
-    chime()
+    chime(soft)
     drain(stream)
 
 
-def chime():
+def chime(soft=False):
+    """Normal beep when listening starts; a softer, lower one when listening for a follow-up answer."""
+    freq, vol = (660, 0.08) if soft else (880, 0.2)
     t = np.linspace(0, 0.12, int(RATE * 0.12), False)
-    sd.play((0.2 * np.sin(2 * np.pi * 880 * t)).astype(np.float32), RATE)
+    sd.play((vol * np.sin(2 * np.pi * freq * t)).astype(np.float32), RATE)
     sd.wait()

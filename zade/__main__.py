@@ -5,15 +5,30 @@ import signal
 import sqlite3
 import threading
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Callable
 
 import numpy as np
 
-from . import actions, brain, config, memory, router
+from . import actions, brain, config, info, memory, router
 
 log = logging.getLogger("zade")
-MEMORY_TOOLS = {"remember", "forget", "list_facts", "make_shortcut", "sleep"}
+# Tools whose calls are never learned as shortcuts (memory, one-off content, or risky).
+MEMORY_TOOLS = {"remember", "forget", "list_facts", "make_shortcut", "sleep", "set_timer", "note_add",
+                "notes_read", "web_answer", "clipboard_read", "clipboard_copy", "type_text", "power", "shell"}
+
+
+def _start_timer(seconds, fn):
+    t = threading.Timer(seconds, fn)
+    t.daemon = True
+    t.start()
+
+
+def _duration(seconds):
+    m, s = divmod(int(seconds), 60)
+    h, m = divmod(m, 60)
+    parts = [f"{n} {unit}{'s' if n != 1 else ''}" for n, unit in ((h, "hour"), (m, "minute"), (s, "second")) if n]
+    return " ".join(parts) or "0 seconds"
 
 
 @dataclass
@@ -26,6 +41,19 @@ class Ctx:
     find_app: Callable = actions.find_app
     ask: Callable = brain.ask
     run_action: Callable = actions.run
+    start_timer: Callable = _start_timer
+    alerts: list = field(default_factory=list)  # due reminders, spoken by the main loop when idle
+    history: list = field(default_factory=list)  # (time, user text, reply) for follow-ups
+
+
+def recent(ctx, now=None):
+    f = ctx.cfg["followup"]
+    now = time.monotonic() if now is None else now
+    return [(u, r) for t, u, r in ctx.history if now - t <= f["history_s"]][-f["history_turns"]:]
+
+
+def wants_followup(reply):
+    return bool(reply) and reply.rstrip().endswith("?")
 
 
 def dispatch(ctx, action):
@@ -48,6 +76,23 @@ def dispatch(ctx, action):
         if name == "sleep":
             brain.unload(ctx.cfg)
             return "Going to sleep.", True
+        if name == "weather":
+            return info.weather(a.get("place", ""), a.get("day", 0)), True
+        if name == "web_answer":
+            return info.web_answer(a["query"], ctx.cfg), True
+        if name == "note_add":
+            return info.note_add(a["text"], ctx.cfg), True
+        if name == "notes_read":
+            return info.notes_read(ctx.cfg), True
+        if name == "set_timer":
+            seconds, message = int(a["seconds"]), a.get("message") or "Time's up."
+
+            def fire():
+                actions._call(["notify-send", "Zade", message])
+                ctx.alerts.append(message)
+
+            ctx.start_timer(seconds, fire)
+            return f"Timer set for {_duration(seconds)}.", True
         return ctx.run_action(action, ctx.confirm), True
     except actions.Failed as e:
         return str(e), False
@@ -66,46 +111,54 @@ def offer(ctx, text, acts):
 
 
 def handle(ctx, raw):
+    """Handle one utterance; return what Zade replied (for follow-up listening)."""
     text = router.normalize(raw)
     r = router.route(text, memory.shortcuts(ctx.conn), ctx.cfg["router"], ctx.predict, ctx.find_app)
     if r.kind == "none":
         ctx.say("Sorry, didn't catch that.")
-        return
+        return ""
     if r.kind == "confirm" and not ctx.confirm(f"Did you mean {r.label}?"):
         r = router.Route("llm")
     if r.kind in ("run", "confirm"):
         results = [dispatch(ctx, a) for a in r.actions]
         ok = all(k for _, k in results)
-        ctx.say(" ".join(t for t, _ in results if t) or "Done.")
+        reply = " ".join(t for t, _ in results if t) or "Done."
+        ctx.say(reply)
         if r.phrase:
             memory.use_shortcut(ctx.conn, r.phrase)
+        learnable = not any(a["name"] in MEMORY_TOOLS for a in r.actions)
         memory.log(ctx.conn, text, r.actions, r.source, ok)
-        if ok and not r.phrase:
+        if ok and learnable and not r.phrase:
             offer(ctx, text, r.actions)
-        return
-    executed = []
+    else:
+        executed = []
 
-    def run_tool(name, args):
-        out, ok = dispatch(ctx, {"name": name, "args": args})
-        if ok and name not in MEMORY_TOOLS:
-            executed.append({"name": name, "args": args})
-        return out or "done"
+        def run_tool(name, args):
+            out, ok = dispatch(ctx, {"name": name, "args": args})
+            if ok and name not in MEMORY_TOOLS:
+                executed.append({"name": name, "args": args})
+            return out or "done"
 
-    ctx.say(ctx.ask(text, memory.facts(ctx.conn), ctx.cfg, run_tool))
-    if executed:
-        memory.log(ctx.conn, text, executed, "llm", True)
-        offer(ctx, text, executed)
+        reply = ctx.ask(text, memory.facts(ctx.conn), ctx.cfg, run_tool, recent(ctx))
+        ctx.say(reply)
+        if executed:
+            memory.log(ctx.conn, text, executed, "llm", True)
+            offer(ctx, text, executed)
+    ctx.history.append((time.monotonic(), text, reply))
+    del ctx.history[:-20]
+    return reply
 
 
 def safe_handle(ctx, text):
     try:
-        handle(ctx, text)
+        return handle(ctx, text)
     except Exception:  # one bad request must not kill the assistant
         log.exception("handling %r failed", text)
         try:
             ctx.say("Something went wrong.")
         except Exception:
             log.exception("could not report the failure")
+        return ""
 
 
 def laya_predictor(cfg):
@@ -159,10 +212,32 @@ def main():
         return actions.is_yes(hear(5.0) or "")
 
     ctx = Ctx(cfg, conn, say, confirm, predict=laya_predictor(cfg))
+
+    def poll():
+        if ctx.alerts:
+            return "alert"
+        if trigger.is_set():
+            trigger.clear()
+            return "hotkey"
+        return None
+
+    def respond(text):
+        t = time.perf_counter()
+        spoke_at.clear()
+        reply = safe_handle(ctx, text)
+        log.info("heard %r, replied after %.2fs (speech threshold %d)", text,
+                 (spoke_at[0] if spoke_at else time.perf_counter()) - t,
+                 audio.speech_threshold(audio.noise, cfg["audio"]["rms_threshold"], cfg["audio"]["noise_factor"]))
+        return reply
+
     stt.transcribe(np.zeros(audio.RATE, np.int16), cfg)  # load whisper before the first command
     log.info("ready")
     while True:
-        source = audio.wait_for_wake(stream, wake, cfg["wake"]["threshold"], trigger)
+        source = audio.wait_for_wake(stream, wake, cfg["wake"]["threshold"], poll)
+        if source == "alert":
+            while ctx.alerts:
+                say("Reminder: " + ctx.alerts.pop(0))
+            continue
         audio.cue(stream)
         threading.Thread(target=brain.warm_up, args=(cfg,), daemon=True).start()
         # Push-to-talk: while the key is still held, record until it is released.
@@ -172,12 +247,14 @@ def main():
         if text is None:
             audio.drain(stream)
             continue
-        t = time.perf_counter()
-        spoke_at.clear()
-        safe_handle(ctx, text)
-        reply = (spoke_at[0] if spoke_at else time.perf_counter()) - t
-        log.info("heard %r, replied after %.2fs (speech threshold %d)",
-                 text, reply, audio.speech_threshold(audio.noise, cfg["audio"]["rms_threshold"], cfg["audio"]["noise_factor"]))
+        reply = respond(text)
+        # Follow-up: when Zade asked a question, listen briefly for an answer without the wake word.
+        while cfg["followup"]["enabled"] and wants_followup(reply):
+            audio.cue(stream, soft=True)
+            text = hear(cfg["followup"]["listen_s"])
+            if text is None:
+                break
+            reply = respond(text)
 
 
 if __name__ == "__main__":

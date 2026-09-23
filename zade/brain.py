@@ -14,7 +14,9 @@ SYSTEM = (
     "aloud, so answer in at most three short sentences of plain text with no markdown, unless the "
     "user asks for detail. Use the tools to act on the computer. Use shell only when no other tool "
     "fits; the user approves each command, and sudo is never allowed. When the user states a lasting "
-    "fact about themselves, call remember."
+    "fact about themselves, call remember. For news, sports results, prices, recent events or anything that "
+    "may have changed after your training, call web_answer instead of answering from memory. To write text "
+    "into the current window, call type_text."
 )
 S = {"type": "string"}
 
@@ -43,6 +45,27 @@ TOOLS = [
     _t("make_shortcut", "Save the previous request's actions under a short phrase the user chose.",
        ["phrase"], phrase=S),
     _t("sleep", "Unload the language model to free GPU memory."),
+    _t("weather", "Get the weather. place is a city (empty = here); day 0 = today, 1 = tomorrow, 2 = day after.",
+       place=S, day={"type": "integer"}),
+    _t("web_answer", "Search the web and get the top results, to answer questions about current events or facts "
+       "you are unsure of. Answer from the results in one or two sentences.", ["query"], query=S),
+    _t("set_timer", "Set a timer or reminder. seconds from now; message is what to remind the user of.",
+       ["seconds"], seconds={"type": "integer"}, message=S),
+    _t("note_add", "Save a note for the user.", ["text"], text=S),
+    _t("notes_read", "Read the user's saved notes."),
+    _t("window", "Control windows and workspaces. workspace is a number or name, for workspace actions.",
+       ["action"], action={"type": "string", "enum": ["close", "fullscreen", "maximize", "focus_left",
+                                                      "focus_right", "overview", "workspace",
+                                                      "move_to_workspace"]}, workspace=S),
+    _t("open_website", "Open a website by name (youtube, github, ...) or domain.", ["site"], site=S),
+    _t("clipboard_read", "Read the text on the clipboard."),
+    _t("clipboard_copy", "Copy text to the clipboard.", ["text"], text=S),
+    _t("type_text", "Type text into the focused window as if typed on the keyboard.", ["text"], text=S),
+    _t("brightness", "Monitor brightness: set to 0-100, or change by delta.",
+       set={"type": "integer"}, delta={"type": "integer"}),
+    _t("screenshot", "Take a screenshot of the screen."),
+    _t("power", "Suspend, restart, shut down or log out. The user must confirm.", ["action"],
+       action={"type": "string", "enum": ["suspend", "reboot", "shutdown", "logout"]}),
 ]
 
 
@@ -82,7 +105,7 @@ def candidates(cfg, vram=vram_free_gb, resident=resident_on_gpu):
     return out
 
 
-def ask(text, facts, cfg, run_tool, vram=vram_free_gb, resident=resident_on_gpu):
+def ask(text, facts, cfg, run_tool, history=(), vram=vram_free_gb, resident=resident_on_gpu):
     system = SYSTEM + f"\nNow: {datetime.datetime.now():%A %Y-%m-%d %H:%M}."
     if facts:
         system += "\nKnown facts about the user:\n" + "\n".join(f"- {f}" for f in facts)
@@ -94,7 +117,7 @@ def ask(text, facts, cfg, run_tool, vram=vram_free_gb, resident=resident_on_gpu)
 
     for name, extra in candidates(cfg, vram, resident):
         try:
-            return providers.chat(name, system, text, TOOLS, tracked, cfg, extra)
+            return providers.chat(name, system, text, TOOLS, tracked, cfg, extra, history)
         except providers.ProviderError as e:
             log.warning("LLM %s %s failed: %s", name, extra, e)
             if ran:  # retrying elsewhere would repeat actions that already happened

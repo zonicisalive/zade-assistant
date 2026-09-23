@@ -62,6 +62,45 @@ def _call(cmd):
     subprocess.run(cmd, check=False, capture_output=True)
 
 
+def _feed(cmd, text):
+    subprocess.run(cmd, input=text, text=True, check=False, capture_output=True)
+
+
+def _output(cmd):
+    return subprocess.run(cmd, capture_output=True, text=True, timeout=5).stdout
+
+
+SITES = {
+    "youtube": "https://www.youtube.com", "github": "https://github.com", "reddit": "https://www.reddit.com",
+    "gmail": "https://mail.google.com", "google": "https://www.google.com", "chatgpt": "https://chatgpt.com",
+    "claude": "https://claude.ai", "twitter": "https://x.com", "x": "https://x.com",
+    "instagram": "https://www.instagram.com", "whatsapp": "https://web.whatsapp.com",
+    "netflix": "https://www.netflix.com", "amazon": "https://www.amazon.in", "wikipedia": "https://en.wikipedia.org",
+    "spotify": "https://open.spotify.com", "linkedin": "https://www.linkedin.com", "maps": "https://maps.google.com",
+}
+WINDOW = {
+    "close": ["close-window"], "fullscreen": ["fullscreen-window"], "maximize": ["maximize-column"],
+    "focus_left": ["focus-column-left"], "focus_right": ["focus-column-right"],
+    "overview": ["toggle-overview"], "workspace": ["focus-workspace"],
+    "move_to_workspace": ["move-window-to-workspace"],
+}
+POWER = {
+    "suspend": ("Suspend the computer?", ["systemctl", "suspend"]),
+    "reboot": ("Restart the computer?", ["systemctl", "reboot"]),
+    "shutdown": ("Shut down the computer?", ["systemctl", "poweroff"]),
+    "logout": ("Log out?", ["niri", "msg", "action", "quit", "--skip-confirmation"]),
+}
+
+
+def site_url(site):
+    s = site.lower().strip().removeprefix("the ").removesuffix(" website")
+    if s.replace(" ", "") in SITES:
+        return SITES[s.replace(" ", "")]
+    if re.fullmatch(r"[\w-]+(\.[\w-]+)+(/\S*)?", s):
+        return "https://" + s
+    return "https://duckduckgo.com/?q=" + urllib.parse.quote_plus(s)
+
+
 def _spawn(cmd):
     subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
 
@@ -84,6 +123,9 @@ def run(action, confirm):
     name, a = action["name"], action.get("args", {})
     if name in ("open_app", "close_app"):
         app = find_app(a["name"])
+        if not app and name == "open_app" and a["name"].lower().replace(" ", "") in SITES:
+            _spawn(["xdg-open", SITES[a["name"].lower().replace(" ", "")]])  # no app, but a known website
+            return ""
         if not app:
             raise Failed(f"I couldn't find {a['name']}.")
         if name == "open_app":
@@ -119,4 +161,40 @@ def run(action, confirm):
         return ""
     if name == "shell":
         return shell(a["cmd"], confirm)
+    if name == "window":
+        if a.get("action") not in WINDOW:
+            raise Failed(f"I can't do {a.get('action')} with windows.")
+        extra = [str(a["workspace"])] if a["action"] in ("workspace", "move_to_workspace") else []
+        _call(["niri", "msg", "action", *WINDOW[a["action"]], *extra])
+        return ""
+    if name == "open_website":
+        _spawn(["xdg-open", site_url(a["site"])])
+        return ""
+    if name == "clipboard_read":
+        text = _output(["wl-paste", "--no-newline"]).strip()
+        return f"Your clipboard says: {text[:2000]}" if text else "Your clipboard is empty."
+    if name == "clipboard_copy":
+        _feed(["wl-copy"], a["text"])
+        return "Copied."
+    if name == "type_text":
+        _call(["wtype", "--", a["text"]])
+        return ""
+    if name == "brightness":
+        if "set" in a:
+            _call(["ddcutil", "setvcp", "10", str(max(0, min(100, int(a["set"]))))])
+        else:
+            d = int(a.get("delta", 10))
+            _call(["ddcutil", "setvcp", "10", "+" if d >= 0 else "-", str(abs(d))])
+        return ""
+    if name == "screenshot":
+        _call(["niri", "msg", "action", "screenshot-screen"])
+        return "Screenshot saved."
+    if name == "power":
+        if a.get("action") not in POWER:
+            raise Failed(f"Unknown power action {a.get('action')}.")
+        question, cmd = POWER[a["action"]]
+        if not confirm(question):
+            raise Failed("Cancelled.")
+        _call(cmd)
+        return ""
     raise Failed(f"I don't know how to {name.replace('_', ' ')}.")
