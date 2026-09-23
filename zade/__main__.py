@@ -49,7 +49,7 @@ def dispatch(ctx, action):
         return ctx.run_action(action, ctx.confirm), True
     except actions.Failed as e:
         return str(e), False
-    except (KeyError, TypeError, ValueError, OSError) as e:
+    except Exception as e:  # a bad tool call must become an error the LLM sees, never a crash
         log.warning("action %s failed: %s", action, e)
         return f"That failed: {e}", False
 
@@ -95,6 +95,17 @@ def handle(ctx, raw):
         offer(ctx, text, executed)
 
 
+def safe_handle(ctx, text):
+    try:
+        handle(ctx, text)
+    except Exception:  # one bad request must not kill the assistant
+        log.exception("handling %r failed", text)
+        try:
+            ctx.say("Something went wrong.")
+        except Exception:
+            log.exception("could not report the failure")
+
+
 def laya_predictor(cfg):
     if not cfg["router"]["laya_enabled"]:
         return None
@@ -122,7 +133,7 @@ def main():
 
     def hear(timeout=None):
         a = audio.record(stream, cfg, timeout)
-        return None if a is None else stt.transcribe(a, cfg, prompt=", ".join(memory.shortcuts(conn)))
+        return None if a is None else stt.transcribe(a, cfg)
 
     def say(text):
         tts.speak(text, cfg)
@@ -137,14 +148,14 @@ def main():
     log.info("ready")
     while True:
         audio.wait_for_wake(stream, wake, cfg["wake"]["threshold"])
-        audio.chime()
+        audio.cue(stream)
         threading.Thread(target=brain.warm_up, args=(cfg,), daemon=True).start()
         text = hear()
         if text is None:
             audio.drain(stream)
             continue
         t = time.perf_counter()
-        handle(ctx, text)
+        safe_handle(ctx, text)
         log.info("heard %r, handled in %.2fs", text, time.perf_counter() - t)
 
 

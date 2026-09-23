@@ -26,9 +26,9 @@ def test_vram_unknown(tmp_path):
 
 def test_candidates():
     assert brain.candidates(cfg(), lambda: 8.0) == [("ollama", {}), ("ollama", {"num_gpu": 0})]
-    assert brain.candidates(cfg(), lambda: 2.0) == [("ollama", {"num_gpu": 0})]
+    assert brain.candidates(cfg(), lambda: 2.0, lambda c: False) == [("ollama", {"num_gpu": 0})]
     assert brain.candidates(cfg(), lambda: None) == [("ollama", {}), ("ollama", {"num_gpu": 0})]
-    assert brain.candidates(cfg(fallback="anthropic"), lambda: 2.0) == [("anthropic", {})]
+    assert brain.candidates(cfg(fallback="anthropic"), lambda: 2.0, lambda c: False) == [("anthropic", {})]
     assert brain.candidates(cfg(provider="openai", fallback="none"), lambda: 0.0) == [("openai", {})]
 
 
@@ -69,3 +69,22 @@ def test_facts_in_prompt(monkeypatch):
 def test_tool_names_unique():
     names = [t["name"] for t in brain.TOOLS]
     assert len(names) == len(set(names))
+
+
+def test_no_fallback_after_a_tool_ran(monkeypatch):
+    seen, ran = [], []
+
+    def fake(name, system, text, tools, run_tool, c, extra):
+        seen.append(name)
+        run_tool("open_app", {"name": "kitty"})
+        raise providers.ProviderError("timeout in round 2")
+
+    monkeypatch.setattr(providers, "chat", fake)
+    out = brain.ask("open kitty", [], cfg(), lambda n, a: ran.append(n) or "ok", lambda: 8.0)
+    assert seen == ["ollama"] and ran == ["open_app"]
+    assert out == "I did part of that, then lost my connection."
+
+
+def test_resident_model_counts_as_gpu():
+    assert brain.candidates(cfg(), lambda: 2.0, lambda c: True) == [("ollama", {}), ("ollama", {"num_gpu": 0})]
+    assert brain.candidates(cfg(), lambda: 2.0, lambda c: False) == [("ollama", {"num_gpu": 0})]

@@ -7,7 +7,10 @@ from rapidfuzz import fuzz
 log = logging.getLogger("zade")
 
 FILLER = re.compile(r"\b(zade|hey|please|can you|could you|would you|um+|uh+)\b")
-HALLUCINATIONS = {"you", "thank you", "thanks for watching", "bye"}
+HALLUCINATIONS = {
+    "you", "thank you", "thanks", "thank you very much", "thank you for watching", "thanks for watching",
+    "bye", "bye bye", "okay", "ok", "so",
+}
 
 
 def normalize(text):

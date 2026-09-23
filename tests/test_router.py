@@ -80,3 +80,8 @@ def test_laya_error_falls_through():
         raise RuntimeError("model missing")
 
     assert router.route("pause the music", {}, CFG, boom).kind == "llm"
+
+
+def test_more_whisper_hallucinations_are_nothing():
+    for t in ["Thank you for watching.", "Thanks.", "Thank you very much.", "Okay.", "So.", "Bye bye."]:
+        assert router.normalize(t) == "", t

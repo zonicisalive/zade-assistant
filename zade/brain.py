@@ -57,11 +57,20 @@ def vram_free_gb(root="/sys/class/drm"):
     return (best[0] - best[1]) / 2**30 if best else None
 
 
-def candidates(cfg, vram=vram_free_gb):
+def resident_on_gpu(cfg):
+    """True when our model is already loaded on the GPU (e.g. by warm_up), so its own VRAM use does not count."""
+    try:
+        return any(m.model == cfg["llm"]["model"] and m.size_vram
+                   for m in ollama.Client(host=cfg["llm"]["host"]).ps().models)
+    except (ollama.ResponseError, httpx.HTTPError, ConnectionError):
+        return False
+
+
+def candidates(cfg, vram=vram_free_gb, resident=resident_on_gpu):
     llm, out = cfg["llm"], []
     if llm["provider"] == "ollama":
         free = vram()
-        if free is None or free >= llm["vram_min_free_gb"]:
+        if free is None or free >= llm["vram_min_free_gb"] or resident(cfg):
             out.append(("ollama", {}))
     else:
         out.append((llm["provider"], {}))
@@ -73,15 +82,23 @@ def candidates(cfg, vram=vram_free_gb):
     return out
 
 
-def ask(text, facts, cfg, run_tool, vram=vram_free_gb):
+def ask(text, facts, cfg, run_tool, vram=vram_free_gb, resident=resident_on_gpu):
     system = SYSTEM + f"\nNow: {datetime.datetime.now():%A %Y-%m-%d %H:%M}."
     if facts:
         system += "\nKnown facts about the user:\n" + "\n".join(f"- {f}" for f in facts)
-    for name, extra in candidates(cfg, vram):
+    ran = []
+
+    def tracked(name, args):
+        ran.append(name)
+        return run_tool(name, args)
+
+    for name, extra in candidates(cfg, vram, resident):
         try:
-            return providers.chat(name, system, text, TOOLS, run_tool, cfg, extra)
+            return providers.chat(name, system, text, TOOLS, tracked, cfg, extra)
         except providers.ProviderError as e:
             log.warning("LLM %s %s failed: %s", name, extra, e)
+            if ran:  # retrying elsewhere would repeat actions that already happened
+                return "I did part of that, then lost my connection."
     return "My brain is offline right now."
 
 

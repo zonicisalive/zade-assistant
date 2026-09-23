@@ -76,6 +76,12 @@ def drain(stream):
         stream.read(n)
 
 
+def cue(stream):
+    """Beep, then drop the beep from the mic buffer so it is not recorded as speech."""
+    chime()
+    drain(stream)
+
+
 def chime():
     t = np.linspace(0, 0.12, int(RATE * 0.12), False)
     sd.play((0.2 * np.sin(2 * np.pi * 880 * t)).astype(np.float32), RATE)

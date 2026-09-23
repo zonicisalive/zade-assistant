@@ -62,3 +62,17 @@ def test_open_missing_app(monkeypatch):
 def test_unknown_action():
     with pytest.raises(actions.Failed):
         actions.run({"name": "format_disk", "args": {}}, lambda q: True)
+
+
+def test_is_yes_rejects_yes_plus_other_words():
+    for t in ["do it later", "run it tomorrow", "yeah hold on", "yes but not that one",
+              "ok so what does that do", "ok google", "it"]:
+        assert not actions.is_yes(t), t
+    for t in ["yes please", "okay run it", "yeah go ahead"]:
+        assert actions.is_yes(t), t
+
+
+def test_root_check_sees_through_quoting():
+    for cmd in ["s\\udo ls", "su\"\"do ls", "run0 ls", "'sudo' ls"]:
+        with pytest.raises(actions.Failed):
+            actions.shell(cmd, lambda q: True)

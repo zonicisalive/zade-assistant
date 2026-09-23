@@ -92,3 +92,24 @@ def test_make_shortcut_uses_previous_actions():
     memory.log(ctx.conn, "start my dev setup", DEV, "llm", True)
     z.handle(ctx, "remember dev means that")
     assert memory.shortcuts(ctx.conn) == {"dev": DEV}
+
+
+def test_unexpected_action_error_returns_to_llm():
+    said = []
+
+    def boom(action, confirm):
+        raise AttributeError("'NoneType' object has no attribute 'lower'")
+
+    ctx = make(said, ask=lambda text, facts, cfg, run_tool: run_tool("open_app", {"name": None}), run_action=boom)
+    z.handle(ctx, "open something")
+    assert said and said[0].startswith("That failed")
+
+
+def test_safe_handle_survives_any_error():
+    said = []
+
+    def boom(*a):
+        raise RuntimeError("provider exploded")
+
+    z.safe_handle(make(said, ask=boom), "what is tcp")
+    assert said == ["Something went wrong."]

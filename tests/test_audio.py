@@ -26,3 +26,11 @@ def test_stops_at_max_length():
 
 def test_speech_after_long_pause_still_counts():
     assert audio.decide(lv((0, 3.0), (2000, 0.5)), **A) == "wait"
+
+
+def test_cue_drops_chime_from_mic_buffer(monkeypatch):
+    order = []
+    monkeypatch.setattr(audio, "chime", lambda: order.append("chime"))
+    monkeypatch.setattr(audio, "drain", lambda s: order.append("drain"))
+    audio.cue(object())
+    assert order == ["chime", "drain"]

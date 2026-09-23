@@ -9,8 +9,9 @@ import urllib.parse
 from rapidfuzz import fuzz, process
 
 APP_DIRS = [pathlib.Path("/usr/share/applications"), pathlib.Path("~/.local/share/applications").expanduser()]
-ROOT = re.compile(r"\b(sudo|su|pkexec|doas)\b", re.IGNORECASE)
-YES = {"yes", "yeah", "yep", "yup", "sure", "ok", "okay", "do it", "run it", "go ahead"}
+ROOT = re.compile(r"\b(sudo|su|pkexec|doas|run0)\b", re.IGNORECASE)
+START = {"yes", "yeah", "yep", "yup", "sure", "ok", "okay", "do", "run", "go"}
+ALLOWED = START | {"it", "ahead", "please", "zade"}
 NO = {"no", "nope", "don't", "dont", "cancel", "stop", "wait"}
 MEDIA = {"play-pause", "play", "pause", "next", "previous"}
 TIMEOUT_S = 30
@@ -22,9 +23,10 @@ class Failed(Exception):
 
 def is_yes(text):
     t = " ".join(re.sub(r"[^a-z' ]", " ", text.lower()).split())
-    if not t or set(t.split()) & NO:
+    words = t.split()
+    if not words or set(words) & NO:
         return False
-    return any(t == y or t.startswith(y + " ") for y in YES)
+    return words[0] in START and all(w in ALLOWED for w in words)
 
 
 def find_app(name, dirs=APP_DIRS):
@@ -55,7 +57,7 @@ def _spawn(cmd):
 
 
 def shell(cmd, confirm):
-    if ROOT.search(cmd):
+    if ROOT.search(re.sub(r"[\\'\"]", "", cmd)):
         raise Failed("I won't run commands that need root.")
     if not confirm(f"Run {cmd}?"):
         raise Failed("Cancelled.")

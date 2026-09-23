@@ -40,5 +40,8 @@ def transcribe(audio, cfg, prompt=""):
         except (providers.ProviderError, openai.OpenAIError) as e:
             log.warning("cloud STT failed, using local whisper: %s", e)
     segments, _ = _whisper(s["model"], s["device"]).transcribe(
-        audio.astype(np.float32) / 32768, language="en", beam_size=1, initial_prompt=prompt or None)
-    return " ".join(seg.text.strip() for seg in segments).strip()
+        audio.astype(np.float32) / 32768, language="en", beam_size=1, initial_prompt=prompt or None,
+        vad_filter=True)
+    # Drop what Whisper invents from noise: likely-silent or very unsure segments.
+    return " ".join(seg.text.strip() for seg in segments
+                    if seg.no_speech_prob <= 0.6 and seg.avg_logprob >= -1.0).strip()
