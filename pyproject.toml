@@ -16,6 +16,7 @@ dependencies = [
   "laya",
   "torch",
   "kokoro-onnx>=0.6.1",
+  "evdev>=2.0.0",
 ]
 
 [project.scripts]

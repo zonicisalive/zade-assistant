@@ -137,6 +137,10 @@ def main():
     signal.signal(signal.SIGUSR1, lambda *_: trigger.set())
     pid_file = pathlib.Path(cfg["paths"]["data"]).expanduser() / "zade.pid"
     pid_file.write_text(str(os.getpid()))
+    if cfg["hotkey"]["enabled"]:
+        from . import hotkey
+
+        hotkey.watch(cfg, trigger)
 
     def hear(timeout=None):
         a = audio.record(stream, cfg, timeout)

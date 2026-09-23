@@ -7,7 +7,7 @@ Local-first voice assistant for the Linux desktop. Say "Zade", then a request.
 ```bash
 sudo pacman -S --needed portaudio playerctl wireplumber gtk3 uv   # plus Ollama with ROCm
 ollama pull qwen3:4b-instruct
-uv python install 3.11 && uv sync
+uv python install 3.11 && CC=gcc uv sync   # CC=gcc: evdev builds from source
 mkdir -p ~/.local/share/zade/voices ~/.config/zade
 uv run python -m piper.download_voices en_US-lessac-medium --data-dir ~/.local/share/zade/voices
 mkdir -p ~/.local/share/zade/kokoro && for f in kokoro-v1.0.onnx voices-v1.0.bin; do curl -L -o ~/.local/share/zade/kokoro/$f https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/$f; done

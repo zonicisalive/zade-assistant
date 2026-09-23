@@ -33,6 +33,7 @@ DEFAULTS = {
         },
     },
     "tts": {"provider": "kokoro", "voice": "af_heart", "speed": 1.2, "piper_voice": "en_US-lessac-medium"},
+    "hotkey": {"enabled": True, "key": "KEY_LEFTMETA", "hold_s": 2.0},
     "learning": {"promote_after": 3},
     "paths": {"data": "~/.local/share/zade"},
 }
