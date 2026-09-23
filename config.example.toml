@@ -6,7 +6,8 @@ model = "hey_jarvis"        # after Task 10: "~/.local/share/zade/zade.onnx"
 threshold = 0.5
 
 [audio]
-rms_threshold = 500         # raise if background noise keeps recordings open
+rms_threshold = 500         # minimum speech loudness; the real threshold adapts to room noise
+noise_factor = 2.5          # speech must be this many times louder than the room; lower if it cuts you off
 
 [llm]
 provider = "ollama"         # ollama | anthropic | openai

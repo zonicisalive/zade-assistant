@@ -135,7 +135,10 @@ def main():
         a = audio.record(stream, cfg, timeout)
         return None if a is None else stt.transcribe(a, cfg)
 
+    spoke_at = []
+
     def say(text):
+        spoke_at.append(time.perf_counter())
         tts.speak(text, cfg)
         audio.drain(stream)
 
@@ -155,8 +158,11 @@ def main():
             audio.drain(stream)
             continue
         t = time.perf_counter()
+        spoke_at.clear()
         safe_handle(ctx, text)
-        log.info("heard %r, handled in %.2fs", text, time.perf_counter() - t)
+        reply = (spoke_at[0] if spoke_at else time.perf_counter()) - t
+        log.info("heard %r, replied after %.2fs (speech threshold %d)",
+                 text, reply, audio.speech_threshold(audio.noise, cfg["audio"]["rms_threshold"], cfg["audio"]["noise_factor"]))
 
 
 if __name__ == "__main__":

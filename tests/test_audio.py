@@ -34,3 +34,13 @@ def test_cue_drops_chime_from_mic_buffer(monkeypatch):
     monkeypatch.setattr(audio, "drain", lambda s: order.append("drain"))
     audio.cue(object())
     assert order == ["chime", "drain"]
+
+
+def test_speech_threshold_follows_room_noise():
+    assert audio.speech_threshold([950] * 25, floor=500) == 2375
+    assert audio.speech_threshold([100] * 25, floor=500) == 500  # never below the configured floor
+    assert audio.speech_threshold([], floor=500) == 500
+
+
+def test_speech_threshold_ignores_a_few_loud_frames():
+    assert audio.speech_threshold([900] * 20 + [8000] * 5, floor=500) == 2250

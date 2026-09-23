@@ -50,20 +50,36 @@ def wake_model(cfg):
     return Model(wakeword_models=[model], inference_framework="onnx", **kw)
 
 
+def speech_threshold(noise_levels, floor, factor=2.5):
+    """Loudness that counts as speech: a multiple of the room's noise, never below the configured floor."""
+    if not noise_levels:
+        return floor
+    return max(floor, round(float(np.median(noise_levels)) * factor))
+
+
+NOISE_FRAMES = 25  # ~2 s of room sound kept while waiting for the wake word
+noise = []
+
+
 def wait_for_wake(stream, model, threshold):
     model.reset()
-    while max(model.predict(read(stream)).values()) < threshold:
-        pass
+    while True:
+        f = read(stream)
+        noise.append(rms(f))
+        del noise[:-NOISE_FRAMES]
+        if max(model.predict(f).values()) >= threshold:
+            return
 
 
 def record(stream, cfg, start_timeout_s=None):
     a = cfg["audio"]
+    thr = speech_threshold(noise, a["rms_threshold"], a["noise_factor"])
     frames, levels = [], []
     while True:
         f = read(stream)
         frames.append(f)
         levels.append(rms(f))
-        d = decide(levels, a["rms_threshold"], a["silence_s"], a["max_s"], start_timeout_s or a["start_timeout_s"])
+        d = decide(levels, thr, a["silence_s"], a["max_s"], start_timeout_s or a["start_timeout_s"])
         if d == "abort":
             return None
         if d == "stop":
