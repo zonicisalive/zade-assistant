@@ -36,10 +36,13 @@ def parse_pattern(text, find_app):
         return {"name": "open_app", "args": {"name": m[1]}} if find_app(m[1]) else None
     if m := re.fullmatch(r"(?:close|quit|kill|exit) (?:the )?(.+?)(?: app)?", text):
         return {"name": "close_app", "args": {"name": m[1]}} if find_app(m[1]) else None
+    verb = r"(?:set|increase|decrease|raise|lower|turn)(?: up| down)?"
+    if m := re.fullmatch(rf"(?:{verb} )?(?:the )?volume(?: up| down)? (?:to )?(\d{{1,3}})(?: percent)?", text):
+        return {"name": "volume", "args": {"set": int(m[1])}}
     if m := re.fullmatch(r"(?:turn )?(?:the )?volume (up|down)(?: a bit| a little)?", text):
         return {"name": "volume", "args": {"delta": 10 if m[1] == "up" else -10}}
-    if m := re.fullmatch(r"(?:set )?(?:the )?volume (?:to )?(\d{1,3})(?: percent)?", text):
-        return {"name": "volume", "args": {"set": int(m[1])}}
+    if m := re.fullmatch(r"(increase|raise|lower|decrease)(?: the)? volume(?: a bit| a little)?", text):
+        return {"name": "volume", "args": {"delta": 10 if m[1] in ("increase", "raise") else -10}}
     if m := re.fullmatch(r"(?:search|google|look up)(?: for)? (.+)", text):
         return {"name": "web_search", "args": {"query": m[1]}}
     return None

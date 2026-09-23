@@ -54,10 +54,11 @@ def speech_threshold(noise_levels, floor, factor=2.5):
     """Loudness that counts as speech: a multiple of the room's noise, never below the configured floor."""
     if not noise_levels:
         return floor
-    return max(floor, round(float(np.median(noise_levels)) * factor))
+    # 20th percentile: the quiet moments, even if you were talking for most of the window.
+    return max(floor, round(float(np.percentile(noise_levels, 20)) * factor))
 
 
-NOISE_FRAMES = 25  # ~2 s of room sound kept while waiting for the wake word
+NOISE_FRAMES = 125  # ~10 s of room sound kept while waiting for the wake word
 noise = []
 
 

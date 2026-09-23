@@ -85,3 +85,11 @@ def test_laya_error_falls_through():
 def test_more_whisper_hallucinations_are_nothing():
     for t in ["Thank you for watching.", "Thanks.", "Thank you very much.", "Okay.", "So.", "Bye bye."]:
         assert router.normalize(t) == "", t
+
+
+def test_more_volume_phrasings():
+    assert router.parse_pattern("increase volume to 80", find) == {"name": "volume", "args": {"set": 80}}
+    assert router.parse_pattern("turn the volume up to 30", find) == {"name": "volume", "args": {"set": 30}}
+    assert router.parse_pattern("increase the volume", find) == {"name": "volume", "args": {"delta": 10}}
+    assert router.parse_pattern("lower the volume", find) == {"name": "volume", "args": {"delta": -10}}
+    assert router.parse_pattern("turn it down", find) is None

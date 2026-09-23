@@ -44,3 +44,9 @@ def test_speech_threshold_follows_room_noise():
 
 def test_speech_threshold_ignores_a_few_loud_frames():
     assert audio.speech_threshold([900] * 20 + [8000] * 5, floor=500) == 2250
+
+
+def test_threshold_stays_at_room_level_when_mostly_speech():
+    # You talked right before "hey zade": most of the window is speech, the floor must still be the room.
+    levels = [950] * 10 + [6000] * 15
+    assert audio.speech_threshold(levels, floor=500) == 2375
