@@ -16,7 +16,7 @@ from . import actions, brain, config, info, memory, router
 log = logging.getLogger("zade")
 # Tools whose calls are never learned as shortcuts (memory, one-off content, or risky).
 STOP_WORDS = {"stop", "cancel", "never mind", "nevermind", "shut up", "quiet", "be quiet", "nothing"}
-MEMORY_TOOLS = {"remember", "forget", "list_facts", "make_shortcut", "sleep", "set_timer", "note_add",
+MEMORY_TOOLS = {"sync_apps", "remember", "forget", "list_facts", "make_shortcut", "sleep", "set_timer", "note_add",
                 "notes_read", "web_answer", "clipboard_read", "clipboard_copy", "type_text", "power", "shell"}
 
 
@@ -47,6 +47,7 @@ class Ctx:
     alerts: list = field(default_factory=list)  # due reminders, spoken by the main loop when idle
     history: list = field(default_factory=list)  # (time, user text, reply) for follow-ups
     turn: list = field(default_factory=list)  # actions done so far in the current request
+    app_words: list = field(default_factory=list)  # installed app names, given to Whisper as hotwords
 
 
 def recent(ctx, now=None):
@@ -79,6 +80,9 @@ def dispatch(ctx, action):
         if name == "sleep":
             brain.unload(ctx.cfg)
             return "Going to sleep.", True
+        if name == "sync_apps":
+            ctx.app_words[:] = actions.app_names()
+            return f"Synced {actions.all_app_count()} apps.", True
         if name == "weather":
             return info.weather(a.get("place", ""), a.get("day", 0)), True
         if name == "web_answer":
@@ -90,8 +94,7 @@ def dispatch(ctx, action):
         if name == "set_timer":
             seconds, message = int(a["seconds"]), a.get("message") or "Time's up."
 
-            def fire():
-                actions._call(["notify-send", "Zade", message])
+            def fire():  # spoken (and shown in the overlay) by the main loop when idle
                 ctx.alerts.append(message)
 
             ctx.start_timer(seconds, fire)
@@ -213,8 +216,6 @@ def main():
 
         ptt = hotkey.watch(cfg, trigger)
 
-    app_words = actions.app_names()  # your installed apps and games, so Whisper expects their names
-
     def hear(timeout=None, released=None, cancelled=None):
         ui.show("listening", heard="", reply="")
         a = audio.record(stream, cfg, timeout, released, cancelled, on_level=ui.level)
@@ -222,7 +223,7 @@ def main():
             ui.show("idle")
             return None
         ui.show("thinking")
-        text = stt.transcribe(a, cfg, hotwords=[*memory.shortcuts(conn), *app_words])
+        text = stt.transcribe(a, cfg, hotwords=[*memory.shortcuts(conn), *ctx.app_words])
         ui.show("thinking", heard=text.strip())
         return text
 
@@ -258,6 +259,7 @@ def main():
         return actions.is_yes(hear(5.0) or "")
 
     ctx = Ctx(cfg, conn, say, confirm, predict=laya_predictor(cfg))
+    ctx.app_words = actions.app_names()  # your installed apps and games, so Whisper expects their names
     overlay = ui.start(cfg)
     if overlay:
         atexit.register(overlay.terminate)

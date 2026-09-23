@@ -179,3 +179,15 @@ def test_closing_a_steam_game_never_kills_steam(monkeypatch):
     with pytest.raises(actions.Failed, match="Steam"):
         actions.run({"name": "close_app", "args": {"name": "meccha chameleon"}}, lambda q: True)
     assert calls == []
+
+
+def test_unknown_app_suggests_the_closest_instead_of_guessing(tmp_path, monkeypatch):
+    (tmp_path / "game.desktop").write_text("[Desktop Entry]\nName=MECCHA CHAMELEON\nExec=steam steam://x\n")
+    (tmp_path / "ff.desktop").write_text("[Desktop Entry]\nName=Firefox\nExec=firefox\n")
+    (tmp_path / "htop.desktop").write_text("[Desktop Entry]\nName=Htop\nExec=htop\n")
+    monkeypatch.setattr(actions, "APP_DIRS", [tmp_path])
+    with pytest.raises(actions.Failed, match="Did you mean MECCHA CHAMELEON"):
+        actions.run({"name": "open_app", "args": {"name": "megacamillion"}}, lambda q: True)
+    with pytest.raises(actions.Failed) as e:
+        actions.run({"name": "open_app", "args": {"name": "photoshop"}}, lambda q: True)
+    assert "Did you mean" not in str(e.value)  # nothing close: no wild suggestion

@@ -128,8 +128,11 @@ def test_info_tools_and_timer(monkeypatch):
     z.handle(ctx, "weather tomorrow and remind me in 5 minutes")
     assert said == ["weather Mumbai 1 | Timer set for 5 minutes."]
     assert timers[0][0] == 300
+    sent = []
+    monkeypatch.setattr(actions, "_call", sent.append)
     timers[0][1]()  # the timer fires
     assert ctx.alerts == ["check the oven"]
+    assert sent == []  # spoken + overlay only, no desktop notification
     assert memory.last_actions(ctx.conn) == [{"name": "weather", "args": {"place": "Mumbai", "day": 1}}]  # timer not learned
 
 
@@ -195,3 +198,14 @@ def test_teach_with_nothing_done_saves_nothing():
     z.handle(ctx, "when i say gaming mode open steam")
     assert memory.shortcuts(ctx.conn) == {}
     assert said[-1] == "That didn't work, so I didn't save it."
+
+
+def test_sync_apps_refreshes_the_word_list(monkeypatch):
+    said = []
+    ctx = make(said)
+    ctx.app_words = ["Old App"]
+    monkeypatch.setattr(actions, "app_names", lambda: ["MECCHA CHAMELEON", "Telegram"])
+    monkeypatch.setattr(actions, "all_app_count", lambda: 142)
+    z.handle(ctx, "sync apps")
+    assert ctx.app_words == ["MECCHA CHAMELEON", "Telegram"]
+    assert said == ["Synced 142 apps."]

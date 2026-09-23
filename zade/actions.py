@@ -9,7 +9,12 @@ import urllib.parse
 
 from rapidfuzz import fuzz, process
 
-APP_DIRS = [pathlib.Path("/usr/share/applications"), pathlib.Path("~/.local/share/applications").expanduser()]
+APP_DIRS = [
+    pathlib.Path("/usr/share/applications"),
+    pathlib.Path("/var/lib/flatpak/exports/share/applications"),
+    pathlib.Path("~/.local/share/flatpak/exports/share/applications").expanduser(),
+    pathlib.Path("~/.local/share/applications").expanduser(),  # last: your own entries win
+]
 ROOT = re.compile(r"\b(sudo|su|pkexec|doas|run0)\b", re.IGNORECASE)
 START = {"yes", "yeah", "yep", "yup", "sure", "ok", "okay", "do", "run", "go"}
 ALLOWED = START | {"it", "ahead", "please", "zade"}
@@ -40,9 +45,8 @@ def _default_browser():
     return r.stdout.strip()
 
 
-def find_app(name, dirs=APP_DIRS):
-    if name.lower().strip() in BROWSER_WORDS:
-        name = _default_browser().removesuffix(".desktop") or name
+def _apps(dirs):
+    """{lowercase name or desktop id: (desktop id, executable)} for every visible app."""
     apps = {}
     for d in dirs:
         for f in sorted(d.glob("*.desktop")) if d.exists() else []:
@@ -57,8 +61,42 @@ def find_app(name, dirs=APP_DIRS):
                 continue
             apps[e.get("Name", f.stem).lower()] = entry
             apps.setdefault(f.stem.lower(), entry)
+    return apps
+
+
+def find_app(name, dirs=None):
+    if name.lower().strip() in BROWSER_WORDS:
+        name = _default_browser().removesuffix(".desktop") or name
+    apps = _apps(dirs or APP_DIRS)
     m = process.extractOne(name.lower(), list(apps), scorer=fuzz.WRatio, score_cutoff=85)
     return apps[m[0]] if m else None
+
+
+def closest_app(name, dirs=None):
+    """Best guess for a misheard app name (spaces ignored, "megacamillion" -> "MECCHA CHAMELEON"), or None."""
+    names = {n: n for n in _apps(dirs or APP_DIRS)}
+    squash = lambda t: t.replace(" ", "").lower()
+    target = squash(name)
+    # Only compare names of similar length: short names ("htop") otherwise match anything by accident.
+    similar = {n: squash(n) for n in names
+               if min(len(squash(n)), len(target)) >= 0.6 * max(len(squash(n)), len(target))}
+    m = process.extractOne(target, similar, scorer=fuzz.ratio, score_cutoff=55)
+    if not m:
+        return None
+    for d in dirs or APP_DIRS:  # report the name as the app spells it
+        for f in d.glob("*.desktop") if d.exists() else []:
+            try:
+                cp = configparser.ConfigParser(interpolation=None, strict=False)
+                cp.read(f, encoding="utf-8")
+                if cp["Desktop Entry"].get("Name", "").lower() == m[2]:
+                    return cp["Desktop Entry"]["Name"]
+            except (configparser.Error, KeyError, UnicodeDecodeError):
+                continue
+    return m[2]
+
+
+def all_app_count(dirs=None):
+    return len({entry for entry in _apps(dirs or APP_DIRS).values()})
 
 
 USER_APP_DIRS = [pathlib.Path("~/.local/share/applications").expanduser()]
@@ -149,7 +187,8 @@ def run(action, confirm):
             _spawn(["xdg-open", SITES[a["name"].lower().replace(" ", "")]])  # no app, but a known website
             return ""
         if not app:
-            raise Failed(f"I couldn't find {a['name']}.")
+            guess = closest_app(a["name"]) if name == "open_app" else None
+            raise Failed(f"I couldn't find {a['name']}." + (f" Did you mean {guess}?" if guess else ""))
         if name == "open_app":
             _spawn(["gtk-launch", app[0]])
         elif app[1] == "steam":  # a Steam game's launcher is Steam itself; pkill would close all of Steam

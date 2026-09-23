@@ -16,7 +16,8 @@ SYSTEM = (
     "fits; the user approves each command, and sudo is never allowed. When the user states a lasting "
     "fact about themselves, call remember. For news, sports results, prices, recent events or anything that "
     "may have changed after your training, call web_answer instead of answering from memory. To write text "
-    "into the current window, call type_text. When the user teaches a command (\"when I say X, do Y\"), "
+    "into the current window, call type_text. If open_app cannot find an app, tell the user and pass on "
+    "its suggestion; never open a web search for it instead. When the user teaches a command (\"when I say X, do Y\"), "
     "do Y with tools first, then call make_shortcut with phrase X."
 )
 S = {"type": "string"}
@@ -65,6 +66,7 @@ TOOLS = [
     _t("brightness", "Monitor brightness: set to 0-100, or change by delta.",
        set={"type": "integer"}, delta={"type": "integer"}),
     _t("screenshot", "Take a screenshot of the screen."),
+    _t("sync_apps", "Rescan installed apps and games so their names are recognised."),
     _t("power", "Suspend, restart, shut down or log out. The user must confirm.", ["action"],
        action={"type": "string", "enum": ["suspend", "reboot", "shutdown", "logout"]}),
 ]
