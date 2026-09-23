@@ -258,8 +258,9 @@ def main():
             return
         spoke_at.append(time.perf_counter())
         wake.reset()
-        ui.show("speaking", reply=tts.clean(text))
-        if not tts.speak(text, cfg, interrupt=interrupted):
+        spoken, _, detail = text.partition("\n")  # text after a newline is shown, not spoken
+        ui.show("speaking", reply=tts.clean(spoken) + (f"\n{detail}" if detail else ""))
+        if not tts.speak(spoken, cfg, interrupt=interrupted):
             audio.drain(stream)
         ui.show("done")
 

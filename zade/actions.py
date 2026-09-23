@@ -168,7 +168,9 @@ def _spawn(cmd):
 def shell(cmd, confirm):
     if ROOT.search(re.sub(r"[\\'\"]", "", cmd)):
         raise Failed("I won't run commands that need root.")
-    if not confirm(f"Run {cmd}?"):
+    # Long commands are shown in the overlay (after the newline) instead of being read aloud.
+    question = f"Run {cmd}?" if len(cmd) <= 40 else f"Should I run this command?\n{cmd}"
+    if not confirm(question):
         raise Failed("Cancelled.")
     try:
         # ponytail: timeout kills the shell, not grandchildren; use a process group if that bites.

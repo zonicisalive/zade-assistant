@@ -191,3 +191,11 @@ def test_unknown_app_suggests_the_closest_instead_of_guessing(tmp_path, monkeypa
     with pytest.raises(actions.Failed) as e:
         actions.run({"name": "open_app", "args": {"name": "photoshop"}}, lambda q: True)
     assert "Did you mean" not in str(e.value)  # nothing close: no wild suggestion
+
+
+def test_long_commands_are_shown_not_read_aloud():
+    asked = []
+    actions.shell("echo hi", lambda q: asked.append(q) or True)
+    long_cmd = "ls /usr/bin | grep -E 'firefox|thunderbird|libreoffice|gedit|emacs'"
+    actions.shell(long_cmd, lambda q: asked.append(q) or True)
+    assert asked == ["Run echo hi?", "Should I run this command?\n" + long_cmd]
