@@ -21,6 +21,7 @@ ALLOWED = START | {"it", "ahead", "please", "zade"}
 NO = {"no", "nope", "don't", "dont", "cancel", "stop", "wait"}
 MEDIA = {"play-pause", "play", "pause", "next", "previous"}
 TIMEOUT_S = 30
+WRAPPERS = {"sh", "bash", "zsh", "env", "flatpak", "python", "python3", "gtk-launch", "xdg-open", "sudo", "exec"}
 SINK = ["wpctl", "set-volume", "-l", "1.0", "@DEFAULT_AUDIO_SINK@"]
 RAMP_STEP, RAMP_DELAY_S = 5, 0.03  # desktop "volume protection" rejects jumps of ~10% or more
 
@@ -60,7 +61,9 @@ def _apps(dirs):
             except (configparser.Error, KeyError, ValueError, UnicodeDecodeError):
                 continue
             apps[e.get("Name", f.stem).lower()] = entry
-            apps.setdefault(f.stem.lower(), entry)
+            # Only the last part of an ID like "com.github.wwmm.easyeffects": the rest (github, kde, gnome)
+            # is not the app's name and would make "open github" launch the wrong app.
+            apps.setdefault(f.stem.lower().rsplit(".", 1)[-1], entry)
     return apps
 
 
@@ -195,6 +198,8 @@ def run(action, confirm):
             _spawn(["gtk-launch", app[0]])
         elif app[1] == "steam":  # a Steam game's launcher is Steam itself; pkill would close all of Steam
             raise Failed(f"I can't close Steam games yet. Close {a['name']} from the game.")
+        elif app[1] in WRAPPERS:  # e.g. Spotify starts via "sh": pkill would kill every shell
+            raise Failed(f"I can't close {a['name']} safely by name. Focus it and say close this window.")
         else:
             _call(["pkill", "-x", app[1]])
         return ""

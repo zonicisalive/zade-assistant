@@ -199,3 +199,22 @@ def test_long_commands_are_shown_not_read_aloud():
     long_cmd = "ls /usr/bin | grep -E 'firefox|thunderbird|libreoffice|gedit|emacs'"
     actions.shell(long_cmd, lambda q: asked.append(q) or True)
     assert asked == ["Run echo hi?", "Should I run this command?\n" + long_cmd]
+
+
+def test_words_inside_app_ids_do_not_match(tmp_path):
+    (tmp_path / "com.github.wwmm.easyeffects.desktop").write_text(
+        "[Desktop Entry]\nName=Easy Effects\nExec=easyeffects\n")
+    (tmp_path / "org.mozilla.firefox.desktop").write_text("[Desktop Entry]\nName=Firefox\nExec=firefox\n")
+    assert actions.find_app("github", [tmp_path]) is None           # "github" is only in the ID
+    assert actions.find_app("easyeffects", [tmp_path]) == ("com.github.wwmm.easyeffects", "easyeffects")
+    assert actions.find_app("easy effects", [tmp_path]) == ("com.github.wwmm.easyeffects", "easyeffects")
+    assert actions.find_app("firefox", [tmp_path]) == ("org.mozilla.firefox", "firefox")
+
+
+def test_never_pkill_generic_launchers(monkeypatch):
+    calls = _calls(monkeypatch)
+    for exe in ["sh", "bash", "env", "flatpak", "python3", "gtk-launch"]:
+        monkeypatch.setattr(actions, "find_app", lambda name, e=exe: ("some-app", e))
+        with pytest.raises(actions.Failed, match="close this window"):
+            actions.run({"name": "close_app", "args": {"name": "spotify"}}, lambda q: True)
+    assert calls == []
