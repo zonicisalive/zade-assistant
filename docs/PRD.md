@@ -6,14 +6,14 @@
 
 ## 1. Summary
 
-Zade is a fully local voice assistant for the desktop. You say the wake word "Zade", speak a request, and Zade either performs an action on the PC or answers out loud. Zade learns your habits over time, so frequent requests turn into instant shortcuts and a partial phrase is enough to trigger them.
+Zade is a local-first voice assistant for the desktop. You say the wake word "Zade", speak a request, and Zade either performs an action on the PC or answers out loud. Zade learns your habits over time, so frequent requests turn into instant shortcuts and a partial phrase is enough to trigger them.
 
-Zade must be fast, private (no audio or text leaves the machine), and light on the GPU. It uses no VRAM while idle because the GPU is shared with other model workflows.
+Zade must be fast, private by default, and light on the GPU. It uses no VRAM while idle because the GPU is shared with other model workflows. Every processing stage (speech-to-text, LLM, text-to-speech) runs locally by default, and each one can be switched to a cloud provider in the config.
 
 ## 2. Goals
 
 1. **Speed.** A learned shortcut or known action runs within 0.5 s of the end of speech. An LLM answer starts speaking within 2 s.
-2. **Fully local.** No cloud APIs, and Zade works offline.
+2. **Local by default, cloud when chosen.** With the default config, nothing leaves the machine and Zade works offline. Each stage can use a cloud provider instead, chosen per stage in `config.toml`.
 3. **Low resource use.** 0 VRAM while idle and at most 4 GB while active. Zade never evicts or breaks other GPU workloads.
 4. **Learns the user.** It remembers facts and habits and promotes repeated requests to shortcuts that trigger on partial phrases.
 5. **Safe.** It never runs an unknown shell command without spoken confirmation.
@@ -25,7 +25,7 @@ Zade must be fast, private (no audio or text leaves the machine), and light on t
 - Continuous conversation mode (every request starts with the wake word; the confirmation reply is the only exception)
 - Languages other than English
 - Smart-home control, mobile apps and remote access
-- Cloud fallback of any kind
+- Cloud providers for the wake word or the Laya router (both stay local, because they run on every utterance and must be instant)
 
 ## 4. User stories
 
@@ -99,6 +99,22 @@ The LLM choice lives in `config.toml`. `qwen2.5:3b` (~2.5 GB) is the fallback if
 
 Ollama's server configuration should set `OLLAMA_MAX_LOADED_MODELS` to suit the user's other workflows. Zade's VRAM check exists so that Zade never triggers an Ollama eviction.
 
+### 5.4 Cloud providers
+
+Each stage has a `provider` setting. The default is local for all three.
+
+| Stage | Local provider (default) | Cloud providers |
+|---|---|---|
+| STT | `whisper` (faster-whisper) | `openai` — any OpenAI-compatible `/audio/transcriptions` endpoint (OpenAI, Groq) |
+| LLM | `ollama` | `anthropic` — Claude through the official `anthropic` Python SDK; `openai` — any OpenAI-compatible chat endpoint (OpenAI, Google Gemini's OpenAI-compatible endpoint, OpenRouter, Groq, DeepSeek, Mistral) |
+| TTS | `piper` | `openai` — any OpenAI-compatible `/audio/speech` endpoint |
+
+- One `openai` provider covers most vendors: each one is just a `base_url`, an API key environment variable and a model name. Gemini goes through its OpenAI-compatible endpoint (`https://generativelanguage.googleapis.com/v1beta/openai/`), so it needs no separate client.
+- Claude uses the native `anthropic` SDK rather than an OpenAI-compatible shim, for reliable tool calling. Its default model in the example config is `claude-opus-5`; a faster, cheaper model such as `claude-haiku-4-5` can be set in `llm.model` if latency matters more than capability.
+- All LLM providers receive the same tool definitions (section 6.3), the same facts, and the same confirmation gate. A cloud LLM never runs a shell command without the spoken yes.
+- **Fallback:** `llm.fallback` decides what happens when the chosen LLM is unavailable (too little VRAM for Ollama, or no network or an API error for a cloud provider). It names another configured provider, for example `"anthropic"` to use Claude when VRAM is busy, or `"cpu"` for the local CPU fallback in 5.3. When the fallback is also unavailable, Zade says so and keeps shortcuts and Laya routes working.
+- API keys are read from environment variables named in the config (`api_key_env`), for example `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY`.
+
 ## 6. Functional requirements
 
 ### 6.1 Audio
@@ -113,7 +129,7 @@ Ollama's server configuration should set `OLLAMA_MAX_LOADED_MODELS` to suit the 
 - **FR-5:** Normalize the transcript (lowercase, strip punctuation and filler words such as "please", "can you" and "um").
 - **FR-6:** Match against approved shortcuts using `rapidfuzz.fuzz.WRatio` plus a prefix match. A score of 90 or more runs the shortcut. This is how partial phrases work: "dev" matches "dev" and "start dev" matches "start dev setup".
 - **FR-7:** Otherwise, ask Laya to choose from the list of known actions and shortcuts, with a "none of these" option. Act on its confidence using the thresholds in 5.1, which are configurable.
-- **FR-8:** Otherwise, send the request to Qwen with the tool definitions from 6.3 plus the stored facts from 6.4 in the system prompt.
+- **FR-8:** Otherwise, send the request to the configured LLM (Qwen through Ollama by default) with the tool definitions from 6.3 plus the stored facts from 6.4 in the system prompt.
 - **FR-9:** Keep spoken answers short (at most 3 sentences) unless the user asks for more detail.
 
 ### 6.3 Actions
@@ -158,8 +174,8 @@ Anything else goes through the confirmation gate:
 | NFR-4 | Idle VRAM | 0 |
 | NFR-5 | Active VRAM | ≤ 4 GB |
 | NFR-6 | Idle CPU | < 3% of one core |
-| NFR-7 | Network | No outbound connections at runtime (models are downloaded once at setup) |
-| NFR-8 | Privacy | Audio is never written to disk unless `debug.save_audio = true` |
+| NFR-7 | Network | With the default all-local config, no outbound connections at runtime (models are downloaded once at setup). A stage set to a cloud provider connects only to that provider's endpoint |
+| NFR-8 | Privacy | Audio is never written to disk unless `debug.save_audio = true`. Audio leaves the machine only when `stt.provider` is a cloud provider; transcript text and stored facts leave it only when `llm.provider` is a cloud provider. API keys come from environment variables and are never stored in `config.toml` or the database |
 
 Latency is measured with timestamps logged at each pipeline stage.
 
@@ -205,6 +221,7 @@ model = "~/.local/share/zade/zade.onnx"   # custom-trained wake word
 threshold = 0.5
 
 [stt]
+provider = "whisper"            # whisper | openai
 model = "small.en"
 device = "cpu"
 
@@ -214,12 +231,29 @@ laya_accept = 0.90
 laya_confirm = 0.60
 
 [llm]
+provider = "ollama"             # ollama | anthropic | openai
 model = "qwen3:4b"
 num_ctx = 4096
 keep_alive = "60s"
 vram_min_free_gb = 4.0
+fallback = "cpu"                # cpu | none | name of a provider below
+
+# Used when provider or fallback is "anthropic"
+[providers.anthropic]
+model = "claude-opus-5"
+api_key_env = "ANTHROPIC_API_KEY"
+
+# Used when provider or fallback is "openai". Swap base_url/model/key for any
+# OpenAI-compatible vendor, e.g. Gemini:
+#   base_url = "https://generativelanguage.googleapis.com/v1beta/openai/"
+#   api_key_env = "GEMINI_API_KEY"
+[providers.openai]
+base_url = "https://api.openai.com/v1"
+model = "gpt-5-mini"             # example; use any model the endpoint serves
+api_key_env = "OPENAI_API_KEY"
 
 [tts]
+provider = "piper"              # piper | openai
 voice = "en_US-lessac-medium"
 
 [learning]
@@ -234,7 +268,8 @@ save_audio = false
 ```
 Zade/
   pyproject.toml        # deps: openwakeword, faster-whisper, piper-tts, ollama,
-                        #       rapidfuzz, sounddevice, numpy, transformers/torch (Laya)
+                        #       rapidfuzz, sounddevice, numpy, transformers/torch (Laya),
+                        #       anthropic, openai (cloud providers)
   config.example.toml
   docs/
     PRD.md
@@ -242,10 +277,11 @@ Zade/
     __main__.py         # main loop: wake → record → stt → route → act → speak
     config.py           # load TOML (stdlib tomllib) into a dict
     audio.py            # mic stream, wake word, VAD recording, chime
-    stt.py              # faster-whisper wrapper
-    tts.py              # piper wrapper, playback
+    stt.py              # transcribe(): faster-whisper or OpenAI-compatible endpoint
+    tts.py              # speak(): piper or OpenAI-compatible endpoint, playback
     router.py           # normalize, shortcut match, Laya, fall through to Qwen
-    brain.py            # Ollama client, tool calls, warm-up, VRAM check
+    brain.py            # ask(): picks provider, tool-call loop, fallback, warm-up, VRAM check
+    providers.py        # one chat function each for ollama, anthropic, openai-compatible
     actions.py          # allowlist, confirmation gate, shell runner
     memory.py           # SQLite: history, shortcuts, facts, promotion rule
   tests/
@@ -280,6 +316,7 @@ Each module has one job and plain functions. There are no class hierarchies or p
 | M3 | **Router** | Shortcut match and Laya routing, with NFR-1 met for known actions |
 | M4 | **Memory** | History, facts, shortcut promotion (FR-13 to FR-17) |
 | M5 | **GPU lifecycle** | Warm-up on wake, idle unload, CPU fallback; NFR-4 and NFR-5 verified with `rocm-smi` |
+| M5b | **Cloud providers** | `anthropic` and `openai` LLM providers pass the same tool-call tests as Ollama; cloud STT and TTS work; `llm.fallback` switches correctly when VRAM is busy or the network is down |
 | M6 | **Daily driver** | systemd user service, latency logging, a week of personal use with thresholds tuned |
 
 ## 13. Risks
@@ -290,4 +327,6 @@ Each module has one job and plain functions. There are no class hierarchies or p
 | ROCm support for the RDNA4 (gfx1200) card in Ollama | Verify in M0. Ollama's Vulkan backend or the CPU fallback keep Zade working |
 | Whisper mishears short commands | Use `initial_prompt` with shortcut phrases and app names to bias recognition; the confirm band catches the rest |
 | False wake-word triggers: "Zade" is one short syllable, so it trips more easily than a longer phrase, and names such as "Jade" or "Wade" sound close to it | Train with negative examples of similar words and tune the threshold. If false triggers stay high, switch to "hey Zade" (a config change plus a retrain) |
+| A cloud provider is slow, down or rate-limited | 10 s request timeout, then `llm.fallback`; shortcuts and Laya routes never depend on the network |
+| API keys leak | Keys only in environment variables, never in `config.toml`, logs or the database |
 | Qwen writes a harmful command | The confirmation gate, the sudo ban, the 30 s timeout, and running as a normal user |
