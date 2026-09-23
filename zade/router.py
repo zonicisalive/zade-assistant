@@ -71,6 +71,9 @@ def parse_pattern(text, find_app):
         return {"name": "set_timer", "args": {"seconds": _seconds(m[1], m[2]), "message": m[3]}}
     if m := re.fullmatch(r"(?:what's |what is |how's |how is )?(?:the )?weather(?: like)?(?: (today|tomorrow))?", text):
         return {"name": "weather", "args": {"day": 1} if m[1] == "tomorrow" else {}}
+    if re.fullmatch(r"(?:what's|what is) on (?:my|the) screen|(?:read|describe) (?:my|the) screen|"
+                    r"what does this say|(?:explain|read) this(?: error)?|what am i looking at", text):
+        return {"name": "look_at_screen", "args": {"question": text}}
     if m := re.fullmatch(r"(?:how hot is|how's|how is|what's using|what is using|check)?(?: my| the)? ?"
                          r"(gpu|cpu|processor|graphics card|ram|memory)(?: temperature| temp| usage| load)?"
                          r"(?: is free| free| left| doing)?", text):

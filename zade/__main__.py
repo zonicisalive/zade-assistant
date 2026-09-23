@@ -18,7 +18,7 @@ from . import actions, brain, config, info, memory, router
 log = logging.getLogger("zade")
 # Tools whose calls are never learned as shortcuts (memory, one-off content, or risky).
 STOP_WORDS = {"stop", "cancel", "never mind", "nevermind", "shut up", "quiet", "be quiet", "nothing"}
-MEMORY_TOOLS = {"system_status", "set_reminder", "list_reminders", "cancel_reminder", "sync_apps", "remember", "forget", "list_facts", "make_shortcut", "sleep", "set_timer", "note_add",
+MEMORY_TOOLS = {"look_at_screen", "system_status", "set_reminder", "list_reminders", "cancel_reminder", "sync_apps", "remember", "forget", "list_facts", "make_shortcut", "sleep", "set_timer", "note_add",
                 "notes_read", "web_answer", "clipboard_read", "clipboard_copy", "type_text", "power", "shell"}
 
 
@@ -106,6 +106,10 @@ def dispatch(ctx, action):
         if name == "sleep":
             brain.unload(ctx.cfg)
             return "Going to sleep.", True
+        if name == "look_at_screen":
+            from . import vision
+
+            return vision.look(a.get("question") or "What's on the screen?", ctx.cfg), True
         if name == "system_status":
             from . import system
 

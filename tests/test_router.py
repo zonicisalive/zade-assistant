@@ -142,3 +142,9 @@ def test_system_status_patterns():
     assert P("how much ram is free", find) == {"name": "system_status", "args": {"what": "ram"}}
     assert P("system status", find) == {"name": "system_status", "args": {"what": "all"}}
     assert P("what are my reminders", find) == {"name": "list_reminders", "args": {}}
+
+
+def test_screen_patterns():
+    for t in ["what's on my screen", "read my screen", "describe my screen", "what does this say",
+              "explain this error", "what am i looking at"]:
+        assert router.parse_pattern(t, find) == {"name": "look_at_screen", "args": {"question": t}}, t
