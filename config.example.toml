@@ -17,6 +17,7 @@ fallback = "cpu"            # cpu | none | anthropic | openai
 
 [stt]
 provider = "whisper"        # whisper | openai
+# hotwords = ["Zade", "workspace", ...]   # words to expect; your shortcut names are added automatically
 
 [tts]
 provider = "kokoro"         # kokoro | piper | openai

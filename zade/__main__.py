@@ -215,7 +215,7 @@ def main():
 
     def hear(timeout=None, released=None, cancelled=None):
         a = audio.record(stream, cfg, timeout, released, cancelled)
-        return None if a is None else stt.transcribe(a, cfg)
+        return None if a is None else stt.transcribe(a, cfg, hotwords=list(memory.shortcuts(conn)))
 
     spoke_at = []
     barge = []  # why speech was interrupted ("wake" or "hotkey"); empty when not interrupted

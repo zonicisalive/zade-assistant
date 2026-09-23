@@ -5,7 +5,12 @@ import tomllib
 DEFAULTS = {
     "wake": {"model": "hey_jarvis", "threshold": 0.5, "verifier": "", "verifier_threshold": 0.3},
     "audio": {"rms_threshold": 500, "noise_factor": 2.5, "silence_s": 0.8, "max_s": 10.0, "start_timeout_s": 4.0},
-    "stt": {"provider": "whisper", "model": "base.en", "device": "cpu"},
+    "stt": {
+        "provider": "whisper", "model": "base.en", "device": "cpu", "beam_size": 5,
+        # Words to expect: big accuracy gain for accents and made-up names (shortcut phrases are added too).
+        "hotwords": ["Zade", "workspace", "timer", "remind me", "minutes", "volume", "weather", "screenshot",
+                     "Firefox", "Discord", "Steam", "YouTube", "clipboard", "brightness"],
+    },
     "router": {"shortcut_min_score": 90, "laya_accept": 0.90, "laya_confirm": 0.60, "laya_enabled": False},
     "llm": {
         "provider": "ollama",

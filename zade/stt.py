@@ -28,7 +28,7 @@ def to_wav(audio, rate=16000):
     return buf.getvalue()
 
 
-def transcribe(audio, cfg, prompt=""):
+def transcribe(audio, cfg, prompt="", hotwords=()):
     s = cfg["stt"]
     if s["provider"] == "openai":
         pc = cfg["providers"]["openai"]
@@ -39,9 +39,10 @@ def transcribe(audio, cfg, prompt=""):
             return r.text.strip()
         except (providers.ProviderError, openai.OpenAIError) as e:
             log.warning("cloud STT failed, using local whisper: %s", e)
+    words = ", ".join(dict.fromkeys([*s["hotwords"], *hotwords]))
     segments, _ = _whisper(s["model"], s["device"]).transcribe(
-        audio.astype(np.float32) / 32768, language="en", beam_size=1, initial_prompt=prompt or None,
-        vad_filter=True)
+        audio.astype(np.float32) / 32768, language="en", beam_size=s["beam_size"], initial_prompt=prompt or None,
+        hotwords=words or None, vad_filter=True)
     # Drop what Whisper invents from noise: likely-silent or very unsure segments.
     return " ".join(seg.text.strip() for seg in segments
                     if seg.no_speech_prob <= 0.6 and seg.avg_logprob >= -1.0).strip()
