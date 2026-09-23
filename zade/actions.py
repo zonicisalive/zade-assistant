@@ -29,7 +29,17 @@ def is_yes(text):
     return words[0] in START and all(w in ALLOWED for w in words)
 
 
+BROWSER_WORDS = {"browser", "the browser", "web browser", "internet"}
+
+
+def _default_browser():
+    r = subprocess.run(["xdg-settings", "get", "default-web-browser"], capture_output=True, text=True)
+    return r.stdout.strip()
+
+
 def find_app(name, dirs=APP_DIRS):
+    if name.lower().strip() in BROWSER_WORDS:
+        name = _default_browser().removesuffix(".desktop") or name
     apps = {}
     for d in dirs:
         for f in sorted(d.glob("*.desktop")) if d.exists() else []:

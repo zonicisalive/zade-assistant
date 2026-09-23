@@ -76,3 +76,11 @@ def test_root_check_sees_through_quoting():
     for cmd in ["s\\udo ls", "su\"\"do ls", "run0 ls", "'sudo' ls"]:
         with pytest.raises(actions.Failed):
             actions.shell(cmd, lambda q: True)
+
+
+def test_browser_means_the_default_browser(tmp_path, monkeypatch):
+    (tmp_path / "avahi-discover.desktop").write_text("[Desktop Entry]\nName=Avahi Zeroconf Browser\nExec=avahi-discover\n")
+    (tmp_path / "firefox.desktop").write_text("[Desktop Entry]\nName=Firefox\nExec=/usr/lib/firefox/firefox %u\n")
+    monkeypatch.setattr(actions, "_default_browser", lambda: "firefox.desktop")
+    for name in ["browser", "the browser", "web browser", "internet"]:
+        assert actions.find_app(name, [tmp_path]) == ("firefox", "firefox"), name
