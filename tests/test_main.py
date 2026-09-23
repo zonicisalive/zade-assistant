@@ -19,10 +19,11 @@ def make(said, answers=(), **kw):
                  say=said.append, confirm=confirm, find_app=lambda name: None, **kw)
 
 
-def test_garbage_says_sorry():
+def test_nothing_said_stays_silent():
     said = []
-    z.handle(make(said), "Thank you.")
-    assert said == ["Sorry, didn't catch that."]
+    for heard in ["", "Thank you.", "..."]:  # silence, or Whisper's noise phantoms
+        assert z.handle(make(said), heard) == ""
+    assert said == []
 
 
 def test_shortcut_runs_without_llm():

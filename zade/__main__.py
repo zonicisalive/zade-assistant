@@ -129,8 +129,7 @@ def handle(ctx, raw):
         return reply
     ctx.turn = []
     r = router.route(text, memory.shortcuts(ctx.conn), ctx.cfg["router"], ctx.predict, ctx.find_app)
-    if r.kind == "none":
-        ctx.say("Sorry, didn't catch that.")
+    if r.kind == "none":  # nothing (or only noise) was said after the wake word: stay silent
         return ""
     if r.kind == "confirm" and not ctx.confirm(f"Did you mean {r.label}?"):
         r = router.Route("llm")
