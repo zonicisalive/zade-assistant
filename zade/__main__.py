@@ -2,6 +2,7 @@ import atexit
 import logging
 import os
 import pathlib
+import re
 import signal
 import sqlite3
 import threading
@@ -48,6 +49,15 @@ class Ctx:
     history: list = field(default_factory=list)  # (time, user text, reply) for follow-ups
     turn: list = field(default_factory=list)  # actions done so far in the current request
     app_words: list = field(default_factory=list)  # installed app names, given to Whisper as hotwords
+
+
+def fact_words(facts):
+    """Names you told Zade ("my name is zonic") as hotwords, so Whisper stops hearing "Sonic"."""
+    out = []
+    for f in facts:
+        for m in re.finditer(r"(?:name is|is called|called) (\w+)", f, re.IGNORECASE):
+            out.append(m[1].capitalize())
+    return list(dict.fromkeys(out))
 
 
 def recent(ctx, now=None):
@@ -223,7 +233,8 @@ def main():
             ui.show("idle")
             return None
         ui.show("thinking")
-        text = stt.transcribe(a, cfg, hotwords=[*memory.shortcuts(conn), *ctx.app_words])
+        words = [*memory.shortcuts(conn), *fact_words(memory.facts(conn)), *ctx.app_words]
+        text = stt.transcribe(a, cfg, hotwords=words)
         ui.show("thinking", heard=text.strip())
         return text
 

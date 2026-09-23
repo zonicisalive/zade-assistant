@@ -209,3 +209,8 @@ def test_sync_apps_refreshes_the_word_list(monkeypatch):
     z.handle(ctx, "sync apps")
     assert ctx.app_words == ["MECCHA CHAMELEON", "Telegram"]
     assert said == ["Synced 142 apps."]
+
+
+def test_names_in_facts_become_hotwords():
+    assert z.fact_words(["user's name is zonic", "my dog's name is bruno", "likes nvim"]) == ["Zonic", "Bruno"]
+    assert z.fact_words(["user is called zonic"]) == ["Zonic"]
