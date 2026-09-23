@@ -29,6 +29,9 @@ class HoldDetector:
         elif value == 1:
             self.clean = False  # a combo like Win+Z, not a hold
 
+    def held(self):
+        return self.since is not None
+
     def due(self, t):
         if self.since is not None and self.clean and not self.fired and t - self.since >= self.hold_s:
             self.fired = True
@@ -51,7 +54,8 @@ def _keyboards(ecodes, evdev, hold_code):
 
 
 def watch(cfg, trigger):
-    """Background thread: set `trigger` whenever the hold key is held alone long enough."""
+    """Background thread: set `trigger` whenever the hold key is held alone long enough.
+    Returns the HoldDetector (its held() tells when the key is released), or None if unavailable."""
     try:
         import evdev
         from evdev import ecodes
@@ -65,8 +69,9 @@ def watch(cfg, trigger):
         log.warning("hold-to-talk disabled: no readable keyboard (is the user in the 'input' group?)")
         return None
 
+    detector = HoldDetector(code, h["hold_s"])
+
     def loop():
-        detector = HoldDetector(code, h["hold_s"])
         while True:
             ready, _, _ = select.select(devices, [], [], 0.05)
             for dev in ready:
@@ -82,4 +87,4 @@ def watch(cfg, trigger):
 
     threading.Thread(target=loop, daemon=True, name="hotkey").start()
     log.info("hold-to-talk: hold %s for %.1fs (%d keyboards)", h["key"], h["hold_s"], len(devices))
-    return True
+    return detector

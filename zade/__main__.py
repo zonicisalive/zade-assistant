@@ -137,13 +137,14 @@ def main():
     signal.signal(signal.SIGUSR1, lambda *_: trigger.set())
     pid_file = pathlib.Path(cfg["paths"]["data"]).expanduser() / "zade.pid"
     pid_file.write_text(str(os.getpid()))
+    ptt = None  # push-to-talk key detector
     if cfg["hotkey"]["enabled"]:
         from . import hotkey
 
-        hotkey.watch(cfg, trigger)
+        ptt = hotkey.watch(cfg, trigger)
 
-    def hear(timeout=None):
-        a = audio.record(stream, cfg, timeout)
+    def hear(timeout=None, released=None):
+        a = audio.record(stream, cfg, timeout, released)
         return None if a is None else stt.transcribe(a, cfg)
 
     spoke_at = []
@@ -161,10 +162,12 @@ def main():
     stt.transcribe(np.zeros(audio.RATE, np.int16), cfg)  # load whisper before the first command
     log.info("ready")
     while True:
-        audio.wait_for_wake(stream, wake, cfg["wake"]["threshold"], trigger)
+        source = audio.wait_for_wake(stream, wake, cfg["wake"]["threshold"], trigger)
         audio.cue(stream)
         threading.Thread(target=brain.warm_up, args=(cfg,), daemon=True).start()
-        text = hear()
+        # Push-to-talk: while the key is still held, record until it is released.
+        released = (lambda: not ptt.held()) if source == "hotkey" and ptt and ptt.held() else None
+        text = hear(released=released)
         if text is None:
             audio.drain(stream)
             continue

@@ -70,3 +70,32 @@ def test_hotkey_trigger_wakes_without_wake_word(monkeypatch):
     trigger.set()
     audio.wait_for_wake(object(), NeverWakes(), 0.5, trigger)  # returns instead of looping forever
     assert not trigger.is_set()  # consumed, so the next wait needs a new press
+
+
+def _fake_mic(monkeypatch, levels):
+    import numpy as np
+
+    frames = iter(levels)
+    monkeypatch.setattr(audio, "read", lambda stream: np.full(audio.FRAME, next(frames), np.int16))
+    monkeypatch.setattr(audio, "noise", [])
+
+
+def test_push_to_talk_ends_on_release_not_silence(monkeypatch):
+    import copy
+
+    from zade import config
+
+    cfg = copy.deepcopy(config.DEFAULTS)
+    # speech, a 2 s pause (would end a normal recording), more speech, then release
+    _fake_mic(monkeypatch, [3000] * 10 + [0] * 25 + [3000] * 10 + [0] * 50)
+    reads = {"n": 0}
+    real_read = audio.read
+
+    def counting(stream):
+        reads["n"] += 1
+        return real_read(stream)
+
+    monkeypatch.setattr(audio, "read", counting)
+    held = lambda: reads["n"] < 45  # key released after 45 frames
+    out = audio.record(object(), cfg, released=lambda: not held())
+    assert len(out) == 45 * audio.FRAME

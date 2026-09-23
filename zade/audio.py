@@ -63,7 +63,7 @@ noise = []
 
 
 def wait_for_wake(stream, model, threshold, trigger=None):
-    """Return on the wake word, or when `trigger` (a threading.Event set by the hotkey) fires."""
+    """Return "wake" on the wake word, or "hotkey" when `trigger` (a threading.Event) fires."""
     model.reset()
     while True:
         f = read(stream)
@@ -71,12 +71,13 @@ def wait_for_wake(stream, model, threshold, trigger=None):
         del noise[:-NOISE_FRAMES]
         if trigger is not None and trigger.is_set():
             trigger.clear()
-            return
+            return "hotkey"
         if max(model.predict(f).values()) >= threshold:
-            return
+            return "wake"
 
 
-def record(stream, cfg, start_timeout_s=None):
+def record(stream, cfg, start_timeout_s=None, released=None):
+    """Record one utterance. With `released` (push-to-talk), stop when it returns True, not on silence."""
     a = cfg["audio"]
     thr = speech_threshold(noise, a["rms_threshold"], a["noise_factor"])
     frames, levels = [], []
@@ -84,6 +85,10 @@ def record(stream, cfg, start_timeout_s=None):
         f = read(stream)
         frames.append(f)
         levels.append(rms(f))
+        if released is not None:
+            if released() or len(frames) >= round(a["max_s"] / FRAME_S):
+                return np.concatenate(frames)
+            continue
         d = decide(levels, thr, a["silence_s"], a["max_s"], start_timeout_s or a["start_timeout_s"])
         if d == "abort":
             return None

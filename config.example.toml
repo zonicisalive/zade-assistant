@@ -47,4 +47,4 @@ laya_enabled = false
 # Hold this key alone to make Zade listen, like saying "hey zade". Needs the 'input' group.
 enabled = true
 key = "KEY_LEFTMETA"        # the Win/Super key; e.g. KEY_RIGHTCTRL
-hold_s = 2.0
+hold_s = 2.0                # keep holding after the beep while you talk; release = done
