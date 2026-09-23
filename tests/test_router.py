@@ -115,3 +115,10 @@ def test_new_fast_patterns():
 
 def test_type_pattern():
     assert router.parse_pattern("type good morning", find) == {"name": "type_text", "args": {"text": "good morning"}}
+
+
+def test_parse_teach():
+    assert router.parse_teach("when i say gaming mode open steam and discord") == (
+        "gaming mode", "open steam and discord")
+    assert router.parse_teach("whenever i say work time go to workspace 2") == ("work time", "go to workspace 2")
+    assert router.parse_teach("open steam") is None

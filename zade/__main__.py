@@ -14,6 +14,7 @@ from . import actions, brain, config, info, memory, router
 
 log = logging.getLogger("zade")
 # Tools whose calls are never learned as shortcuts (memory, one-off content, or risky).
+STOP_WORDS = {"stop", "cancel", "never mind", "nevermind", "shut up", "quiet", "be quiet", "nothing"}
 MEMORY_TOOLS = {"remember", "forget", "list_facts", "make_shortcut", "sleep", "set_timer", "note_add",
                 "notes_read", "web_answer", "clipboard_read", "clipboard_copy", "type_text", "power", "shell"}
 
@@ -44,6 +45,7 @@ class Ctx:
     start_timer: Callable = _start_timer
     alerts: list = field(default_factory=list)  # due reminders, spoken by the main loop when idle
     history: list = field(default_factory=list)  # (time, user text, reply) for follow-ups
+    turn: list = field(default_factory=list)  # actions done so far in the current request
 
 
 def recent(ctx, now=None):
@@ -68,7 +70,7 @@ def dispatch(ctx, action):
             f = memory.facts(ctx.conn)
             return ("I know that " + "; ".join(f) + "." if f else "I don't know anything about you yet."), True
         if name == "make_shortcut":
-            last = memory.last_actions(ctx.conn)
+            last = ctx.turn or memory.last_actions(ctx.conn)  # "when I say X, do Y" saves this turn's Y
             if not last:
                 return "There's nothing to save yet.", False
             memory.add_shortcut(ctx.conn, router.normalize(a["phrase"]), last)
@@ -113,6 +115,19 @@ def offer(ctx, text, acts):
 def handle(ctx, raw):
     """Handle one utterance; return what Zade replied (for follow-up listening)."""
     text = router.normalize(raw)
+    if text in STOP_WORDS:
+        return ""
+    if taught := router.parse_teach(text):
+        phrase, request = taught
+        handle(ctx, request)
+        if ctx.turn:
+            memory.add_shortcut(ctx.conn, phrase, ctx.turn)
+            reply = f"Got it. Say {phrase} any time."
+        else:
+            reply = "That didn't work, so I didn't save it."
+        ctx.say(reply)
+        return reply
+    ctx.turn = []
     r = router.route(text, memory.shortcuts(ctx.conn), ctx.cfg["router"], ctx.predict, ctx.find_app)
     if r.kind == "none":
         ctx.say("Sorry, didn't catch that.")
@@ -122,6 +137,7 @@ def handle(ctx, raw):
     if r.kind in ("run", "confirm"):
         results = [dispatch(ctx, a) for a in r.actions]
         ok = all(k for _, k in results)
+        ctx.turn = [a for a, (_, k) in zip(r.actions, results) if k and a["name"] not in MEMORY_TOOLS]
         reply = " ".join(t for t, _ in results if t) or "Done."
         ctx.say(reply)
         if r.phrase:
@@ -137,6 +153,7 @@ def handle(ctx, raw):
             out, ok = dispatch(ctx, {"name": name, "args": args})
             if ok and name not in MEMORY_TOOLS:
                 executed.append({"name": name, "args": args})
+                ctx.turn.append({"name": name, "args": args})
             return out or "done"
 
         reply = ctx.ask(text, memory.facts(ctx.conn), ctx.cfg, run_tool, recent(ctx))
@@ -201,14 +218,32 @@ def main():
         return None if a is None else stt.transcribe(a, cfg)
 
     spoke_at = []
+    barge = []  # why speech was interrupted ("wake" or "hotkey"); empty when not interrupted
+
+    def interrupted():
+        """While speaking: stop if the hotkey fires or the wake word is heard (barge-in)."""
+        if trigger.is_set():
+            trigger.clear()
+            barge.append("hotkey")
+            return True
+        while stream.read_available >= audio.FRAME:
+            if max(wake.predict(audio.read(stream)).values()) >= cfg["wake"]["threshold"]:
+                barge.append("wake")
+                return True
+        return False
 
     def say(text):
+        if barge:  # the user cut in: stay quiet for the rest of this request
+            return
         spoke_at.append(time.perf_counter())
-        tts.speak(text, cfg)
-        audio.drain(stream)
+        wake.reset()
+        if not tts.speak(text, cfg, interrupt=interrupted):
+            audio.drain(stream)
 
     def confirm(question):
         say(question)
+        if barge:  # interrupted instead of answering: treat as no
+            return False
         return actions.is_yes(hear(5.0) or "")
 
     ctx = Ctx(cfg, conn, say, confirm, predict=laya_predictor(cfg))
@@ -233,7 +268,11 @@ def main():
     stt.transcribe(np.zeros(audio.RATE, np.int16), cfg)  # load whisper before the first command
     log.info("ready")
     while True:
-        source = audio.wait_for_wake(stream, wake, cfg["wake"]["threshold"], poll)
+        if barge:  # interrupted mid-speech: listen right away, as if woken
+            source = barge.pop()
+            barge.clear()
+        else:
+            source = audio.wait_for_wake(stream, wake, cfg["wake"]["threshold"], poll)
         if source == "alert":
             while ctx.alerts:
                 say("Reminder: " + ctx.alerts.pop(0))
@@ -249,7 +288,7 @@ def main():
             continue
         reply = respond(text)
         # Follow-up: when Zade asked a question, listen briefly for an answer without the wake word.
-        while cfg["followup"]["enabled"] and wants_followup(reply):
+        while cfg["followup"]["enabled"] and wants_followup(reply) and not barge:
             audio.cue(stream, soft=True)
             text = hear(cfg["followup"]["listen_s"])
             if text is None:

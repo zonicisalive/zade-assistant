@@ -16,7 +16,8 @@ SYSTEM = (
     "fits; the user approves each command, and sudo is never allowed. When the user states a lasting "
     "fact about themselves, call remember. For news, sports results, prices, recent events or anything that "
     "may have changed after your training, call web_answer instead of answering from memory. To write text "
-    "into the current window, call type_text."
+    "into the current window, call type_text. When the user teaches a command (\"when I say X, do Y\"), "
+    "do Y with tools first, then call make_shortcut with phrase X."
 )
 S = {"type": "string"}
 

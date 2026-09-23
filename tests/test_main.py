@@ -151,3 +151,46 @@ def test_history_expires_and_is_capped():
     ctx.cfg["followup"].update(history_turns=2, history_s=120)
     ctx.history = [(0.0, "old", "x"), (100.0, "a", "1"), (150.0, "b", "2"), (160.0, "c", "3")]
     assert z.recent(ctx, now=200.0) == [("b", "2"), ("c", "3")]
+
+
+def test_teach_in_one_sentence():
+    said = []
+
+    def ask(text, facts, cfg, run_tool, history=()):
+        run_tool("open_app", {"name": "steam"})
+        run_tool("open_app", {"name": "discord"})
+        return run_tool("make_shortcut", {"phrase": "gaming mode"})
+
+    ctx = make(said, ask=ask)
+    z.handle(ctx, "when I say gaming mode open steam and discord")
+    assert memory.shortcuts(ctx.conn) == {"gaming mode": [
+        {"name": "open_app", "args": {"name": "steam"}}, {"name": "open_app", "args": {"name": "discord"}}]}
+
+
+def test_stop_words_are_silent():
+    said = []
+    for t in ["Stop.", "cancel", "never mind", "shut up", "quiet"]:
+        assert z.handle(make(said), t) == ""
+    assert said == []
+
+
+def test_teach_saves_what_was_actually_done():
+    said = []
+    ctx = make(said, ask=lambda *a, **k: "should not be needed")
+    z.handle(ctx, "When I say work time, go to workspace 2.")
+    assert memory.shortcuts(ctx.conn) == {
+        "work time": [{"name": "window", "args": {"action": "workspace", "workspace": "2"}}]}
+    assert said[-1] == "Got it. Say work time any time."
+
+
+def test_teach_with_nothing_done_saves_nothing():
+    said = []
+
+    def fail(action, confirm):
+        raise actions.Failed("I couldn't find steam.")
+
+    ctx = make(said, ask=lambda text, facts, cfg, run_tool, history=(): run_tool("open_app", {"name": "steam"}),
+               run_action=fail)
+    z.handle(ctx, "when i say gaming mode open steam")
+    assert memory.shortcuts(ctx.conn) == {}
+    assert said[-1] == "That didn't work, so I didn't save it."

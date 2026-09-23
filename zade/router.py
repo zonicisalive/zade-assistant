@@ -33,6 +33,17 @@ def match_shortcut(text, table, min_score):
     return best if best_score >= min_score else None
 
 
+VERBS = ("open|launch|start|go|switch|move|set|turn|play|pause|resume|close|type|take|increase|decrease|raise|"
+         "lower|mute|unmute|lock|search|remind|run|show|put|make|copy|read|note")
+
+
+def parse_teach(text):
+    """ "when i say X <do something>" -> (X, request); the request starts at the first command verb."""
+    if m := re.fullmatch(rf"(?:when|whenever|if) i say (.+?) (?:then |you should )?((?:{VERBS})\b.*)", text):
+        return m[1], m[2]
+    return None
+
+
 UNITS = {"second": 1, "minute": 60, "min": 60, "hour": 3600}
 
 
