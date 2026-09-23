@@ -50,3 +50,23 @@ def test_threshold_stays_at_room_level_when_mostly_speech():
     # You talked right before "hey zade": most of the window is speech, the floor must still be the room.
     levels = [950] * 10 + [6000] * 15
     assert audio.speech_threshold(levels, floor=500) == 2375
+
+
+def test_hotkey_trigger_wakes_without_wake_word(monkeypatch):
+    import threading
+
+    import numpy as np
+
+    monkeypatch.setattr(audio, "read", lambda stream: np.zeros(audio.FRAME, np.int16))
+
+    class NeverWakes:
+        def reset(self):
+            pass
+
+        def predict(self, frame):
+            return {"hey_zade": 0.0}
+
+    trigger = threading.Event()
+    trigger.set()
+    audio.wait_for_wake(object(), NeverWakes(), 0.5, trigger)  # returns instead of looping forever
+    assert not trigger.is_set()  # consumed, so the next wait needs a new press

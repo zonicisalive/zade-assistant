@@ -1,5 +1,7 @@
 import logging
+import os
 import pathlib
+import signal
 import sqlite3
 import threading
 import time
@@ -130,6 +132,11 @@ def main():
         conn = memory.connect(":memory:")
     stream = audio.open_stream()
     wake = audio.wake_model(cfg)
+    # Hotkey: `kill -USR1 $(cat ~/.local/share/zade/zade.pid)` acts like saying the wake word.
+    trigger = threading.Event()
+    signal.signal(signal.SIGUSR1, lambda *_: trigger.set())
+    pid_file = pathlib.Path(cfg["paths"]["data"]).expanduser() / "zade.pid"
+    pid_file.write_text(str(os.getpid()))
 
     def hear(timeout=None):
         a = audio.record(stream, cfg, timeout)
@@ -150,7 +157,7 @@ def main():
     stt.transcribe(np.zeros(audio.RATE, np.int16), cfg)  # load whisper before the first command
     log.info("ready")
     while True:
-        audio.wait_for_wake(stream, wake, cfg["wake"]["threshold"])
+        audio.wait_for_wake(stream, wake, cfg["wake"]["threshold"], trigger)
         audio.cue(stream)
         threading.Thread(target=brain.warm_up, args=(cfg,), daemon=True).start()
         text = hear()

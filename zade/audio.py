@@ -62,12 +62,16 @@ NOISE_FRAMES = 125  # ~10 s of room sound kept while waiting for the wake word
 noise = []
 
 
-def wait_for_wake(stream, model, threshold):
+def wait_for_wake(stream, model, threshold, trigger=None):
+    """Return on the wake word, or when `trigger` (a threading.Event set by the hotkey) fires."""
     model.reset()
     while True:
         f = read(stream)
         noise.append(rms(f))
         del noise[:-NOISE_FRAMES]
+        if trigger is not None and trigger.is_set():
+            trigger.clear()
+            return
         if max(model.predict(f).values()) >= threshold:
             return
 
