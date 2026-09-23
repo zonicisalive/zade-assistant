@@ -4,6 +4,7 @@ import pathlib
 import re
 import shlex
 import subprocess
+import time
 import urllib.parse
 
 from rapidfuzz import fuzz, process
@@ -15,6 +16,8 @@ ALLOWED = START | {"it", "ahead", "please", "zade"}
 NO = {"no", "nope", "don't", "dont", "cancel", "stop", "wait"}
 MEDIA = {"play-pause", "play", "pause", "next", "previous"}
 TIMEOUT_S = 30
+SINK = ["wpctl", "set-volume", "-l", "1.0", "@DEFAULT_AUDIO_SINK@"]
+RAMP_STEP, RAMP_DELAY_S = 5, 0.03  # desktop "volume protection" rejects jumps of ~10% or more
 
 
 class Failed(Exception):
@@ -134,12 +137,14 @@ def run(action, confirm):
             _call(["pkill", "-x", app[1]])
         return ""
     if name == "volume":
-        if "set" in a:
-            level = f"{max(0, min(100, int(a['set'])))}%"
-        else:
-            d = int(a.get("delta", 10))
-            level = f"{abs(d)}%{'+' if d >= 0 else '-'}"
-        _call(["wpctl", "set-volume", "-l", "1.0", "@DEFAULT_AUDIO_SINK@", level])
+        current = round(float(_output(["wpctl", "get-volume", "@DEFAULT_AUDIO_SINK@"]).split()[1]) * 100)
+        target = int(a["set"]) if "set" in a else current + int(a.get("delta", 10))
+        target = max(0, min(100, target))
+        steps = list(range(current + RAMP_STEP, target, RAMP_STEP)) + [target] if target > current else [target]
+        for i, level in enumerate(steps):
+            if i:
+                time.sleep(RAMP_DELAY_S)
+            _call([*SINK, f"{level}%"])
         return ""
     if name == "mute":
         _call(["wpctl", "set-mute", "@DEFAULT_AUDIO_SINK@", "toggle"])

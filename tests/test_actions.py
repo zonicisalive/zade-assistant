@@ -45,12 +45,18 @@ def test_find_app(tmp_path):
 def test_volume_command(monkeypatch):
     calls = []
     monkeypatch.setattr(actions, "_call", calls.append)
+    monkeypatch.setattr(actions, "_output", lambda cmd: "Volume: 0.50\n")
+    monkeypatch.setattr(actions, "RAMP_DELAY_S", 0)
+    sink = ["wpctl", "set-volume", "-l", "1.0", "@DEFAULT_AUDIO_SINK@"]
     actions.run({"name": "volume", "args": {"delta": -10}}, lambda q: True)
+    assert calls == [sink + ["40%"]]  # decreases go straight there
+    calls.clear()
+    actions.run({"name": "volume", "args": {"set": 70}}, lambda q: True)
+    # increases ramp in 5% steps: desktop "volume protection" rejects big jumps as "Illegal increment"
+    assert calls == [sink + ["55%"], sink + ["60%"], sink + ["65%"], sink + ["70%"]]
+    calls.clear()
     actions.run({"name": "volume", "args": {"set": 150}}, lambda q: True)
-    assert calls == [
-        ["wpctl", "set-volume", "-l", "1.0", "@DEFAULT_AUDIO_SINK@", "10%-"],
-        ["wpctl", "set-volume", "-l", "1.0", "@DEFAULT_AUDIO_SINK@", "100%"],
-    ]
+    assert calls[-1] == sink + ["100%"] and len(calls) == 10
 
 
 def test_open_missing_app(monkeypatch):
