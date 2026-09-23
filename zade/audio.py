@@ -85,8 +85,9 @@ def record(stream, cfg, start_timeout_s=None, released=None, cancelled=None, on_
         f = read(stream)
         frames.append(f)
         levels.append(rms(f))
-        if on_level is not None:
-            on_level(levels[-1] / (thr * 3))  # roughly 0..1 for the overlay's waveform
+        if on_level is not None:  # 0 at room noise, ~0.8 for normal speech, capped at 1 (overlay waveform)
+            room = thr / a["noise_factor"]
+            on_level(max(0.0, min(1.0, (levels[-1] - room) / (room * 5))))
         if released is not None:
             if cancelled is not None and cancelled():
                 return None

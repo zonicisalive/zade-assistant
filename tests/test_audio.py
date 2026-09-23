@@ -124,3 +124,28 @@ def test_push_to_talk_cancel_returns_nothing(monkeypatch):
     out = audio.record(object(), copy.deepcopy(config.DEFAULTS),
                        released=lambda: False, cancelled=lambda: n["reads"] >= 10)
     assert out is None
+
+
+def test_voice_level_is_zero_at_room_noise_and_full_when_speaking(monkeypatch):
+    import copy
+
+    import numpy as np
+
+    from zade import config
+
+    cfg = copy.deepcopy(config.DEFAULTS)
+    monkeypatch.setattr(audio, "noise", [1000] * 25)  # room noise ~1000 -> speech threshold 2500
+    frames = iter([1000, 2500, 5000, 20000])
+    monkeypatch.setattr(audio, "read", lambda stream: np.full(audio.FRAME, next(frames), np.int16))
+    seen = []
+    n = {"i": 0}
+
+    def released():
+        n["i"] += 1
+        return n["i"] >= 4
+
+    audio.record(object(), cfg, released=released, on_level=seen.append)
+    assert seen[0] < 0.05          # room noise: flat
+    assert 0.15 < seen[1] < 0.5    # quiet speech
+    assert seen[2] > 0.6           # normal speech
+    assert seen[3] == 1.0          # loud: capped

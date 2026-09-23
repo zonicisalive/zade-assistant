@@ -200,14 +200,19 @@ ShellRoot {
                     Rectangle {
                         required property int index
                         readonly property real centre: 1 - Math.abs(index - 3) / 4        // taller in the middle
+                        // Each bar flickers a little differently so a steady voice still looks alive.
+                        readonly property real jitter: 0.6 + 0.4 * Math.sin(root.phase * 5 + index * 2.1)
                         readonly property real wave: 0.5 + 0.5 * Math.sin(root.phase * 2 - index * 0.7)
-                        readonly property real amp: root.mode === "listening" ? 0.3 + root.level * 0.7 : 0.4
+                        // Listening: driven by your voice (flat when you're quiet). Thinking: a slow wave.
+                        readonly property real amount: root.mode === "listening"
+                            ? Math.min(1, root.level * (0.45 + 0.55 * centre) * jitter * 1.4)
+                            : 0.35 * (0.4 + 0.6 * centre) * wave
                         width: 3; radius: 1.5
                         anchors.verticalCenter: parent.verticalCenter
-                        height: 6 + 20 * (0.4 + 0.6 * centre) * (0.3 + 0.7 * wave) * amp
+                        // No Behavior here: the height changes every frame, and a restarting animation would freeze it.
+                        height: 4 + 24 * amount
                         color: root.mode === "thinking" ? root.c.tertiary : root.c.primary
-                        opacity: 0.55 + 0.45 * centre
-                        Behavior on height { NumberAnimation { duration: 100 } }
+                        opacity: 0.5 + 0.5 * Math.max(centre, amount)
                     }
                 }
             }
