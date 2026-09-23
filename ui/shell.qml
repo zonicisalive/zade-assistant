@@ -34,7 +34,7 @@ ShellRoot {
         heard = s.heard || ""
         reply = newReply
         level = s.level || 0
-        if (mode === "done") revealed = reply.length
+        if (mode !== "speaking") revealed = reply.length   // only the spoken part types itself out
         if (mode === "idle") { hideTimer.interval = 120; hideTimer.restart() }
         else if (mode === "done") { hideTimer.interval = 500; hideTimer.restart() }   // fade right after speaking
         else { hideTimer.stop(); shown = true }

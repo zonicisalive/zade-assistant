@@ -226,8 +226,9 @@ def main():
 
         ptt = hotkey.watch(cfg, trigger)
 
-    def hear(timeout=None, released=None, cancelled=None):
-        ui.show("listening", heard="", reply="")
+    def hear(timeout=None, released=None, cancelled=None, keep_reply=False):
+        # keep_reply: while answering a question, keep it (e.g. a command to approve) on screen
+        ui.show("listening", heard="", **({} if keep_reply else {"reply": ""}))
         a = audio.record(stream, cfg, timeout, released, cancelled, on_level=ui.level)
         if a is None:
             ui.show("idle")
@@ -268,7 +269,7 @@ def main():
         say(question)
         if barge:  # interrupted instead of answering: treat as no
             return False
-        return actions.is_yes(hear(5.0) or "")
+        return actions.is_yes(hear(5.0, keep_reply=True) or "")
 
     ctx = Ctx(cfg, conn, say, confirm, predict=laya_predictor(cfg))
     ctx.app_words = actions.app_names()  # your installed apps and games, so Whisper expects their names
