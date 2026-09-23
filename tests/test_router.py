@@ -122,3 +122,12 @@ def test_parse_teach():
         "gaming mode", "open steam and discord")
     assert router.parse_teach("whenever i say work time go to workspace 2") == ("work time", "go to workspace 2")
     assert router.parse_teach("open steam") is None
+
+
+def test_time_and_date_patterns():
+    P = router.parse_pattern
+    for t in ["what time is it", "what's the time", "what is the time", "time", "what's the time in india",
+              "what time is it now", "tell me the time"]:
+        assert P(t, find) == {"name": "time", "args": {}}, t
+    for t in ["what's the date", "what's today's date", "what day is it", "what is the date today"]:
+        assert P(t, find) == {"name": "date", "args": {}}, t

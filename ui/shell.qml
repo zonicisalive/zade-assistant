@@ -31,7 +31,7 @@ ShellRoot {
         reply = s.reply || ""
         level = s.level || 0
         if (mode === "idle") { hideTimer.interval = 120; hideTimer.restart() }
-        else if (mode === "done") { hideTimer.interval = 4500; hideTimer.restart() }
+        else if (mode === "done") { hideTimer.interval = 500; hideTimer.restart() }   // fade right after speaking
         else { hideTimer.stop(); shown = true }
     }
 

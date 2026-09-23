@@ -94,3 +94,15 @@ def test_new_tools_are_defined():
     names = {t["name"] for t in brain.TOOLS}
     assert {"weather", "web_answer", "set_timer", "note_add", "notes_read", "window", "open_website",
             "clipboard_read", "clipboard_copy", "type_text", "brightness", "screenshot", "power"} <= names
+
+
+def test_prompt_states_local_timezone(monkeypatch):
+    got = {}
+
+    def fake(name, system, *rest):
+        got["system"] = system
+        return "ok"
+
+    monkeypatch.setattr(providers, "chat", fake)
+    brain.ask("hello", [], cfg(), None, vram=lambda: 8.0)
+    assert "time zone" in got["system"] and "UTC" in got["system"]

@@ -73,6 +73,13 @@ def parse_pattern(text, find_app):
         return {"name": "weather", "args": {"day": 1} if m[1] == "tomorrow" else {}}
     if m := re.fullmatch(r"type (.+)", text):
         return {"name": "type_text", "args": {"text": m[1]}}
+    # Local time and date come from the clock, never from the model. "in india" = local time here.
+    here = r"(?: now| here| right now| in india| today)?"
+    if re.fullmatch(rf"(?:what time is it|what's the time|what is the time|tell me the time|time){here}", text):
+        return {"name": "time", "args": {}}
+    if re.fullmatch(rf"(?:what's the date|what's today's date|what is the date|what is today's date"
+                    rf"|what day is it|what's the day|today's date|date){here}", text):
+        return {"name": "date", "args": {}}
     if re.fullmatch(r"(?:take a |take )?screenshot", text):
         return {"name": "screenshot", "args": {}}
     if m := re.fullmatch(r"(?:close|quit|kill|exit) (?:the )?(.+?)(?: app)?", text):

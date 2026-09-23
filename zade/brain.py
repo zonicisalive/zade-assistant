@@ -107,7 +107,9 @@ def candidates(cfg, vram=vram_free_gb, resident=resident_on_gpu):
 
 
 def ask(text, facts, cfg, run_tool, history=(), vram=vram_free_gb, resident=resident_on_gpu):
-    system = SYSTEM + f"\nNow: {datetime.datetime.now():%A %Y-%m-%d %H:%M}."
+    now = datetime.datetime.now().astimezone()
+    system = SYSTEM + (f"\nNow: {now:%A %Y-%m-%d %H:%M}, the user's local time "
+                       f"(time zone {now:%Z}, UTC{now:%z}). Use it as is; do not convert it.")
     if facts:
         system += "\nKnown facts about the user:\n" + "\n".join(f"- {f}" for f in facts)
     ran = []
