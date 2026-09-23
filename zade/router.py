@@ -87,6 +87,8 @@ def parse_pattern(text, find_app):
         return {"name": "list_reminders", "args": {}}
     if re.fullmatch(r"(?:sync|refresh|rescan)(?: my| the)?(?: apps| applications| games)?", text):
         return {"name": "sync_apps", "args": {}}
+    if m := re.fullmatch(r"play (?!music$|pause$|next$|previous$)(.+?)(?: on spotify)?", text):
+        return {"name": "play_music", "args": {"query": m[1]}}
     if m := re.fullmatch(r"type (.+)", text):
         return {"name": "type_text", "args": {"text": m[1]}}
     # Local time and date come from the clock, never from the model. "in india" = local time here.

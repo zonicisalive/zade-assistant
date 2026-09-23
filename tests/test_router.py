@@ -148,3 +148,10 @@ def test_screen_patterns():
     for t in ["what's on my screen", "read my screen", "describe my screen", "what does this say",
               "explain this error", "what am i looking at"]:
         assert router.parse_pattern(t, find) == {"name": "look_at_screen", "args": {"question": t}}, t
+
+
+def test_play_music_pattern_keeps_media_controls():
+    P = router.parse_pattern
+    assert P("play killshot by eminem", find) == {"name": "play_music", "args": {"query": "killshot by eminem"}}
+    assert P("play lose yourself on spotify", find) == {"name": "play_music", "args": {"query": "lose yourself"}}
+    assert P("play", find) is None and P("play music", find) is None  # plain resume stays a media control

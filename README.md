@@ -31,3 +31,14 @@ Set `llm.provider`, `stt.provider` or `tts.provider` in `~/.config/zade/config.t
 ## Safety
 
 Shell commands are read back and run only after a spoken "yes". Anything containing sudo, su, pkexec or doas is refused.
+
+## Spotify
+
+"Play Killshot by Eminem" needs a free Spotify developer app:
+1. Go to https://developer.spotify.com/dashboard, log in, "Create app" (any name; redirect URI `http://127.0.0.1:8888`).
+2. Copy its Client ID and Client secret into `~/.config/zade/env`:
+   ```
+   SPOTIFY_CLIENT_ID=...
+   SPOTIFY_CLIENT_SECRET=...
+   ```
+Without keys, Zade opens Spotify's search instead.

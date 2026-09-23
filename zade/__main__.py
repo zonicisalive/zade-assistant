@@ -112,6 +112,10 @@ def dispatch(ctx, action):
         if name == "sleep":
             brain.unload(ctx.cfg)
             return "Going to sleep.", True
+        if name == "play_music":
+            from . import music
+
+            return music.play(a["query"]), True
         if name == "look_at_screen":
             from . import vision
 
@@ -252,6 +256,7 @@ def main():
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     cfg = config.load()
+    config.load_env()  # API keys (Spotify, cloud models) from ~/.config/zade/env
     try:
         conn = memory.connect(pathlib.Path(cfg["paths"]["data"]).expanduser() / "zade.db")
     except sqlite3.DatabaseError as e:

@@ -1,4 +1,5 @@
 import copy
+import os
 import pathlib
 import tomllib
 
@@ -62,3 +63,14 @@ def load(path=None):
     p = pathlib.Path(path or "~/.config/zade/config.toml").expanduser()
     user = tomllib.loads(p.read_text()) if p.exists() else {}
     return _merge(copy.deepcopy(DEFAULTS), user)
+
+
+def load_env(path=None):
+    """Read KEY=VALUE lines (API keys) from ~/.config/zade/env; variables already set win."""
+    p = pathlib.Path(path or "~/.config/zade/env").expanduser()
+    if not p.exists():
+        return
+    for line in p.read_text().splitlines():
+        key, sep, value = line.partition("=")
+        if sep and not key.strip().startswith("#"):
+            os.environ.setdefault(key.strip(), value.strip().strip("'\""))
