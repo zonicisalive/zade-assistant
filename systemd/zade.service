@@ -1,0 +1,12 @@
+[Unit]
+Description=Zade voice assistant
+After=pipewire.service wireplumber.service
+
+[Service]
+ExecStart=%h/Zade/.venv/bin/zade
+Restart=on-failure
+RestartSec=5
+EnvironmentFile=-%h/.config/zade/env
+
+[Install]
+WantedBy=default.target
