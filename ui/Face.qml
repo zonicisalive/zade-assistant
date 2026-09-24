@@ -506,10 +506,11 @@ Item {
                                 control2X: mouth.w * 0.03; control2Y: mouth.isOpen ? mouth.depth : 0 }
                 }
             }
-            // playful tongue sticking out of the lip, off-centre, with an outline and a groove
+            // playful tongue sticking out of the lip, off-centre, with an outline and a groove. Only on a
+            // closed mouth: while talking the mouth opens and a tongue over the dark inside reads as a blob.
             Shape {
                 id: tongueOut
-                visible: mouth.mk === "tongue"
+                visible: mouth.mk === "tongue" && !mouth.isOpen
                 readonly property real tw: mouth.w * 0.42
                 readonly property real th: face.hs * 0.17
                 x: mouth.w * 0.46; y: mouth.bend * 0.5 - face.hs * 0.01
