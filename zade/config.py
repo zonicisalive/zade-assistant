@@ -44,7 +44,15 @@ DEFAULTS = {
     "dictation": {"enabled": True, "key": "KEY_RIGHTALT", "hold_s": 0.3},  # hold to type what you say
     "web": {"searxng_url": "http://127.0.0.1:8080"},
     "followup": {"enabled": True, "listen_s": 5.0, "history_turns": 3, "history_s": 120},
-    "ui": {"enabled": True, "host_file": "~/.config/quickshell/inir/shell.qml"},  # shell that may host the overlay
+    "ui": {
+        "enabled": True,
+        "host_file": "~/.config/quickshell/inir/shell.qml",  # desktop shell that may host the overlay
+        # Overlay style (applies live): top | bottom | top-left | top-right | bottom-left | bottom-right
+        "position": "top", "size": "medium", "accent": "", "linger_s": 0.5, "reveal_cps": 18, "show_heard": True,
+    },
+    "sound": {"chime": "soft", "volume": 0.6, "wake_reply": ""},  # chime: soft | classic | none
+    "quiet": {"enabled": False, "start": "23:00", "end": "08:00", "dnd": False},
+    "safety": {"confirm": "commands"},  # commands | risky | everything
     "vision": {"model": "qwen2.5vl:3b"},
     "learning": {"promote_after": 3},
     "paths": {"data": "~/.local/share/zade"},

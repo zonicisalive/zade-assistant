@@ -28,12 +28,16 @@ def test_speech_after_long_pause_still_counts():
     assert audio.decide(lv((0, 3.0), (2000, 0.5)), **A) == "wait"
 
 
-def test_cue_drops_chime_from_mic_buffer(monkeypatch):
+def test_cue_plays_then_drops_chime_from_mic_buffer(monkeypatch):
     order = []
-    monkeypatch.setattr(audio, "chime", lambda soft=False: order.append("chime"))
+    monkeypatch.setattr(audio.sd, "play", lambda wave, rate: order.append("play"))
+    monkeypatch.setattr(audio.sd, "wait", lambda: order.append("wait"))
     monkeypatch.setattr(audio, "drain", lambda s: order.append("drain"))
     audio.cue(object())
-    assert order == ["chime", "drain"]
+    assert order == ["play", "wait", "drain"]
+    order.clear()
+    audio.cue(object(), cfg={"sound": {"chime": "none", "volume": 0.6}})
+    assert order == ["drain"]  # silent, but still clears the mic buffer
 
 
 def test_speech_threshold_follows_room_noise():

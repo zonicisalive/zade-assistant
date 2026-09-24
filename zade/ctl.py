@@ -172,6 +172,15 @@ def run(argv):
         return {"ok": memory.delete_fact(conn, int(args[0])) > 0}
     if cmd == "shortcuts":
         return memory.shortcut_rows(conn)
+    if cmd == "shortcut-save":  # from the app's shortcut builder
+        steps = json.loads(args[1])
+        allowed = {t["name"] for t in __import__("zade.brain", fromlist=["TOOLS"]).TOOLS}
+        if not steps or any(not isinstance(st, dict) or st.get("name") not in allowed
+                            or not isinstance(st.get("args", {}), dict) for st in steps):
+            return {"ok": False, "error": "Each step needs a known action."}
+        memory.add_shortcut(conn, args[0].strip().lower(), [{"name": st["name"], "args": st.get("args", {})}
+                                                           for st in steps])
+        return {"ok": True}
     if cmd == "shortcut-rename":
         return {"ok": memory.rename_shortcut(conn, args[0], args[1].strip().lower()) > 0}
     if cmd == "shortcut-del":

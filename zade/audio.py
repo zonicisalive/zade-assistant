@@ -107,15 +107,28 @@ def drain(stream):
         stream.read(n)
 
 
-def cue(stream, soft=False):
-    """Beep, then drop the beep from the mic buffer so it is not recorded as speech."""
-    chime(soft)
+def chime_wave(style, volume, followup=False):
+    """The listening sound. soft: a gentle rising two-tone; classic: a short beep; none: silence.
+    Follow-up listening uses a quieter version."""
+    if style == "none":
+        return None
+    peak = volume * 0.4 * (0.5 if followup else 1.0)
+    if style == "classic":
+        t = np.linspace(0, 0.12, int(RATE * 0.12), False)
+        return (peak * np.sin(2 * np.pi * 880 * t)).astype(np.float32)
+    parts = []
+    for freq in ((587, 880) if not followup else (660, 784)):
+        t = np.linspace(0, 0.07, int(RATE * 0.07), False)
+        envelope = np.sin(np.pi * t / 0.07)  # fade in and out: no click
+        parts.append(peak * envelope * np.sin(2 * np.pi * freq * t))
+    return np.concatenate(parts).astype(np.float32)
+
+
+def cue(stream, soft=False, cfg=None):
+    """Play the listening sound, then drop it from the mic buffer so it is not recorded as speech."""
+    snd = (cfg or {}).get("sound", {"chime": "soft", "volume": 0.6})
+    wave = chime_wave(snd["chime"], snd["volume"], followup=soft)
+    if wave is not None:
+        sd.play(wave, RATE)
+        sd.wait()
     drain(stream)
-
-
-def chime(soft=False):
-    """Normal beep when listening starts; a softer, lower one when listening for a follow-up answer."""
-    freq, vol = (660, 0.08) if soft else (880, 0.2)
-    t = np.linspace(0, 0.12, int(RATE * 0.12), False)
-    sd.play((vol * np.sin(2 * np.pi * freq * t)).astype(np.float32), RATE)
-    sd.wait()

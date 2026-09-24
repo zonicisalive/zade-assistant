@@ -15,9 +15,21 @@ PATH = pathlib.Path(os.environ.get("XDG_RUNTIME_DIR", "/tmp")) / "zade" / "state
 _state = {}
 
 
+STYLE_KEYS = ("position", "size", "accent", "linger_s", "reveal_cps", "show_heard")
+_style = {}
+
+
+def configure(cfg):
+    """Overlay style from settings; sent with every state update so it applies live."""
+    _style.clear()
+    _style.update({k: cfg["ui"][k] for k in STYLE_KEYS})
+    _state["style"] = dict(_style)
+    _write()
+
+
 def reset():
     _state.clear()
-    _state.update(state="idle", heard="", reply="", level=0.0)
+    _state.update(state="idle", heard="", reply="", level=0.0, style=dict(_style))
 
 
 def _write():
@@ -45,7 +57,7 @@ def start(cfg):
     if not cfg["ui"]["enabled"]:
         return None
     reset()
-    _write()
+    configure(cfg)
     host = pathlib.Path(cfg["ui"]["host_file"]).expanduser()
     try:
         if "Zade/ui/Overlay.qml" in host.read_text():

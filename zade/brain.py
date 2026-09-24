@@ -73,6 +73,7 @@ TOOLS = [
        "every day.", ["message", "at"], message=S, at=S, daily={"type": "boolean"}),
     _t("list_reminders", "List the user's reminders."),
     _t("cancel_reminder", "Cancel reminders whose text contains these words.", ["query"], query=S),
+    _t("dnd", "Turn Do Not Disturb on or off (the wake word is ignored while on).", ["on"], on={"type": "boolean"}),
     _t("system_status", "CPU/GPU temperature and load, memory use, top process.", ["what"],
        what={"type": "string", "enum": ["all", "cpu", "gpu", "ram"]}),
     _t("sync_apps", "Rescan installed apps and games so their names are recognised."),

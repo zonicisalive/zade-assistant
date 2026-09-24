@@ -85,6 +85,9 @@ def parse_pattern(text, find_app):
         return {"name": "system_status", "args": {"what": "all"}}
     if re.fullmatch(r"(?:what are|list|read|show)(?: me)? my reminders", text):
         return {"name": "list_reminders", "args": {}}
+    if m := re.fullmatch(r"(?:(turn on|enable|start) )?(?:do not disturb|quiet mode)(?: (on|off))?|"
+                         r"(turn off|disable|stop) (?:do not disturb|quiet mode)", text):
+        return {"name": "dnd", "args": {"on": not (m[3] or m[2] == "off")}}
     if re.fullmatch(r"(?:sync|refresh|rescan)(?: my| the)?(?: apps| applications| games)?", text):
         return {"name": "sync_apps", "args": {}}
     if m := re.fullmatch(r"play (?!music$|pause$|next$|previous$)(.+?)(?: on spotify)?", text):

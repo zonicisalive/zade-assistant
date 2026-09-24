@@ -20,7 +20,7 @@ from . import actions, brain, config, info, memory, router
 log = logging.getLogger("zade")
 # Tools whose calls are never learned as shortcuts (memory, one-off content, or risky).
 STOP_WORDS = {"stop", "cancel", "never mind", "nevermind", "shut up", "quiet", "be quiet", "nothing"}
-MEMORY_TOOLS = {"look_at_screen", "system_status", "set_reminder", "list_reminders", "cancel_reminder", "sync_apps", "remember", "forget", "list_facts", "make_shortcut", "sleep", "set_timer", "note_add",
+MEMORY_TOOLS = {"dnd", "look_at_screen", "system_status", "set_reminder", "list_reminders", "cancel_reminder", "sync_apps", "remember", "forget", "list_facts", "make_shortcut", "sleep", "set_timer", "note_add",
                 "notes_read", "web_answer", "clipboard_read", "clipboard_copy", "type_text", "power", "shell"}
 
 
@@ -78,8 +78,48 @@ def next_time(at, now=None):
     return t if t > now else t + datetime.timedelta(days=1)
 
 
+def is_quiet(cfg, now=None):
+    """Do Not Disturb, or inside the quiet-hours window (which may wrap past midnight)."""
+    q = cfg["quiet"]
+    if q["dnd"]:
+        return True
+    if not q["enabled"]:
+        return False
+    now = now or datetime.datetime.now()
+    minutes = now.hour * 60 + now.minute
+    start, end = (int(t.split(":")[0]) * 60 + int(t.split(":")[1]) for t in (q["start"], q["end"]))
+    return start <= minutes < end if start <= end else minutes >= start or minutes < end
+
+
+LIVE_SECTIONS = ("ui", "sound", "quiet", "safety")  # settings that apply without a restart
+
+
+def apply_live(cfg, new):
+    for section in LIVE_SECTIONS:
+        cfg[section] = new[section]
+
+
+# Actions that need a spoken yes at each safety level (shell and power always ask, in actions.py).
+RISKY = {"close_app", "type_text", "clipboard_copy"}
+READ_ONLY = {"dnd", "time", "date", "weather", "web_answer", "notes_read", "list_facts", "list_reminders",
+             "system_status", "look_at_screen", "clipboard_read", "remember", "forget", "note_add",
+             "set_timer", "set_reminder", "cancel_reminder", "make_shortcut", "sync_apps", "sleep",
+             "shell", "power"}
+
+
+def needs_confirm(name, level, args=None):
+    if level == "everything":
+        return name not in READ_ONLY
+    if level == "risky":
+        return name in RISKY or (name == "window" and (args or {}).get("action") == "close")
+    return False
+
+
 def pump_reminders(ctx, now=None):
-    """Move due reminders into ctx.alerts (the main loop speaks them when idle). Returns how many."""
+    """Move due reminders into ctx.alerts (the main loop speaks them when idle). Returns how many.
+    During quiet hours they wait, and are spoken once quiet time ends."""
+    if is_quiet(ctx.cfg):
+        return 0
     due = memory.due_reminders(ctx.conn, time.time() if now is None else now)
     ctx.alerts.extend(due)
     return len(due)
@@ -98,6 +138,10 @@ def wants_followup(reply):
 def dispatch(ctx, action):
     name, a = action["name"], action.get("args", {})
     try:
+        if needs_confirm(name, ctx.cfg["safety"]["confirm"], a):
+            detail = next((str(v) for v in a.values() if isinstance(v, (str, int))), "")
+            if not ctx.confirm(f"{name.replace('_', ' ').capitalize()}{' ' + detail if detail else ''}?"):
+                return "Cancelled.", False
         if name == "remember":
             memory.add_fact(ctx.conn, a["fact"])
             return "Got it.", True
@@ -123,6 +167,13 @@ def dispatch(ctx, action):
             from . import vision
 
             return vision.look(a.get("question") or "What's on the screen?", ctx.cfg), True
+        if name == "dnd":
+            from . import ctl
+
+            ctx.cfg["quiet"]["dnd"] = bool(a.get("on", True))
+            ctl.set_setting("quiet.dnd", "true" if ctx.cfg["quiet"]["dnd"] else "false")
+            return ("Do not disturb is on. Hold Win to talk to me." if ctx.cfg["quiet"]["dnd"]
+                    else "Do not disturb is off."), True
         if name == "system_status":
             from . import system
 
@@ -372,11 +423,23 @@ def main():
     typed = []  # commands typed in the desktop app
     inbox = pathlib.Path(os.environ.get("XDG_RUNTIME_DIR", "/tmp")) / "zade" / "inbox"
 
+    config_file = pathlib.Path("~/.config/zade/config.toml").expanduser()
+    config_mtime = [config_file.stat().st_mtime if config_file.exists() else 0]
+
     def poll():
-        if time.monotonic() - last_check[0] >= 0.5:  # reminders and typed commands, twice a second
+        if time.monotonic() - last_check[0] >= 0.5:  # reminders, typed commands, live settings
             last_check[0] = time.monotonic()
             pump_reminders(ctx)
             typed.extend(read_inbox(inbox))
+            mtime = config_file.stat().st_mtime if config_file.exists() else 0
+            if mtime != config_mtime[0]:  # changed in the app: overlay, sounds, quiet hours, safety apply now
+                config_mtime[0] = mtime
+                try:
+                    apply_live(cfg, config.load())
+                    ui.configure(cfg)
+                    log.info("live settings reloaded")
+                except Exception as e:  # a half-written or broken file: keep the current settings
+                    log.warning("could not reload settings: %s", e)
         if typed:
             return "typed"
         if ctx.alerts:
@@ -408,8 +471,11 @@ def main():
             barge.clear()
         else:
             source = audio.wait_for_wake(stream, wake, cfg["wake"]["threshold"], poll)
+        if source == "wake" and is_quiet(cfg):  # quiet hours / Do Not Disturb: ignore the wake word
+            log.info("wake word ignored (quiet)")
+            continue
         if source == "dictate":  # voice typing: record while the key is held, type it, no model
-            audio.cue(stream, soft=True)
+            audio.cue(stream, soft=True, cfg=cfg)
             text = hear(released=lambda: not typer.held(), cancelled=typer.cancelled)
             if text and (typed := dictation_text(text)):
                 actions._call(["wtype", "--", typed])
@@ -427,10 +493,13 @@ def main():
             while ctx.alerts:
                 say("Reminder: " + ctx.alerts.pop(0))
             continue
-        audio.cue(stream)
+        audio.cue(stream, cfg=cfg)
         threading.Thread(target=brain.warm_up, args=(cfg,), daemon=True).start()
         # Push-to-talk: while the key is still held, record until it is released.
         ptt_active = source == "hotkey" and ptt and ptt.held()
+        if cfg["sound"]["wake_reply"] and not ptt_active:  # e.g. "Yes?" before listening
+            tts.speak(cfg["sound"]["wake_reply"], cfg)
+            audio.drain(stream)
         text = hear(released=(lambda: not ptt.held()) if ptt_active else None,
                     cancelled=ptt.cancelled if ptt_active else None)
         if text is None:
@@ -439,7 +508,7 @@ def main():
         reply = respond(text)
         # Follow-up: when Zade asked a question, listen briefly for an answer without the wake word.
         while cfg["followup"]["enabled"] and wants_followup(reply) and not barge:
-            audio.cue(stream, soft=True)
+            audio.cue(stream, soft=True, cfg=cfg)
             text = hear(cfg["followup"]["listen_s"])
             if text is None:
                 break
