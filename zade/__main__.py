@@ -20,7 +20,7 @@ from . import actions, brain, config, info, memory, router
 log = logging.getLogger("zade")
 # Tools whose calls are never learned as shortcuts (memory, one-off content, or risky).
 STOP_WORDS = {"stop", "cancel", "never mind", "nevermind", "shut up", "quiet", "be quiet", "nothing"}
-MEMORY_TOOLS = {"dnd", "look_at_screen", "system_status", "set_reminder", "list_reminders", "cancel_reminder", "sync_apps", "remember", "forget", "list_facts", "make_shortcut", "sleep", "set_timer", "note_add",
+MEMORY_TOOLS = {"express", "dnd", "look_at_screen", "system_status", "set_reminder", "list_reminders", "cancel_reminder", "sync_apps", "remember", "forget", "list_facts", "make_shortcut", "sleep", "set_timer", "note_add",
                 "notes_read", "web_answer", "clipboard_read", "clipboard_copy", "type_text", "power", "shell"}
 
 
@@ -55,8 +55,7 @@ def dictation_text(raw):
     return text + " " if router.normalize(text) else ""
 
 
-EMOTIONS = ["neutral", "happy", "excited", "laughing", "love", "sad", "crying", "confused", "surprised", "amazed",
-            "annoyed", "angry", "curious", "smug", "sleepy", "embarrassed", "nervous", "wink", "playful"]
+EMOTIONS = router.EMOTIONS
 
 
 def split_emotion(reply):
@@ -124,7 +123,7 @@ def apply_live(cfg, new):
 
 # Actions that need a spoken yes at each safety level (shell and power always ask, in actions.py).
 RISKY = {"close_app", "type_text", "clipboard_copy", "press_keys"}
-READ_ONLY = {"dnd", "time", "date", "weather", "web_answer", "notes_read", "list_facts", "list_reminders",
+READ_ONLY = {"express", "dnd", "time", "date", "weather", "web_answer", "notes_read", "list_facts", "list_reminders",
              "system_status", "look_at_screen", "clipboard_read", "remember", "forget", "note_add",
              "set_timer", "set_reminder", "cancel_reminder", "make_shortcut", "sync_apps", "sleep",
              "shell", "power"}
@@ -195,6 +194,11 @@ def dispatch(ctx, action, from_model=False):
             from . import vision
 
             return vision.look(a.get("question") or "What's on the screen?", ctx.cfg), True
+        if name == "express":  # the face itself is set by handle(); this is what Zade says
+            e = a.get("emotion", "")
+            if e not in EMOTIONS:
+                return "I can make these faces: " + ", ".join(EMOTIONS) + ".", False
+            return f"This is my {e} face.", True
         if name == "dnd":
             from . import ctl
 
@@ -287,7 +291,8 @@ def handle(ctx, raw):
         ok = all(k for _, k in results)
         ctx.turn = [a for a, (_, k) in zip(r.actions, results) if k and a["name"] not in MEMORY_TOOLS]
         reply = " ".join(t for t, _ in results if t) or "Done."
-        ctx.show(emotion="happy" if ok else "sad")
+        shown = next((a["args"]["emotion"] for a in r.actions if a["name"] == "express" and a["args"]["emotion"]), None)
+        ctx.show(emotion=shown or ("happy" if ok else "sad"))
         ctx.say(reply)
         if r.phrase:
             memory.use_shortcut(ctx.conn, r.phrase)

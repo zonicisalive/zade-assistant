@@ -223,3 +223,11 @@ def test_audit_regressions_router():
 def test_workspace_without_a_space():
     assert router.parse_pattern("go to workspace1", lambda q: None) == \
         {"name": "window", "args": {"action": "workspace", "workspace": "1"}}
+
+
+def test_show_an_expression():
+    P, find = router.parse_pattern, lambda q: None
+    for text, e in [("play play flool expression", "playful"), ("show me your happy face", "happy"),
+                    ("make a sad expression", "sad"), ("do the wink face", "wink")]:
+        assert P(text, find) == {"name": "express", "args": {"emotion": e}}, text
+    assert P("show me your banana face", find) == {"name": "express", "args": {"emotion": ""}}

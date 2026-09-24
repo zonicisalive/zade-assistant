@@ -306,3 +306,12 @@ def test_inbox_keeps_its_file_so_the_app_can_append_safely(tmp_path):
     with inbox.open("a") as f:  # the app appending after a read
         f.write("what time is it\n")
     assert z.read_inbox(inbox) == ["what time is it"] and z.read_inbox(inbox) == []
+
+
+def test_show_an_expression_sets_the_face():
+    said, shown = [], []
+    ctx = make(said, show=lambda **f: shown.append(f.get("emotion")))
+    z.handle(ctx, "show me your playful face")
+    assert shown[-1] == "playful" and said == ["This is my playful face."]
+    z.handle(ctx, "show me your banana face")
+    assert said[-1].startswith("I can make these faces:")

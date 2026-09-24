@@ -2,7 +2,7 @@ import logging
 import re
 from dataclasses import dataclass, field
 
-from rapidfuzz import fuzz
+from rapidfuzz import fuzz, process
 
 from .actions import SITES
 
@@ -46,6 +46,11 @@ def parse_teach(text):
 
 _SPOKEN_MODS = {"control": "ctrl", "ctrl": "ctrl", "shift": "shift", "alt": "alt", "super": "super",
                 "windows": "super", "win": "super", "meta": "super"}
+
+
+# The overlay character's expressions (the model tags replies with one of these).
+EMOTIONS = ["neutral", "happy", "excited", "laughing", "love", "sad", "crying", "confused", "surprised", "amazed",
+            "annoyed", "angry", "curious", "smug", "sleepy", "embarrassed", "nervous", "wink", "playful"]
 
 
 UNITS = {"second": 1, "minute": 60, "min": 60, "hour": 3600}
@@ -130,6 +135,11 @@ def parse_pattern(text, find_app):
         return {"name": "media", "args": {"cmd": "next"}}
     if re.fullmatch(r"(?:previous|last|go back(?: to the)?(?: previous| last)?)(?: song| track| one)?", text):
         return {"name": "media", "args": {"cmd": "previous"}}
+    # "show me your happy face", "make a sad expression", "play playful expression" (heard as "play flool")
+    if m := re.fullmatch(r"(?:show|make|do|give|play|place)(?: me)?(?: a| an| the| your)? (.+?) (?:face|expression|look)",
+                         text):
+        hit = process.extractOne(m[1].replace(" ", ""), EMOTIONS, scorer=fuzz.ratio, score_cutoff=60)
+        return {"name": "express", "args": {"emotion": hit[0] if hit else ""}}
     # "play" is often heard as "place" ("Place Scars by Juice WRLD"), so "place" counts too, but only
     # when it clearly names a song ("... by artist" or "... on youtube"), not "place an order".
     if m := re.fullmatch(r"(play|place) (?!music$|pause$|next$|previous$)(.+?)"
