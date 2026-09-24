@@ -145,3 +145,43 @@ def test_gpu_path_ignores_silence_and_made_up_phrases(monkeypatch):
         assert S.transcribe(np.zeros(32000, np.int16), c) == "", made_up
     monkeypatch.setattr(S, "_server", lambda *a: "thank you zade, open firefox")
     assert S.transcribe(np.zeros(32000, np.int16), c) == "thank you zade, open firefox"
+
+
+def test_gpu_model_starts_on_use_and_stops_when_idle(monkeypatch):
+    import zade.stt as S
+
+    c = copy.deepcopy(config.DEFAULTS)
+    c["stt"]["provider"] = "gpu"
+    ran = []
+    monkeypatch.setattr(S.subprocess, "run", lambda cmd, **kw: ran.append(cmd[2]))
+    monkeypatch.setattr(S, "_gpu", {"used": 0.0})
+    S.gpu_start(c)
+    t = S._gpu["used"]
+    S.gpu_idle(c, now=t + 10)
+    S.gpu_idle(c, now=t + 31)
+    S.gpu_idle(c, now=t + 60)  # already stopped: nothing more
+    assert ran == ["start", "stop"]
+    c["stt"]["provider"] = "whisper"
+    S.gpu_start(c)
+    assert ran == ["start", "stop"]  # the CPU model never touches the service
+
+
+def test_gpu_waits_for_a_starting_server(monkeypatch):
+    import urllib.error
+
+    import zade.stt as S
+
+    c = copy.deepcopy(config.DEFAULTS)
+    c["stt"]["provider"] = "gpu"
+    monkeypatch.setattr(S, "has_speech", lambda a: True)
+    tries = []
+
+    def server(*a):
+        tries.append(1)
+        if len(tries) < 3:
+            raise urllib.error.URLError(ConnectionRefusedError(111, "refused"))
+        return "open firefox"
+
+    monkeypatch.setattr(S, "_server", server)
+    monkeypatch.setattr(S.time, "sleep", lambda s: None)
+    assert S.transcribe(np.zeros(16000, np.int16), c) == "open firefox" and len(tries) == 3

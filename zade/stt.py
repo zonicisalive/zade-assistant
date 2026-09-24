@@ -3,6 +3,8 @@ import io
 import re
 import logging
 import pathlib
+import subprocess
+import time
 import wave
 
 import numpy as np
@@ -30,6 +32,26 @@ def to_wav(audio, rate=16000):
         w.setframerate(rate)
         w.writeframes(audio.astype(np.int16).tobytes())
     return buf.getvalue()
+
+
+# The GPU model only holds VRAM while it's in use: Zade starts its service on wake (it loads in ~0.2 s,
+# while the user is still talking) and stops it after stt.keep_alive_s without a request.
+GPU_SERVICE = "zade-whisper"
+_gpu = {"used": 0.0}
+
+
+def gpu_start(cfg):
+    if cfg["stt"]["provider"] == "gpu":
+        _gpu["used"] = time.monotonic()
+        subprocess.run(["systemctl", "--user", "start", "--no-block", GPU_SERVICE], capture_output=True)
+
+
+def gpu_idle(cfg, now=None):
+    """Stop the GPU model once it has been idle long enough (called from Zade's main loop)."""
+    now = time.monotonic() if now is None else now
+    if cfg["stt"]["provider"] == "gpu" and _gpu["used"] and now - _gpu["used"] > cfg["stt"].get("keep_alive_s", 30):
+        _gpu["used"] = 0.0
+        subprocess.run(["systemctl", "--user", "stop", "--no-block", GPU_SERVICE], capture_output=True)
 
 
 def _server(audio, cfg, prompt):
@@ -71,11 +93,19 @@ def transcribe(audio, cfg, prompt="", hotwords=()):
         if not has_speech(audio):  # the server has no silence filter: nothing said means nothing heard
             return ""
         words = ", ".join(dict.fromkeys([*s["hotwords"], *hotwords]))
-        try:
-            text = _server(audio, cfg, " ".join(x for x in (words, prompt) if x))
-            return "" if HALLUCINATIONS.fullmatch(text.strip(" .!")) else text
-        except Exception as e:  # server not running or busy: the CPU model still works
-            log.warning("GPU speech server failed, using %s on the CPU: %s", s["model"], e)
+        _gpu["used"] = time.monotonic()
+        deadline = time.monotonic() + 3  # still loading after the wake: wait a moment for it
+        while True:
+            try:
+                text = _server(audio, cfg, " ".join(x for x in (words, prompt) if x))
+                _gpu["used"] = time.monotonic()
+                return "" if HALLUCINATIONS.fullmatch(text.strip(" .!")) else text
+            except Exception as e:
+                starting = isinstance(getattr(e, "reason", e), ConnectionRefusedError)  # the service is loading
+                if not starting or time.monotonic() > deadline:  # otherwise: the CPU model still works
+                    log.warning("GPU speech server failed, using %s on the CPU: %s", s["model"], e)
+                    break
+                time.sleep(0.1)
     if s["provider"] == "openai":
         pc = cfg["providers"]["openai"]
         try:

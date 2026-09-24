@@ -55,10 +55,12 @@ sudo pacman -S --needed vulkan-headers spirv-headers shaderc
 cd ~/.local/share/zade && git clone --depth 1 https://github.com/ggml-org/whisper.cpp && cd whisper.cpp
 cmake -B build -DGGML_VULKAN=1 -DGGML_CCACHE=OFF -DCMAKE_BUILD_TYPE=Release && cmake --build build -j --target whisper-server
 curl -L -o models/ggml-large-v3-turbo-q5_0.bin https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo-q5_0.bin
-cp ~/Zade/systemd/zade-whisper.service ~/.config/systemd/user/ && systemctl --user enable --now zade-whisper
+cp ~/Zade/systemd/zade-whisper.service ~/.config/systemd/user/ && systemctl --user daemon-reload
 ```
 
-Then pick **Settings → Listening → Speech recognition → Large (GPU)** and restart Zade.
+Then pick **Settings → Listening → Speech recognition → Large (GPU)** and restart Zade. Zade starts the
+service when it starts listening (the model loads in ~0.5 s, while you talk) and stops it after
+`stt.keep_alive_s` (30 s) without a request, so it uses no VRAM while idle.
 
 ## Overlay inside your desktop shell (optional, saves ~225 MB)
 

@@ -408,6 +408,7 @@ def main():
     typer = next(detectors) if bindings[1] else None  # voice-typing key detector
 
     def hear(timeout=None, released=None, cancelled=None, keep_reply=False):
+        stt.gpu_start(cfg)  # the GPU speech model (if used) loads while the user talks
         # keep_reply: while answering a question, keep it (e.g. a command to approve) on screen
         ui.show("listening", heard="", emotion="neutral", **({} if keep_reply else {"reply": ""}))
         a = audio.record(stream, cfg, timeout, released, cancelled, on_level=ui.level)
@@ -471,6 +472,7 @@ def main():
         if time.monotonic() - last_check[0] >= 0.5:  # reminders, typed commands, live settings
             last_check[0] = time.monotonic()
             pump_reminders(ctx)
+            stt.gpu_idle(cfg)  # frees its VRAM after stt.keep_alive_s
             typed.extend(read_inbox(inbox))
             mtime = config_file.stat().st_mtime if config_file.exists() else 0
             if mtime != config_mtime[0]:  # changed in the app: overlay, sounds, quiet hours, safety apply now
@@ -505,6 +507,7 @@ def main():
         return reply
 
     stt.transcribe(np.zeros(audio.RATE, np.int16), cfg)  # load whisper before the first command
+    stt.gpu_start(cfg)  # counts as a use, so a GPU model loaded at login is freed after the idle time
     if cfg["wake"]["verify"]:
         stt.wake_check(np.zeros(audio.RATE, np.int16), cfg)  # and the wake word's second-opinion model
     log.info("ready")
