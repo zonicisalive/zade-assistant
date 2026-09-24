@@ -47,3 +47,19 @@ def test_no_second_overlay_when_the_desktop_shell_hosts_it(tmp_path, monkeypatch
     shell.write_text("ShellRoot {}\n")  # an inir update removed the hook: fall back to our own overlay
     ui.start(cfg)
     assert len(started) == 1
+
+
+def test_host_file_hook_is_recognised(tmp_path, monkeypatch):
+    import copy
+    import subprocess
+
+    from zade import config
+
+    shell = tmp_path / "shell.qml"
+    shell.write_text('LazyLoader { active: true; source: "file:///home/me/Zade/ui/ZadeHost.qml" }\n')
+    cfg = copy.deepcopy(config.DEFAULTS)
+    cfg["ui"]["host_file"] = str(shell)
+    monkeypatch.setattr(ui, "PATH", tmp_path / "state.json")
+    started = []
+    monkeypatch.setattr(subprocess, "Popen", lambda *a, **k: started.append(a))
+    assert ui.start(cfg) is None and started == []

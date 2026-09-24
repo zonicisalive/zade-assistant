@@ -50,8 +50,8 @@ Without keys, Zade opens Spotify's search instead.
 If you run a Quickshell-based shell (e.g. inir), add this line inside its `ShellRoot { ... }` in `shell.qml`:
 
 ```qml
-LazyLoader { active: true; source: "file:///home/you/Zade/ui/Overlay.qml" }
+LazyLoader { active: true; source: "file:///home/you/Zade/ui/ZadeHost.qml" }
 ```
 
-Restart the shell. Zade sees the line (setting `ui.host_file`) and no longer starts its own overlay process.
+Restart the shell once. From then on, Zade updates to the overlay load by themselves (ZadeHost.qml watches its files). Zade sees the line (setting `ui.host_file`) and no longer starts its own overlay process.
 If a shell update removes the line, Zade automatically goes back to running its own.

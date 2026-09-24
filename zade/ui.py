@@ -68,7 +68,7 @@ def start(cfg):
     configure(cfg)
     host = pathlib.Path(cfg["ui"]["host_file"]).expanduser()
     try:
-        if "Zade/ui/Overlay.qml" in host.read_text():
+        if any(f"Zade/ui/{f}" in host.read_text() for f in ("ZadeHost.qml", "Overlay.qml")):
             log.info("overlay hosted by %s", host)  # the desktop shell shows it: no second Quickshell
             return None
     except OSError:
