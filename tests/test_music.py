@@ -36,5 +36,25 @@ def test_without_keys_opens_spotify_search(monkeypatch):
     opened = []
     monkeypatch.delenv("SPOTIFY_CLIENT_ID", raising=False)
     monkeypatch.setattr(music, "_open", opened.append)
+    monkeypatch.setattr(music, "_find_keyless", lambda q: None)
     assert "search" in music.play("killshot").lower()
     assert opened == ["spotify:search:killshot"]
+
+
+def test_without_keys_finds_the_track_on_the_web(monkeypatch):
+    page = ('<a class="result__a" href="//duckduckgo.com/l/?uddg=https%3A%2F%2Fopen.spotify.com%2Ftrack%2F'
+            '6EtYag2uAqy6ccWTn0x2BV&amp;rut=2f">Permanent Scar - song and lyrics by Zeus | Spotify</a>')
+
+    class Resp:
+        def __enter__(self): return self
+        def __exit__(self, *a): pass
+        def read(self): return page.encode()
+
+    monkeypatch.setattr(music.urllib.request, "urlopen", lambda req, timeout: Resp())
+    assert music._find_keyless("permanent scar zeus") == ("spotify:track:6EtYag2uAqy6ccWTn0x2BV",
+                                                          "Permanent Scar by Zeus")
+    opened = []
+    monkeypatch.delenv("SPOTIFY_CLIENT_ID", raising=False)
+    monkeypatch.setattr(music, "_open", opened.append)
+    assert music.play("permanent scar zeus") == "Playing Permanent Scar by Zeus."
+    assert opened == ["spotify:track:6EtYag2uAqy6ccWTn0x2BV"]

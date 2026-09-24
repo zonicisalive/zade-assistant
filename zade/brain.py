@@ -141,12 +141,19 @@ def ask(text, facts, cfg, run_tool, history=(), vram=vram_free_gb, resident=resi
     ran = []
 
     def tracked(name, args):
-        ran.append(name)
-        return run_tool(name, args)
+        result = run_tool(name, args)
+        ran.append((name, result))
+        return result
 
     for name, extra in candidates(cfg, vram, resident):
         try:
-            return providers.chat(name, system, text, TOOLS, tracked, cfg, extra, history)
+            reply = providers.chat(name, system, text, TOOLS, tracked, cfg, extra, history)
+            # The model tends to paraphrase a music result into "I started playing <what you asked>",
+            # even when a different song played or nothing did, so say what really happened.
+            if [n for n, _ in ran] == ["play_music"]:
+                result = str(ran[0][1])
+                return ("[happy] " if result.startswith("Playing") else "[embarrassed] ") + result
+            return reply
         except providers.ProviderError as e:
             log.warning("LLM %s %s failed: %s", name, extra, e)
             if ran:  # retrying elsewhere would repeat actions that already happened

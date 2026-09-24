@@ -115,3 +115,15 @@ def test_personality_goes_into_the_prompt(monkeypatch):
     c["llm"]["personality"] = "Call the user boss."
     brain.ask("hello", [], c, None, vram=lambda: 8.0)
     assert "Call the user boss." in got["system"]
+
+
+def test_music_reply_says_what_really_played(monkeypatch):
+    def fake(name, system, text, tools, run_tool, c, extra, history=()):
+        run_tool("play_music", {"query": "plage scars"})
+        return "[happy] I've started playing Plage Scars!"
+
+    monkeypatch.setattr(providers, "chat", fake)
+    assert brain.ask("play plage scars", [], cfg(), lambda n, a: "Playing Permanent Scar by Zeus.",
+                     vram=lambda: 8.0) == "[happy] Playing Permanent Scar by Zeus."
+    assert brain.ask("play it", [], cfg(), lambda n, a: "I couldn't reach Spotify right now.",
+                     vram=lambda: 8.0) == "[embarrassed] I couldn't reach Spotify right now."
