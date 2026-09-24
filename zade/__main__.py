@@ -6,6 +6,7 @@ import pathlib
 import re
 import signal
 import sqlite3
+import sys
 import threading
 import time
 from dataclasses import dataclass, field
@@ -348,6 +349,7 @@ def main():
     overlay = ui.start(cfg)
     if overlay:
         atexit.register(overlay.terminate)
+    signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))  # run exit handlers (close the overlay) on stop
 
     last_check = [0.0]
     typed = []  # commands typed in the desktop app

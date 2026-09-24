@@ -1,0 +1,676 @@
+// Zade control app: status, personality, settings, memory and history.
+// Talks to Zade through `python -m zade.ctl` (JSON), and follows the wallpaper colors like the overlay.
+import QtQuick
+import QtQuick.Layouts
+import Quickshell
+import Quickshell.Io
+
+ShellRoot {
+    id: root
+
+    readonly property string repo: Quickshell.shellDir + "/.."          // ui/ lives inside the Zade repo
+    readonly property string python: repo + "/.venv/bin/python"
+
+    property var c: ({
+        primary: "#A5D0BB", on_primary: "#1E352B", primary_container: "#749D8A", tertiary: "#EABBB8",
+        error: "#EABCB6", on_surface: "#E2E2E0", on_surface_variant: "#C1C8C3",
+        surface_container_low: "#1A1C1B", surface_container: "#1E201F", surface_container_high: "#282A29",
+        surface_container_highest: "#333534", outline_variant: "#434844"
+    })
+
+    property string page: "home"
+    property var status: ({ running: false, autostart: false })
+    property var settings: null
+    property var facts: []
+    property var shortcuts: []
+    property var reminders: []
+    property var history: []
+    property var voices: []
+    property bool needsRestart: false
+    property string toast: ""
+
+    FileView {
+        path: Quickshell.env("HOME") + "/.local/state/quickshell/user/generated/colors.json"
+        watchChanges: true
+        onFileChanged: reload()
+        onLoaded: { try { root.c = Object.assign({}, root.c, JSON.parse(text())) } catch (e) {} }
+    }
+
+    // ── zade ctl ──────────────────────────────────────────────────────────────
+    Component {
+        id: procComponent
+        Process {
+            id: proc
+            property var callback: null
+            workingDirectory: root.repo
+            stdout: StdioCollector {
+                onStreamFinished: {
+                    let out = null
+                    try { out = JSON.parse(text) } catch (e) {}
+                    if (proc.callback) proc.callback(out)
+                    proc.destroy()
+                }
+            }
+        }
+    }
+
+    function ctl(args, callback) {
+        const p = procComponent.createObject(root, { command: [python, "-m", "zade.ctl"].concat(args), callback: callback || null })
+        p.running = true
+    }
+
+    function refresh() {
+        ctl(["status"], r => { if (r) status = r })
+        ctl(["settings"], r => { if (r) settings = r })
+        ctl(["facts"], r => { if (r) facts = r })
+        ctl(["shortcuts"], r => { if (r) shortcuts = r })
+        ctl(["reminders"], r => { if (r) reminders = r })
+        ctl(["history"], r => { if (r) history = r })
+    }
+
+    function setSetting(key, value) {
+        ctl(["set", key, String(value)], r => {
+            if (r && r.ok) { needsRestart = status.running; ctl(["settings"], s => { if (s) settings = s }) }
+            else flash(r && r.error ? r.error : "Couldn't save that setting.")
+        })
+    }
+
+    function flash(text) { toast = text; toastTimer.restart() }
+    Timer { id: toastTimer; interval: 2600; onTriggered: root.toast = "" }
+
+    Component.onCompleted: { refresh(); ctl(["voices"], r => { if (r) voices = r }) }
+    Timer { interval: 3000; repeat: true; running: true
+            onTriggered: { ctl(["status"], r => { if (r) root.status = r })
+                           if (root.page === "history" || root.page === "home") ctl(["history"], r => { if (r) root.history = r }) } }
+
+    property real phase: 0
+    NumberAnimation on phase { from: 0; to: Math.PI * 2; duration: 2400; loops: Animation.Infinite; running: true }
+
+    // ── Building blocks ───────────────────────────────────────────────────────
+    component Label: Text {
+        color: root.c.on_surface
+        font.family: "Readex Pro"
+        font.pixelSize: 14
+        wrapMode: Text.WordWrap
+    }
+
+    component Muted: Label { color: root.c.on_surface_variant; font.pixelSize: 13 }
+
+    component Button: Rectangle {
+        id: btn
+        property string text: ""
+        property bool accent: false
+        property bool danger: false
+        signal clicked
+        implicitWidth: btnLabel.implicitWidth + 32
+        implicitHeight: 38
+        radius: 10
+        color: accent ? root.c.primary : (hover.containsMouse ? root.c.surface_container_highest : root.c.surface_container_high)
+        border.width: accent ? 0 : 1
+        border.color: Qt.alpha(root.c.outline_variant, 0.6)
+        Behavior on color { ColorAnimation { duration: 120 } }
+        Text {
+            id: btnLabel
+            anchors.centerIn: parent
+            text: btn.text
+            color: btn.accent ? root.c.on_primary : (btn.danger ? root.c.error : root.c.on_surface)
+            font.family: "Readex Pro"; font.pixelSize: 13; font.weight: Font.Medium
+        }
+        MouseArea { id: hover; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: btn.clicked() }
+    }
+
+    component Field: Rectangle {
+        id: field
+        property alias text: input.text
+        property string placeholder: ""
+        signal accepted
+        signal edited
+        implicitHeight: 38
+        radius: 10
+        color: root.c.surface_container
+        border.width: 1
+        border.color: input.activeFocus ? root.c.primary : Qt.alpha(root.c.outline_variant, 0.7)
+        TextInput {
+            id: input
+            anchors.fill: parent; anchors.leftMargin: 12; anchors.rightMargin: 12
+            verticalAlignment: TextInput.AlignVCenter
+            color: root.c.on_surface
+            selectionColor: Qt.alpha(root.c.primary, 0.4)
+            font.family: "Readex Pro"; font.pixelSize: 14
+            clip: true
+            onAccepted: field.accepted()
+            onEditingFinished: field.edited()
+        }
+        Text {
+            anchors.fill: input; verticalAlignment: Text.AlignVCenter
+            visible: input.text.length === 0 && !input.activeFocus
+            text: field.placeholder
+            color: Qt.alpha(root.c.on_surface_variant, 0.6)
+            font: input.font
+        }
+    }
+
+    component Switch: Rectangle {
+        id: sw
+        property bool checked: false
+        signal toggled(bool value)
+        implicitWidth: 44; implicitHeight: 24; radius: 12
+        color: checked ? root.c.primary : root.c.surface_container_highest
+        Behavior on color { ColorAnimation { duration: 150 } }
+        Rectangle {
+            width: 18; height: 18; radius: 9
+            anchors.verticalCenter: parent.verticalCenter
+            x: sw.checked ? parent.width - width - 3 : 3
+            color: sw.checked ? root.c.on_primary : root.c.on_surface_variant
+            Behavior on x { NumberAnimation { duration: 150; easing.type: Easing.OutCubic } }
+        }
+        MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: sw.toggled(!sw.checked) }
+    }
+
+    // A row in a settings group: label (and hint) on the left, control on the right.
+    component Row_: RowLayout {
+        property string label: ""
+        property string hint: ""
+        Layout.fillWidth: true
+        Layout.minimumHeight: 52
+        spacing: 16
+        ColumnLayout {
+            Layout.fillWidth: true
+            spacing: 2
+            Label { text: parent.parent.label; Layout.fillWidth: true }
+            Muted { text: parent.parent.hint; visible: text.length > 0; Layout.fillWidth: true; font.pixelSize: 12 }
+        }
+    }
+
+    component Group: Rectangle {
+        default property alias content: groupCol.data
+        property string title: ""
+        Layout.fillWidth: true
+        implicitHeight: groupCol.implicitHeight + 20
+        radius: 16
+        color: root.c.surface_container
+        border.width: 1
+        border.color: Qt.alpha(root.c.outline_variant, 0.4)
+        ColumnLayout {
+            id: groupCol
+            anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top
+            anchors.margins: 10; anchors.leftMargin: 18; anchors.rightMargin: 18
+            spacing: 0
+        }
+    }
+
+    component Divider: Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: Qt.alpha(root.c.outline_variant, 0.35) }
+
+    component Chip: Rectangle {
+        property string text: ""
+        property bool selected: false
+        signal clicked
+        implicitWidth: chipText.implicitWidth + 24; implicitHeight: 32; radius: 16
+        color: selected ? root.c.primary : root.c.surface_container_high
+        border.width: selected ? 0 : 1
+        border.color: Qt.alpha(root.c.outline_variant, 0.6)
+        Text { id: chipText; anchors.centerIn: parent; text: parent.text
+               color: parent.selected ? root.c.on_primary : root.c.on_surface
+               font.family: "Readex Pro"; font.pixelSize: 13 }
+        MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: parent.clicked() }
+    }
+
+    // The living orb (same language as the overlay): breathes while Zade runs, still and grey when stopped.
+    component Orb: Item {
+        property real size: 72
+        property bool alive: root.status.running
+        implicitWidth: size * 1.9; implicitHeight: size * 1.9
+        Rectangle {
+            anchors.centerIn: parent
+            width: parent.size; height: width; radius: width / 2
+            color: Qt.alpha(parent.alive ? root.c.primary : root.c.outline_variant, 0.18)
+            scale: parent.alive ? 1.5 + 0.12 * Math.sin(root.phase) : 1.2
+        }
+        Repeater {
+            model: 2
+            Rectangle {
+                required property int index
+                anchors.centerIn: parent
+                width: parent.size; height: width; radius: width / 2
+                color: "transparent"; border.width: 1.5; border.color: root.c.primary
+                visible: parent.alive
+                property real t: ((root.phase / (Math.PI * 2)) + index * 0.5) % 1
+                scale: 1 + t * 0.8; opacity: (1 - t) * 0.4
+            }
+        }
+        Rectangle {
+            anchors.centerIn: parent
+            width: parent.size * 0.55; height: width; radius: width / 2
+            gradient: Gradient {
+                GradientStop { position: 0; color: parent.parent.alive ? Qt.lighter(root.c.primary, 1.15) : root.c.surface_container_highest }
+                GradientStop { position: 1; color: parent.parent.alive ? root.c.primary_container : root.c.outline_variant }
+            }
+        }
+    }
+
+    // ── Window ────────────────────────────────────────────────────────────────
+    FloatingWindow {
+        title: "Zade"
+        implicitWidth: 980
+        implicitHeight: 680
+        color: root.c.surface_container_low
+
+        RowLayout {
+            anchors.fill: parent
+            spacing: 0
+
+            // Navigation rail
+            Rectangle {
+                Layout.fillHeight: true
+                Layout.preferredWidth: 212
+                color: root.c.surface_container
+                ColumnLayout {
+                    anchors.fill: parent; anchors.margins: 16; anchors.topMargin: 22
+                    spacing: 4
+                    RowLayout {
+                        spacing: 10
+                        Layout.bottomMargin: 18
+                        Layout.leftMargin: 6
+                        Orb { size: 18; implicitWidth: 30; implicitHeight: 30 }
+                        Label { text: "Zade"; font.pixelSize: 20; font.weight: Font.Medium }
+                    }
+                    Repeater {
+                        model: [
+                            { id: "home", name: "Home" }, { id: "personalize", name: "Personalize" },
+                            { id: "settings", name: "Settings" }, { id: "memory", name: "Memory" },
+                            { id: "history", name: "History" }
+                        ]
+                        Rectangle {
+                            required property var modelData
+                            Layout.fillWidth: true
+                            implicitHeight: 40; radius: 12
+                            color: root.page === modelData.id ? Qt.alpha(root.c.primary, 0.16)
+                                 : (navHover.containsMouse ? Qt.alpha(root.c.on_surface, 0.05) : "transparent")
+                            Text {
+                                anchors.verticalCenter: parent.verticalCenter; x: 14
+                                text: parent.modelData.name
+                                color: root.page === parent.modelData.id ? root.c.primary : root.c.on_surface
+                                font.family: "Readex Pro"; font.pixelSize: 14
+                                font.weight: root.page === parent.modelData.id ? Font.Medium : Font.Normal
+                            }
+                            MouseArea { id: navHover; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
+                                        onClicked: { root.page = parent.modelData.id; root.refresh() } }
+                        }
+                    }
+                    Item { Layout.fillHeight: true }
+                    Muted {
+                        Layout.leftMargin: 6
+                        text: root.status.running ? "Running" : "Stopped"
+                        color: root.status.running ? root.c.primary : root.c.on_surface_variant
+                    }
+                }
+            }
+
+            // Pages
+            Flickable {
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                contentHeight: pageCol.implicitHeight + 64
+                clip: true
+                boundsBehavior: Flickable.StopAtBounds
+
+                ColumnLayout {
+                    id: pageCol
+                    x: 40; y: 32
+                    width: parent.width - 80
+                    spacing: 16
+
+                    // Restart banner after settings changed while running
+                    Rectangle {
+                        visible: root.needsRestart && root.page !== "memory" && root.page !== "history"
+                        Layout.fillWidth: true
+                        implicitHeight: 52; radius: 14
+                        color: Qt.alpha(root.c.primary, 0.12)
+                        RowLayout {
+                            anchors.fill: parent; anchors.leftMargin: 18; anchors.rightMargin: 8
+                            Label { text: "Restart Zade to use the new settings."; Layout.fillWidth: true }
+                            Button { text: "Restart"; accent: true
+                                     onClicked: { root.needsRestart = false; root.ctl(["restart"], () => root.refresh()) } }
+                        }
+                    }
+
+                    // ── Home
+                    ColumnLayout {
+                        visible: root.page === "home"
+                        Layout.fillWidth: true
+                        spacing: 16
+                        RowLayout {
+                            spacing: 20
+                            Orb { size: 64 }
+                            ColumnLayout {
+                                spacing: 4
+                                Label { text: root.status.running ? "Zade is listening" : "Zade is stopped"; font.pixelSize: 26; font.weight: Font.Medium }
+                                Muted { text: root.status.running ? "Say “hey zade”, hold Win, or type below."
+                                                                  : "Start Zade to talk to it." }
+                            }
+                        }
+                        RowLayout {
+                            spacing: 10
+                            Button { text: root.status.running ? "Stop" : "Start Zade"; accent: !root.status.running; danger: root.status.running
+                                     onClicked: root.ctl([root.status.running ? "stop" : "start"], () => statusLater.restart()) }
+                            Button { text: "Restart"; visible: root.status.running
+                                     onClicked: { root.needsRestart = false; root.ctl(["restart"], () => statusLater.restart()) } }
+                        }
+                        Timer { id: statusLater; interval: 1500; onTriggered: root.ctl(["status"], r => { if (r) root.status = r }) }
+
+                        Group {
+                            Row_ {
+                                label: "Type to Zade"
+                                hint: "Handled like something you said."
+                                Field {
+                                    id: typeBox
+                                    Layout.preferredWidth: 360
+                                    placeholder: "what's the weather tomorrow"
+                                    onAccepted: {
+                                        if (!text.trim()) return
+                                        if (!root.status.running) { root.flash("Start Zade first."); return }
+                                        root.ctl(["say", text]); root.flash("Sent."); text = ""
+                                    }
+                                }
+                            }
+                            Divider {}
+                            Row_ {
+                                label: "Start on login"
+                                hint: "Runs Zade in the background as a user service."
+                                Switch { checked: root.status.autostart
+                                         onToggled: v => root.ctl(["autostart", v ? "on" : "off"], () => root.ctl(["status"], r => { if (r) root.status = r })) }
+                            }
+                        }
+
+                        Muted { text: "Recent"; Layout.topMargin: 8 }
+                        Group {
+                            Repeater {
+                                model: root.history.slice(0, 4)
+                                ColumnLayout {
+                                    required property var modelData
+                                    required property int index
+                                    Layout.fillWidth: true
+                                    spacing: 2
+                                    Divider { visible: parent.index > 0 }
+                                    Label { text: parent.modelData.heard; Layout.fillWidth: true; Layout.topMargin: 10; elide: Text.ElideRight; maximumLineCount: 1 }
+                                    Muted { text: parent.modelData.reply || "—"; Layout.fillWidth: true; Layout.bottomMargin: 10; elide: Text.ElideRight; maximumLineCount: 1 }
+                                }
+                            }
+                            Muted { visible: root.history.length === 0; text: "Nothing yet."; Layout.topMargin: 12; Layout.bottomMargin: 12 }
+                        }
+                    }
+
+                    // ── Personalize
+                    ColumnLayout {
+                        visible: root.page === "personalize" && root.settings !== null
+                        Layout.fillWidth: true
+                        spacing: 16
+                        Label { text: "Personalize"; font.pixelSize: 26; font.weight: Font.Medium }
+                        Group {
+                            Row_ { label: "Voice"; hint: "a = American, b = British; f = female, m = male." }
+                            Flow {
+                                Layout.fillWidth: true; Layout.bottomMargin: 12
+                                spacing: 8
+                                Repeater {
+                                    model: root.voices
+                                    Chip {
+                                        required property string modelData
+                                        text: modelData
+                                        selected: root.settings && root.settings.tts.voice === modelData
+                                        onClicked: { root.setSetting("tts.voice", modelData)
+                                                     root.ctl(["preview", modelData, String(root.settings.tts.speed)]) }
+                                    }
+                                }
+                            }
+                            Divider {}
+                            Row_ {
+                                label: "Speaking speed"
+                                hint: "1.0 is normal."
+                                RowLayout {
+                                    spacing: 8
+                                    Repeater {
+                                        model: [1.0, 1.1, 1.2, 1.3, 1.4]
+                                        Chip {
+                                            required property real modelData
+                                            text: modelData.toFixed(1) + "×"
+                                            selected: root.settings && Math.abs(root.settings.tts.speed - modelData) < 0.01
+                                            onClicked: { root.setSetting("tts.speed", modelData)
+                                                         root.ctl(["preview", root.settings.tts.voice, String(modelData)]) }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        Group {
+                            Row_ { label: "Personality"; hint: "How Zade should talk. For example: “Be playful and call me boss.” or “Answer in Hinglish.”" }
+                            Rectangle {
+                                Layout.fillWidth: true; Layout.bottomMargin: 12
+                                implicitHeight: 110; radius: 10
+                                color: root.c.surface_container_low
+                                border.width: 1
+                                border.color: personality.activeFocus ? root.c.primary : Qt.alpha(root.c.outline_variant, 0.7)
+                                TextEdit {
+                                    id: personality
+                                    anchors.fill: parent; anchors.margins: 12
+                                    text: root.settings ? root.settings.llm.personality : ""
+                                    color: root.c.on_surface
+                                    font.family: "Readex Pro"; font.pixelSize: 14
+                                    wrapMode: TextEdit.Wrap
+                                    selectionColor: Qt.alpha(root.c.primary, 0.4)
+                                }
+                            }
+                            RowLayout {
+                                Layout.bottomMargin: 10
+                                Button { text: "Save personality"; accent: true
+                                         onClicked: { root.setSetting("llm.personality", personality.text); root.flash("Saved.") } }
+                            }
+                        }
+                    }
+
+                    // ── Settings
+                    ColumnLayout {
+                        visible: root.page === "settings" && root.settings !== null
+                        Layout.fillWidth: true
+                        spacing: 16
+                        Label { text: "Settings"; font.pixelSize: 26; font.weight: Font.Medium }
+
+                        Muted { text: "Listening" }
+                        Group {
+                            Row_ { label: "Wake word sensitivity"; hint: "Lower hears you more easily; higher avoids false wakes."
+                                RowLayout { spacing: 8
+                                    Repeater { model: [0.35, 0.5, 0.65]
+                                        Chip { required property real modelData
+                                               text: ({ 0.35: "Easy", 0.5: "Normal", 0.65: "Strict" })[modelData]
+                                               selected: root.settings && Math.abs(root.settings.wake.threshold - modelData) < 0.01
+                                               onClicked: root.setSetting("wake.threshold", modelData) } } } }
+                            Divider {}
+                            Row_ { label: "Hold Win to talk"; hint: "Hold the key alone, speak, release."
+                                Switch { checked: root.settings ? root.settings.hotkey.enabled : false; onToggled: v => root.setSetting("hotkey.enabled", v) } }
+                            Divider {}
+                            Row_ { label: "Hold time"; hint: "Seconds to hold Win before Zade listens."
+                                Field { Layout.preferredWidth: 90; text: root.settings ? String(root.settings.hotkey.hold_s) : ""
+                                        onEdited: root.setSetting("hotkey.hold_s", text) } }
+                            Divider {}
+                            Row_ { label: "Voice typing"; hint: "Hold Right Alt, speak, release: the words are typed."
+                                Switch { checked: root.settings ? root.settings.dictation.enabled : false; onToggled: v => root.setSetting("dictation.enabled", v) } }
+                            Divider {}
+                            Row_ { label: "Follow-up listening"; hint: "When Zade asks a question, listen for your answer without the wake word."
+                                Switch { checked: root.settings ? root.settings.followup.enabled : false; onToggled: v => root.setSetting("followup.enabled", v) } }
+                            Divider {}
+                            Row_ { label: "Words to expect"; hint: "Names Whisper often mishears, separated by commas."
+                                Field { Layout.preferredWidth: 360; text: root.settings ? root.settings.stt.hotwords.join(", ") : ""
+                                        onEdited: root.setSetting("stt.hotwords", text) } }
+                        }
+
+                        Muted { text: "Brain"; Layout.topMargin: 8 }
+                        Group {
+                            Row_ { label: "Model provider"; hint: "Local runs on your PC; cloud needs an API key in ~/.config/zade/env."
+                                RowLayout { spacing: 8
+                                    Repeater { model: [{ id: "ollama", name: "Local" }, { id: "anthropic", name: "Claude" }, { id: "openai", name: "OpenAI-compatible" }]
+                                        Chip { required property var modelData
+                                               text: modelData.name
+                                               selected: root.settings && root.settings.llm.provider === modelData.id
+                                               onClicked: root.setSetting("llm.provider", modelData.id) } } } }
+                            Divider {}
+                            Row_ { label: "Local model"; hint: "Any Ollama model with tool calling."
+                                Field { Layout.preferredWidth: 220; text: root.settings ? root.settings.llm.model : ""
+                                        onEdited: root.setSetting("llm.model", text) } }
+                            Divider {}
+                            Row_ { label: "Claude model"
+                                Field { Layout.preferredWidth: 220; text: root.settings ? root.settings.providers.anthropic.model : ""
+                                        onEdited: root.setSetting("providers.anthropic.model", text) } }
+                            Divider {}
+                            Row_ { label: "Vision model"; hint: "Used for “what's on my screen”."
+                                Field { Layout.preferredWidth: 220; text: root.settings ? root.settings.vision.model : ""
+                                        onEdited: root.setSetting("vision.model", text) } }
+                        }
+
+                        Muted { text: "Screen"; Layout.topMargin: 8 }
+                        Group {
+                            Row_ { label: "Overlay"; hint: "The island at the top that shows what Zade hears and says."
+                                Switch { checked: root.settings ? root.settings.ui.enabled : false; onToggled: v => root.setSetting("ui.enabled", v) } }
+                        }
+                    }
+
+                    // ── Memory
+                    ColumnLayout {
+                        visible: root.page === "memory"
+                        Layout.fillWidth: true
+                        spacing: 16
+                        Label { text: "Memory"; font.pixelSize: 26; font.weight: Font.Medium }
+
+                        Muted { text: "What Zade knows about you" }
+                        Group {
+                            RowLayout {
+                                Layout.fillWidth: true; Layout.topMargin: 6; Layout.bottomMargin: 6
+                                spacing: 10
+                                Field { id: newFact; Layout.fillWidth: true; placeholder: "my projects are in ~/code"
+                                        onAccepted: addFact.clicked() }
+                                Button { id: addFact; text: "Add fact"
+                                         onClicked: { if (!newFact.text.trim()) return
+                                                      root.ctl(["fact-add", newFact.text], () => root.ctl(["facts"], r => { if (r) root.facts = r }))
+                                                      newFact.text = "" } }
+                            }
+                            Repeater {
+                                model: root.facts
+                                RowLayout {
+                                    required property var modelData
+                                    Layout.fillWidth: true; Layout.minimumHeight: 44
+                                    Label { text: parent.modelData.text; Layout.fillWidth: true }
+                                    Button { text: "Delete"; danger: true
+                                             onClicked: root.ctl(["fact-del", String(parent.modelData.id)], () => root.ctl(["facts"], r => { if (r) root.facts = r })) }
+                                }
+                            }
+                        }
+
+                        Muted { text: "Shortcuts"; Layout.topMargin: 8 }
+                        Group {
+                            Muted { visible: root.shortcuts.length === 0; Layout.topMargin: 12; Layout.bottomMargin: 12
+                                    text: "None yet. Teach one by saying “when I say gaming mode, open Steam and Discord”." }
+                            Repeater {
+                                model: root.shortcuts
+                                RowLayout {
+                                    required property var modelData
+                                    Layout.fillWidth: true; Layout.minimumHeight: 52
+                                    spacing: 10
+                                    Field { Layout.preferredWidth: 200; text: parent.modelData.phrase
+                                            onEdited: if (text.trim() && text !== parent.modelData.phrase)
+                                                          root.ctl(["shortcut-rename", parent.modelData.phrase, text], () => root.ctl(["shortcuts"], r => { if (r) root.shortcuts = r })) }
+                                    Muted {
+                                        Layout.fillWidth: true
+                                        text: parent.modelData.actions.map(a => a.name.replace("_", " ") + (a.args.name || a.args.site || a.args.query || a.args.cmd ? " " + (a.args.name || a.args.site || a.args.query || a.args.cmd) : "")).join(", ")
+                                              + (parent.modelData.uses ? "  ·  used " + parent.modelData.uses + "×" : "")
+                                        elide: Text.ElideRight; maximumLineCount: 1
+                                    }
+                                    Button { text: "Delete"; danger: true
+                                             onClicked: root.ctl(["shortcut-del", parent.modelData.phrase], () => root.ctl(["shortcuts"], r => { if (r) root.shortcuts = r })) }
+                                }
+                            }
+                        }
+
+                        Muted { text: "Reminders"; Layout.topMargin: 8 }
+                        Group {
+                            RowLayout {
+                                Layout.fillWidth: true; Layout.topMargin: 6; Layout.bottomMargin: 6
+                                spacing: 10
+                                Field { id: remText; Layout.fillWidth: true; placeholder: "drink water" }
+                                Field { id: remTime; Layout.preferredWidth: 110; placeholder: "9 am" }
+                                Chip { id: remDaily; text: "Every day"; selected: false; onClicked: selected = !selected }
+                                Button { text: "Add"
+                                         onClicked: { if (!remText.text.trim() || !remTime.text.trim()) return
+                                                      root.ctl(["reminder-add", remText.text, remTime.text].concat(remDaily.selected ? ["daily"] : []), r => {
+                                                          if (!r || !r.ok) root.flash(r && r.error ? r.error : "Couldn't add that reminder.")
+                                                          root.ctl(["reminders"], x => { if (x) root.reminders = x }) })
+                                                      remText.text = ""; remTime.text = "" } }
+                            }
+                            Repeater {
+                                model: root.reminders
+                                RowLayout {
+                                    required property var modelData
+                                    Layout.fillWidth: true; Layout.minimumHeight: 44
+                                    Label { text: parent.modelData.message; Layout.fillWidth: true }
+                                    Muted { text: (parent.modelData.daily ? "every day at " : "")
+                                                  + new Date(parent.modelData.due * 1000).toLocaleTimeString(Qt.locale(), "h:mm AP") }
+                                    Button { text: "Delete"; danger: true
+                                             onClicked: root.ctl(["reminder-del", String(parent.modelData.id)], () => root.ctl(["reminders"], r => { if (r) root.reminders = r })) }
+                                }
+                            }
+                        }
+                    }
+
+                    // ── History
+                    ColumnLayout {
+                        visible: root.page === "history"
+                        Layout.fillWidth: true
+                        spacing: 16
+                        Label { text: "History"; font.pixelSize: 26; font.weight: Font.Medium }
+                        Muted { text: "What Zade heard, what it did, and how long it took. Mishearings show up here: add the right word under Settings → Words to expect." }
+                        Group {
+                            Muted { visible: root.history.length === 0; text: "Nothing yet."; Layout.topMargin: 12; Layout.bottomMargin: 12 }
+                            Repeater {
+                                model: root.history
+                                ColumnLayout {
+                                    required property var modelData
+                                    required property int index
+                                    Layout.fillWidth: true
+                                    spacing: 3
+                                    Divider { visible: parent.index > 0 }
+                                    RowLayout {
+                                        Layout.fillWidth: true; Layout.topMargin: 10
+                                        spacing: 10
+                                        Label { text: parent.parent.modelData.heard; Layout.fillWidth: true; elide: Text.ElideRight; maximumLineCount: 1 }
+                                        Rectangle {
+                                            implicitWidth: routeText.implicitWidth + 16; implicitHeight: 22; radius: 11
+                                            color: parent.parent.modelData.route === "llm" ? Qt.alpha(root.c.tertiary, 0.18) : Qt.alpha(root.c.primary, 0.16)
+                                            Text { id: routeText; anchors.centerIn: parent
+                                                   text: ({ llm: "model", pattern: "instant", shortcut: "shortcut", laya: "instant" })[parent.parent.parent.modelData.route] || parent.parent.parent.modelData.route
+                                                   color: parent.parent.parent.modelData.route === "llm" ? root.c.tertiary : root.c.primary
+                                                   font.family: "Readex Pro"; font.pixelSize: 11 }
+                                        }
+                                        Muted { text: (parent.parent.modelData.ms / 1000).toFixed(1) + " s"; font.pixelSize: 12 }
+                                        Muted { text: parent.parent.modelData.ts.slice(11, 16); font.pixelSize: 12 }
+                                    }
+                                    Muted { text: parent.modelData.reply || "—"; Layout.fillWidth: true; Layout.bottomMargin: 10
+                                            maximumLineCount: 2; elide: Text.ElideRight }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Toast
+        Rectangle {
+            anchors.horizontalCenter: parent.horizontalCenter
+            anchors.bottom: parent.bottom; anchors.bottomMargin: 24
+            visible: opacity > 0
+            opacity: root.toast.length > 0 ? 1 : 0
+            Behavior on opacity { NumberAnimation { duration: 180 } }
+            implicitWidth: toastText.implicitWidth + 36; implicitHeight: 40; radius: 20
+            color: root.c.surface_container_highest
+            Text { id: toastText; anchors.centerIn: parent; text: root.toast; color: root.c.on_surface
+                   font.family: "Readex Pro"; font.pixelSize: 13 }
+        }
+    }
+}

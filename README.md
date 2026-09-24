@@ -18,6 +18,8 @@ Train the "Zade" wake word: see `docs/superpowers/plans/2026-09-23-zade-v1.md`, 
 
 ## Run
 
+- App: open **Zade** from your app launcher (or `qs -p ~/Zade/ui/app.qml`): start/stop, voice and personality, settings, memory and history. Install the launcher entry with `cp ui/zade.desktop ~/.local/share/applications/`.
+
 - Foreground: `uv run python -m zade`
 - Service: `cp systemd/zade.service ~/.config/systemd/user/ && systemctl --user enable --now zade`, logs with `journalctl --user -u zade -f`
 - Hotkey: Zade writes its PID to `~/.local/share/zade/zade.pid`; `kill -USR1 $(cat ~/.local/share/zade/zade.pid)` makes it listen as if you said the wake word. niri example: `Mod+Z { spawn "sh" "-c" "kill -USR1 $(cat ~/.local/share/zade/zade.pid)"; }`
