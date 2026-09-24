@@ -234,7 +234,7 @@ def search_url(query, engine="google"):
 
 
 def site_url(site):
-    s = site.lower().strip().removeprefix("the ").removesuffix(" website")
+    s = re.sub(r" (?:website|web site|site|webpage)$", "", site.lower().strip().removeprefix("the "))
     if s.replace(" ", "") in SITES:
         return SITES[s.replace(" ", "")]
     if re.fullmatch(r"[\w-]+(\.[\w-]+)+(/\S*)?", s):
