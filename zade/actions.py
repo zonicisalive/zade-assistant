@@ -21,6 +21,10 @@ ALLOWED = START | {"it", "ahead", "please", "zade"}
 NO = {"no", "nope", "don't", "dont", "cancel", "stop", "wait"}
 MEDIA = {"play-pause", "play", "pause", "next", "previous"}
 TIMEOUT_S = 30
+# Never closed by Zade, whoever asks: closing these ends the desktop session or breaks audio/apps.
+PROTECTED = {"niri", "qs", "quickshell", "inir", "pipewire", "pipewire-pulse", "wireplumber", "xdg-desktop-portal",
+             "xdg-desktop-portal-gtk", "xdg-desktop-portal-gnome", "dbus-daemon", "dbus-broker", "systemd",
+             "Xwayland", "xwayland-satellite", "zade", "gnome-keyring-daemon", "polkit"}
 WRAPPERS = {"sh", "bash", "zsh", "env", "flatpak", "python", "python3", "gtk-launch", "xdg-open", "sudo", "exec"}
 SINK = ["wpctl", "set-volume", "-l", "1.0", "@DEFAULT_AUDIO_SINK@"]
 RAMP_STEP, RAMP_DELAY_S = 5, 0.03  # desktop "volume protection" rejects jumps of ~10% or more
@@ -199,6 +203,8 @@ def run(action, confirm):
             raise Failed(f"I couldn't find {a['name']}." + (f" Did you mean {guess}?" if guess else ""))
         if name == "open_app":
             _spawn(["gtk-launch", app[0]])
+        elif app[1] in PROTECTED or any(p in app[1].lower() for p in ("niri", "quickshell", "portal", "pipewire")):
+            raise Failed(f"I won't close {a['name']}, it keeps your desktop running.")
         elif app[1] == "steam":  # a Steam game's launcher is Steam itself; pkill would close all of Steam
             raise Failed(f"I can't close Steam games yet. Close {a['name']} from the game.")
         elif app[1] in WRAPPERS:  # e.g. Spotify starts via "sh": pkill would kill every shell

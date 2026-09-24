@@ -225,3 +225,13 @@ def test_a_long_phrase_does_not_match_an_app_inside_it(tmp_path):
     assert actions.find_app("discord whatsapp and telegram", [tmp_path]) is None
     assert actions.find_app("discord", [tmp_path]) == ("discord", "discord")
     assert actions.find_app("discrd", [tmp_path]) == ("discord", "discord")  # small mishearings still match
+
+
+def test_system_components_can_never_be_closed(monkeypatch):
+    calls = _calls(monkeypatch)
+    for name, exe in [("niri", "niri"), ("inir settings", "inir"), ("quickshell", "qs"), ("pipewire", "pipewire"),
+                      ("portal", "xdg-desktop-portal"), ("zade", "zade")]:
+        monkeypatch.setattr(actions, "find_app", lambda n, e=exe: ("x", e))
+        with pytest.raises(actions.Failed, match="keeps your desktop running"):
+            actions.run({"name": "close_app", "args": {"name": name}}, lambda q: True)
+    assert calls == []

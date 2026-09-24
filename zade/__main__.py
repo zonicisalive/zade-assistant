@@ -157,10 +157,12 @@ def wants_followup(reply):
     return bool(reply) and reply.rstrip().endswith("?")
 
 
-def dispatch(ctx, action):
+def dispatch(ctx, action, from_model=False):
     name, a = action["name"], action.get("args", {})
     try:
-        if needs_confirm(name, ctx.cfg["safety"]["confirm"], a):
+        # Closing things on the model's own initiative always needs a yes; the user naming it doesn't.
+        model_close = from_model and (name == "close_app" or (name == "window" and a.get("action") == "close"))
+        if model_close or needs_confirm(name, ctx.cfg["safety"]["confirm"], a):
             detail = next((str(v) for v in a.values() if isinstance(v, (str, int))), "")
             if not ctx.confirm(f"{name.replace('_', ' ').capitalize()}{' ' + detail if detail else ''}?"):
                 return "Cancelled.", False
@@ -290,7 +292,7 @@ def handle(ctx, raw):
         executed = []
 
         def run_tool(name, args):
-            out, ok = dispatch(ctx, {"name": name, "args": args})
+            out, ok = dispatch(ctx, {"name": name, "args": args}, from_model=True)
             if ok and name not in MEMORY_TOOLS:
                 executed.append({"name": name, "args": args})
                 ctx.turn.append({"name": name, "args": args})

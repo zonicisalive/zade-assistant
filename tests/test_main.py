@@ -263,3 +263,25 @@ def test_only_one_zade_can_run(tmp_path):
     assert z.single_instance(tmp_path / "zade.lock") is None  # a second copy is refused
     first.close()  # the first one exits
     assert z.single_instance(tmp_path / "zade.lock") is not None
+
+
+def test_model_must_ask_before_closing_anything():
+    said, asked, ran = [], [], []
+
+    def ask(text, facts, cfg, run_tool, history=()):
+        run_tool("close_app", {"name": "discord"})
+        run_tool("window", {"action": "close"})
+        return "Closed some apps."
+
+    ctx = make(said, ask=ask, run_action=lambda a, c: ran.append(a) or "")
+    ctx.confirm = lambda q: asked.append(q) or False
+    z.handle(ctx, "good night")
+    assert asked == ["Close app discord?", "Window close?"] and ran == []
+
+
+def test_user_saying_close_still_works_without_asking():
+    ran = []
+    ctx = make([], run_action=lambda a, c: ran.append(a) or "")
+    ctx.confirm = lambda q: (_ for _ in ()).throw(AssertionError("should not ask"))
+    z.handle(ctx, "close this window")
+    assert ran == [{"name": "window", "args": {"action": "close"}}]
