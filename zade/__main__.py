@@ -118,7 +118,8 @@ LIVE_SECTIONS = ("ui", "sound", "quiet", "safety", "persona", "history", "web") 
 def apply_live(cfg, new):
     for section in LIVE_SECTIONS:
         cfg[section] = new[section]
-    cfg["llm"]["personality"] = new["llm"]["personality"]  # read on every request, so it can change live
+    for key in ("personality", "keep_alive"):  # read on every request, so they can change live
+        cfg["llm"][key] = new["llm"][key]
 
 
 # Actions that need a spoken yes at each safety level (shell and power always ask, in actions.py).

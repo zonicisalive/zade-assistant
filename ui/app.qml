@@ -108,7 +108,7 @@ ShellRoot {
 
     function setSetting(key, value) {
         ctl(["set", key, String(value)], r => {
-            const live = ["ui.", "sound.", "quiet.", "safety.", "persona.", "history.", "web.", "llm.personality"].some(p => key.startsWith(p) && key !== "ui.enabled")
+            const live = ["ui.", "sound.", "quiet.", "safety.", "persona.", "history.", "web.", "llm.personality", "llm.keep_alive"].some(p => key.startsWith(p) && key !== "ui.enabled")
             if (r && r.ok) { if (!live) needsRestart = status.running; ctl(["settings"], s => { if (s) settings = s }) }
             else flash(r && r.error ? r.error : "Couldn't save that setting.")
         })
@@ -729,6 +729,13 @@ ShellRoot {
                                                text: modelData.name
                                                selected: root.settings && root.settings.llm.provider === modelData.id
                                                onClicked: root.setSetting("llm.provider", modelData.id) } } } }
+                            Divider {}
+                            Row_ { label: "Unload after"; hint: "How long the local model stays in VRAM after a request. Instantly frees VRAM at once, but every reply loads it again (about 1–2 s slower)."
+                                RowLayout { spacing: 8
+                                    Repeater { model: [["0", "Instantly"], ["30s", "30 s"], ["60s", "1 min"], ["5m", "5 min"], ["15m", "15 min"]]
+                                        Chip { required property var modelData; text: modelData[1]
+                                               selected: root.settings && String(root.settings.llm.keep_alive) === modelData[0]
+                                               onClicked: root.setSetting("llm.keep_alive", modelData[0]) } } } }
                             Divider {}
                             Row_ { label: "Local model"; hint: "Any Ollama model with tool calling."
                                 Field { Layout.preferredWidth: 220; text: root.settings ? root.settings.llm.model : ""

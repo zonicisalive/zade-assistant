@@ -171,8 +171,8 @@ def _load(cfg, keep_alive):
 
 
 def warm_up(cfg):
-    if cfg["llm"]["provider"] != "ollama":
-        return
+    if cfg["llm"]["provider"] != "ollama" or str(cfg["llm"]["keep_alive"]) in ("0", "0s"):
+        return  # nothing to warm: with keep_alive 0 the model would unload again straight away
     free = vram_free_gb()
     if free is None or free >= cfg["llm"]["vram_min_free_gb"]:
         _load(cfg, cfg["llm"]["keep_alive"])
