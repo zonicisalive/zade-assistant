@@ -1,5 +1,6 @@
 import atexit
 import datetime
+import fcntl
 import logging
 import os
 import pathlib
@@ -231,6 +232,18 @@ def handle(ctx, raw):
     return reply
 
 
+def single_instance(path):
+    """Hold an exclusive lock for as long as this Zade runs; None if another Zade already holds it."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    f = open(path, "w")
+    try:
+        fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        f.close()
+        return None
+    return f
+
+
 def read_inbox(path):
     """Commands typed in the desktop app, one per line; the file is emptied once read."""
     try:
@@ -276,6 +289,10 @@ def main():
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     cfg = config.load()
+    lock = single_instance(pathlib.Path(cfg["paths"]["data"]).expanduser() / "zade.lock")
+    if lock is None:
+        log.error("Zade is already running; not starting a second copy.")
+        sys.exit(1)
     config.load_env()  # API keys (Spotify, cloud models) from ~/.config/zade/env
     try:
         conn = memory.connect(pathlib.Path(cfg["paths"]["data"]).expanduser() / "zade.db")

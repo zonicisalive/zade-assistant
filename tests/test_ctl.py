@@ -59,3 +59,14 @@ def test_history_and_typed_commands(env):
     assert (h["heard"], h["reply"], h["route"], h["ms"]) == ("open firefox", "Done.", "pattern", 50)
     assert run("say", "what time is it") == {"ok": True}
     assert (env / "inbox").read_text() == "what time is it\n"
+
+
+def test_status_uses_the_lock_not_a_stale_pid(env, monkeypatch):
+    from zade import __main__ as z
+
+    monkeypatch.setattr(ctl, "LOCK", env / "zade.lock")
+    assert run("status")["running"] is False
+    held = z.single_instance(env / "zade.lock")
+    assert run("status")["running"] is True
+    assert run("start") == {"ok": True, "already": True}  # never starts a second copy
+    held.close()

@@ -255,3 +255,11 @@ def test_read_inbox_takes_typed_commands_once(tmp_path):
     inbox.write_text("what time is it\nopen firefox\n")
     assert z.read_inbox(inbox) == ["what time is it", "open firefox"]
     assert z.read_inbox(inbox) == []
+
+
+def test_only_one_zade_can_run(tmp_path):
+    first = z.single_instance(tmp_path / "zade.lock")
+    assert first is not None
+    assert z.single_instance(tmp_path / "zade.lock") is None  # a second copy is refused
+    first.close()  # the first one exits
+    assert z.single_instance(tmp_path / "zade.lock") is not None

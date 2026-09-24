@@ -28,3 +28,22 @@ def test_write_errors_never_break_zade(monkeypatch, tmp_path):
     monkeypatch.setattr(ui, "PATH", tmp_path / "missing-dir" / "sub" / "x" / "state.json")
     (tmp_path / "missing-dir").write_text("a file, so mkdir fails")
     ui.show("listening")  # must not raise
+
+
+def test_no_second_overlay_when_the_desktop_shell_hosts_it(tmp_path, monkeypatch):
+    import copy
+    import subprocess
+
+    from zade import config
+
+    shell = tmp_path / "shell.qml"
+    shell.write_text('ShellRoot {\n    LazyLoader { active: true; source: "file:///home/me/Zade/ui/Overlay.qml" }\n}\n')
+    cfg = copy.deepcopy(config.DEFAULTS)
+    cfg["ui"]["host_file"] = str(shell)
+    monkeypatch.setattr(ui, "PATH", tmp_path / "state.json")
+    started = []
+    monkeypatch.setattr(subprocess, "Popen", lambda *a, **k: started.append(a))
+    assert ui.start(cfg) is None and started == []
+    shell.write_text("ShellRoot {}\n")  # an inir update removed the hook: fall back to our own overlay
+    ui.start(cfg)
+    assert len(started) == 1

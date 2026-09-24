@@ -44,7 +44,7 @@ DEFAULTS = {
     "dictation": {"enabled": True, "key": "KEY_RIGHTALT", "hold_s": 0.3},  # hold to type what you say
     "web": {"searxng_url": "http://127.0.0.1:8080"},
     "followup": {"enabled": True, "listen_s": 5.0, "history_turns": 3, "history_s": 120},
-    "ui": {"enabled": True},
+    "ui": {"enabled": True, "host_file": "~/.config/quickshell/inir/shell.qml"},  # shell that may host the overlay
     "vision": {"model": "qwen2.5vl:3b"},
     "learning": {"promote_after": 3},
     "paths": {"data": "~/.local/share/zade"},

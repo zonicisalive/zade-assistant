@@ -46,6 +46,13 @@ def start(cfg):
         return None
     reset()
     _write()
+    host = pathlib.Path(cfg["ui"]["host_file"]).expanduser()
+    try:
+        if "Zade/ui/Overlay.qml" in host.read_text():
+            log.info("overlay hosted by %s", host)  # the desktop shell shows it: no second Quickshell
+            return None
+    except OSError:
+        pass
     shell = pathlib.Path(__file__).resolve().parent.parent / "ui" / "shell.qml"
     try:
         return subprocess.Popen(["qs", "-p", str(shell)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)

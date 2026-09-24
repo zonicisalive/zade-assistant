@@ -3,6 +3,7 @@
     python -m zade.ctl <command> [args...]   ->  one JSON document on stdout
 """
 
+import fcntl
 import json
 import os
 import pathlib
@@ -16,6 +17,7 @@ from . import config, memory
 CONFIG = pathlib.Path("~/.config/zade/config.toml").expanduser()
 DATA = pathlib.Path(config.DEFAULTS["paths"]["data"]).expanduser()
 DB = DATA / "zade.db"
+LOCK = DATA / "zade.lock"
 INBOX = pathlib.Path(os.environ.get("XDG_RUNTIME_DIR", "/tmp")) / "zade" / "inbox"
 REPO = pathlib.Path(__file__).resolve().parent.parent
 SERVICE = pathlib.Path("~/.config/systemd/user/zade.service").expanduser()
@@ -65,18 +67,31 @@ def _pid():
         return None
 
 
+def _running():
+    """True while a Zade holds its lock (reliable even during its first seconds of startup)."""
+    try:
+        with open(LOCK) as f:
+            fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            fcntl.flock(f, fcntl.LOCK_UN)
+            return False
+    except FileNotFoundError:
+        return False
+    except OSError:
+        return True
+
+
 def _systemctl(*args):
     return subprocess.run(["systemctl", "--user", *args], capture_output=True, text=True)
 
 
 def status():
-    return {"running": _pid() is not None, "pid": _pid(),
+    return {"running": _running(), "pid": _pid(),
             "autostart": SERVICE.exists() and _systemctl("is-enabled", "zade").stdout.strip() == "enabled"}
 
 
 def start():
-    if _pid():
-        return {"ok": True}
+    if _running():
+        return {"ok": True, "already": True}
     if SERVICE.exists():
         _systemctl("start", "zade")
     else:
@@ -127,7 +142,7 @@ def run(argv):
         import time
 
         for _ in range(40):
-            if not _pid():
+            if not _running():
                 break
             time.sleep(0.1)
         return start()
