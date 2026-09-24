@@ -51,10 +51,11 @@ DEFAULTS = {
         "position": "top", "size": "medium", "accent": "", "linger_s": 0.5, "reveal_cps": 18, "show_heard": True,
     },
     "sound": {"chime": "soft", "volume": 0.6, "wake_reply": ""},  # chime: soft | classic | none
-    # The character in the overlay. shape: round | squircle | blob; eyes: round | oval | anime | line;
-    # mouth: smile | cat | small; color: "" = wallpaper accent.
-    "persona": {"enabled": True, "name": "Zade", "shape": "round", "eyes": "round", "mouth": "smile",
-                "color": "", "blush": True},
+    # The character in the overlay. type: blob | robot | cat | bunny | bear | ghost;
+    # shape: round | squircle | blob; eyes: round | oval | anime | line; mouth: smile | cat | small;
+    # color: "" = wallpaper accent.
+    "persona": {"enabled": True, "name": "Zade", "type": "blob", "shape": "round", "eyes": "round",
+                "mouth": "smile", "color": "", "blush": True},
     "quiet": {"enabled": False, "start": "23:00", "end": "08:00", "dnd": False},
     "safety": {"confirm": "commands"},  # commands | risky | everything
     "vision": {"model": "qwen2.5vl:3b"},

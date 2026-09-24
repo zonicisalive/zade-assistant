@@ -59,3 +59,16 @@ def test_persona_look_is_sent_to_the_overlay(tmp_path, monkeypatch):
     state = json.loads((tmp_path / "state.json").read_text())
     assert state["emotion"] == "happy"
     assert state["persona"]["shape"] == "squircle" and state["persona"]["eyes"] == "anime"
+
+
+def test_all_emotions_are_offered_to_the_model(monkeypatch):
+    got = {}
+    monkeypatch.setattr(providers, "chat", lambda name, system, *rest: got.update(system=system) or "ok")
+    brain.ask("hi", [], cfg(), None, vram=lambda: 8.0)
+    for e in ["laughing", "love", "crying", "amazed", "angry", "smug", "sleepy", "embarrassed", "nervous",
+              "wink", "playful"]:
+        assert e in z.EMOTIONS and f"[{e}]" in got["system"], e
+
+
+def test_character_type_setting():
+    assert config.DEFAULTS["persona"]["type"] == "blob"

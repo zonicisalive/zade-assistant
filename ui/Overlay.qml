@@ -17,9 +17,9 @@ Scope {
     property string reply: ""
     property real level: 0
     property string emotion: "neutral"
-    property var persona: ({ enabled: true, shape: "round", eyes: "round", mouth: "smile", color: "", blush: true })
+    property var persona: ({ enabled: true, type: "blob", shape: "round", eyes: "round", mouth: "smile", color: "", blush: true })
     readonly property bool hasFace: persona.enabled !== false
-    readonly property real faceSize: expanded ? 40 : 30
+    readonly property real faceSize: expanded ? 48 : 36
     property bool shown: false
     // Style from Zade's settings (sent with every state update, so changes apply live).
     property var style: ({ position: "top", size: "medium", accent: "", linger_s: 0.5, reveal_cps: 18, show_heard: true })
@@ -124,8 +124,8 @@ Scope {
             y: root.fromTop ? (root.shown ? 8 : -height - 12) : (root.shown ? parent.height - height - 8 : parent.height + 12)
             transformOrigin: root.fromTop ? (root.side === "left" ? Item.TopLeft : root.side === "right" ? Item.TopRight : Item.Top)
                                           : (root.side === "left" ? Item.BottomLeft : root.side === "right" ? Item.BottomRight : Item.Bottom)
-            width: root.expanded ? Math.min(570, Math.max(300, textCol.implicitWidth + textCol.x + 26)) : (root.hasFace ? 136 : 128)
-            height: root.expanded ? Math.max(62, textCol.implicitHeight + 34) : 44
+            width: root.expanded ? Math.min(570, Math.max(300, textCol.implicitWidth + textCol.x + 26)) : (root.hasFace ? 140 : 128)
+            height: root.expanded ? Math.max(72, textCol.implicitHeight + 34) : 46
             radius: root.expanded ? 26 : 22
             color: Qt.alpha(root.c.surface_container_low, 0.96)
             border.width: 1
@@ -145,8 +145,8 @@ Scope {
             Face {
                 visible: root.hasFace
                 size: root.faceSize
-                x: 14
-                y: root.expanded ? 14 : (island.height - size) / 2
+                x: root.expanded ? 16 : 12
+                y: root.expanded ? 12 : (island.height - size) / 2
                 Behavior on size { NumberAnimation { duration: 260; easing.type: Easing.OutCubic } }
                 Behavior on y { NumberAnimation { duration: 260; easing.type: Easing.OutCubic } }
                 mode: root.mode
@@ -229,7 +229,7 @@ Scope {
             // Voice ribbon in the pill: your mic level while listening, a slow wave while thinking.
             Row {
                 anchors.verticalCenter: parent.verticalCenter
-                x: root.hasFace ? 56 : 50
+                x: root.hasFace ? 60 : 50
                 spacing: 4
                 opacity: root.expanded ? 0 : 1
                 visible: opacity > 0
@@ -259,7 +259,7 @@ Scope {
             // What you said (quiet context) and Zade's reply.
             Column {
                 id: textCol
-                x: root.hasFace ? 68 : 58
+                x: root.hasFace ? 76 : 58
                 y: 17
                 spacing: 4
                 opacity: root.expanded ? 1 : 0

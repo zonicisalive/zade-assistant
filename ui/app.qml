@@ -446,7 +446,7 @@ ShellRoot {
                         // Live preview: try each expression
                         Rectangle {
                             Layout.fillWidth: true
-                            implicitHeight: 230; radius: 16
+                            implicitHeight: 250; radius: 16
                             color: root.c.surface_container
                             border.width: 1; border.color: Qt.alpha(root.c.outline_variant, 0.4)
                             RowLayout {
@@ -472,7 +472,8 @@ ShellRoot {
                                     Flow {
                                         Layout.fillWidth: true; spacing: 8
                                         Repeater {
-                                            model: ["neutral", "happy", "excited", "sad", "confused", "surprised", "annoyed", "curious"]
+                                            model: ["neutral", "happy", "excited", "laughing", "love", "sad", "crying", "confused", "surprised",
+                                                    "amazed", "annoyed", "angry", "curious", "smug", "sleepy", "embarrassed", "nervous", "wink", "playful"]
                                             Chip { required property string modelData
                                                    text: modelData.charAt(0).toUpperCase() + modelData.slice(1)
                                                    selected: root.previewMode === "idle" && root.previewEmotion === modelData
@@ -497,6 +498,13 @@ ShellRoot {
                             Row_ { label: "Name"; hint: "What it calls itself."
                                 Field { Layout.preferredWidth: 200; text: root.settings ? root.settings.persona.name : ""
                                         onEdited: if (text.trim()) root.setSetting("persona.name", text.trim()) } }
+                            Divider {}
+                            Row_ { label: "Character"; hint: "Robot glows in your colour; cat, bunny and bear have ears." }
+                            Flow { Layout.fillWidth: true; Layout.bottomMargin: 12; spacing: 8
+                                Repeater { model: [["blob", "Blob"], ["robot", "Robot"], ["cat", "Cat"], ["bunny", "Bunny"], ["bear", "Bear"], ["ghost", "Ghost"]]
+                                    Chip { required property var modelData; text: modelData[1]
+                                           selected: root.settings && (root.settings.persona.type || "blob") === modelData[0]
+                                           onClicked: root.setSetting("persona.type", modelData[0]) } } }
                             Divider {}
                             Row_ { label: "Shape"
                                 RowLayout { spacing: 8

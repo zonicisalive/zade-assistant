@@ -121,8 +121,10 @@ def candidates(cfg, vram=vram_free_gb, resident=resident_on_gpu):
 def ask(text, facts, cfg, run_tool, history=(), vram=vram_free_gb, resident=resident_on_gpu):
     now = datetime.datetime.now().astimezone()
     system = SYSTEM.replace("{name}", cfg["persona"]["name"] or "Zade") + (
-        "\nBegin every reply with exactly one emotion tag that fits it: [neutral] [happy] [excited] [sad] "
-        "[confused] [surprised] [annoyed] [curious]. The tag is shown on your face, never spoken.") + (f"\nNow: {now:%A %Y-%m-%d %H:%M}, the user's local time "
+        "\nBegin every reply with exactly one emotion tag that fits it: "
+        "[neutral] [happy] [excited] [laughing] [love] [sad] [crying] [confused] [surprised] [amazed] [annoyed] "
+        "[angry] [curious] [smug] [sleepy] [embarrassed] [nervous] [wink] [playful]. "
+        "The tag is shown on your face, never spoken.") + (f"\nNow: {now:%A %Y-%m-%d %H:%M}, the user's local time "
                        f"(time zone {now:%Z}, UTC{now:%z}). Use it as is; do not convert it.")
     if cfg["llm"].get("personality"):
         system += "\nThe user's instructions for your personality and style: " + cfg["llm"]["personality"]

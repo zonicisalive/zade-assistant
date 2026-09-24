@@ -55,7 +55,8 @@ def dictation_text(raw):
     return text + " " if router.normalize(text) else ""
 
 
-EMOTIONS = {"neutral", "happy", "excited", "sad", "confused", "surprised", "annoyed", "curious"}
+EMOTIONS = ["neutral", "happy", "excited", "laughing", "love", "sad", "crying", "confused", "surprised", "amazed",
+            "annoyed", "angry", "curious", "smug", "sleepy", "embarrassed", "nervous", "wink", "playful"]
 
 
 def split_emotion(reply):
