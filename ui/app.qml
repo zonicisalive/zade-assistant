@@ -336,6 +336,7 @@ ShellRoot {
     // ── Window ────────────────────────────────────────────────────────────────
     FloatingWindow {
         title: "Zade"
+        onVisibleChanged: if (!visible) Qt.quit()  // closing the window ends the app (Quickshell would keep running)
         implicitWidth: 980
         implicitHeight: 680
         color: root.c.surface_container_low
