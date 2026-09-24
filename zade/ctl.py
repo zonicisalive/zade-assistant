@@ -202,6 +202,10 @@ def run(argv):
             return set_key("SPOTIFY_REFRESH_TOKEN", music.login(cid, secret))
         except (Failed, OSError, ValueError, KeyError) as e:
             return {"ok": False, "error": f"Spotify login failed: {e}"}
+    if cmd == "calibrate":  # "quiet" (measure the room), then "voice" (measure you, get a recommendation)
+        from . import calibrate
+
+        return calibrate.run(args[0], DATA)
     if cmd == "voices":
         return KOKORO_VOICES
     if cmd == "preview":

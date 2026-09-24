@@ -20,6 +20,19 @@ ShellRoot {
 
     property string page: "home"
     property string settingsTab: "listening"
+    property string calStep: ""      // mic calibration: "", "quiet", "voice", "done"
+    property var calResult: null
+    function calibrate() {
+        calStep = "quiet"; calResult = null
+        ctl(["calibrate", "quiet"], r => {
+            if (!r || !r.ok) { calStep = ""; flash(r && r.error ? r.error : "Couldn't use the microphone."); return }
+            calStep = "voice"
+            ctl(["calibrate", "voice"], v => {
+                if (!v || !v.ok) { calStep = ""; flash(v && v.error ? v.error : "Calibration failed."); return }
+                calResult = v; calStep = "done"
+            })
+        })
+    }
     readonly property var wakeWords: [["~/.local/share/zade/zade.onnx", "Hey Zade"], ["hey_jarvis", "Hey Jarvis"],
                                       ["alexa", "Alexa"], ["hey_mycroft", "Hey Mycroft"], ["hey_rhasspy", "Hey Rhasspy"]]
     // What to say to wake Zade, for hints: the chosen built-in word, or "hey zade" for a custom model.
@@ -710,6 +723,20 @@ ShellRoot {
                                                text: ({ 0.35: "Easy", 0.5: "Normal", 0.65: "Strict" })[modelData]
                                                selected: root.settings && Math.abs(root.settings.wake.threshold - modelData) < 0.01
                                                onClicked: root.setSetting("wake.threshold", modelData) } } } }
+                            Divider {}
+                            Row_ { label: "Microphone calibration"
+                                hint: root.calStep === "quiet" ? "Stay quiet for 5 seconds\u2026 (background noise is fine)"
+                                    : root.calStep === "voice" ? "Now say at your normal volume: \u201cOpen Firefox, and what\u2019s the weather tomorrow?\u201d"
+                                    : root.calStep === "done" && root.calResult
+                                      ? "Room " + root.calResult.room + ", your voice " + root.calResult.voice + ". Recommended sensitivity "
+                                        + root.calResult.noise_factor + " (now " + root.settings.audio.noise_factor + "): background counts as talking "
+                                        + root.calResult.noise_pct + "% of the time." + (root.calResult.too_noisy ? " The room is loud for your voice: holding Win to talk works best." : "")
+                                    : "Measures your room and voice so background noise doesn\u2019t count as talking."
+                                RowLayout { spacing: 8
+                                    Button { text: root.calStep === "done" ? "Again" : "Calibrate"; visible: root.calStep === "" || root.calStep === "done"
+                                             onClicked: root.calibrate() }
+                                    Button { text: "Apply"; accent: true; visible: root.calStep === "done" && root.calResult !== null
+                                             onClicked: { root.setSetting("audio.noise_factor", root.calResult.noise_factor); root.calStep = "" } } } }
                             Divider {}
                             Row_ { label: "Hold Win to talk"; hint: "Hold the key alone, speak, release."
                                 Switch { checked: root.settings ? root.settings.hotkey.enabled : false; onToggled: v => root.setSetting("hotkey.enabled", v) } }
