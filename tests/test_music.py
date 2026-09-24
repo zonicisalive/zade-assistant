@@ -178,3 +178,14 @@ def test_user_token_is_reused(monkeypatch):
     monkeypatch.setattr(music, "_post_token", lambda c, s, form: posts.append(1) or {"access_token": "A", "expires_in": 3600})
     assert music._user_token("id", "s", "R") == music._user_token("id", "s", "R") == "A"
     assert len(posts) == 1
+
+
+def test_misheard_artist_searches_the_song_alone(monkeypatch):
+    calls, searched = [], []
+    keyed(monkeypatch, calls)
+    t = lambda name, artist: {"uri": f"spotify:track:{artist}", "name": name, "artists": [{"name": artist}]}
+    results = {"business amine am": [t("Business", "Ranveer Choudhary"), t("Business", "Gur Sidhu")],
+               "business": [t("Business", "Ranveer Choudhary"), t("Business", "Eminem")]}
+    monkeypatch.setattr(music, "_search", lambda q, tok: searched.append(q) or {"tracks": {"items": results[q]}})
+    assert music.play("business by amine am") == "Playing Business by Eminem."
+    assert searched == ["business amine am", "business"]

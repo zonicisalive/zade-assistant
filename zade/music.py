@@ -60,6 +60,17 @@ def _find_keyless(query):
     return f"spotify:track:{m[1]}", title
 
 
+def artist_score(said, track):
+    """How much the artist heard sounds like the track's artists; spaces are ignored because speech
+    recognition splits names ("Amine AM" for Eminem)."""
+    from rapidfuzz import fuzz
+
+    said = said.lower()
+    return max((max(fuzz.partial_ratio(said, a["name"].lower()),
+                    fuzz.ratio(said.replace(" ", ""), a["name"].lower().replace(" ", "")))
+                for a in track["artists"]), default=0)
+
+
 def pick_track(query, items):
     """The result that best matches "song by artist" (Spotify's own top hit is often another song
     by the same artist); for a bare query, Spotify's order."""
@@ -71,8 +82,7 @@ def pick_track(query, items):
     song, artist = m[1], m[2]
 
     def score(t):
-        artists = " ".join(a["name"] for a in t["artists"]).lower()
-        return fuzz.ratio(song, t["name"].lower()) + (40 if fuzz.partial_ratio(artist, artists) >= 70 else 0)
+        return fuzz.ratio(song, t["name"].lower()) + (40 if artist_score(artist, t) >= 70 else 0)
 
     return max(items, key=score)  # max keeps Spotify's order on ties
 
@@ -266,6 +276,16 @@ def play(query, mode="app", provider="spotify", device=""):
     if not items:
         raise Failed(f"I couldn't find {query} on Spotify.")
     track = pick_track(query, items)
+    if (m := re.fullmatch(r"(.+) by (.+)", query.lower())) and artist_score(m[2], track) < 70:
+        # A misheard artist ("Amine AM") steers the search away: look for the song alone and take the
+        # version whose artist sounds closest.
+        try:
+            same_song = _search(m[1], _token(cid, secret))["tracks"]["items"]
+        except (OSError, ValueError, KeyError):
+            same_song = []
+        best = max(same_song, key=lambda t: artist_score(m[2], t), default=None)
+        if best and artist_score(m[2], best) >= 70:
+            track = best
     name = f"{track['name']} by {track['artists'][0]['name']}"
     if user and (mode == "connect" or chosen):  # a named speaker always plays there
         try:
