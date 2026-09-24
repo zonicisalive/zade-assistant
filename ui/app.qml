@@ -680,6 +680,14 @@ ShellRoot {
                                        onClicked: root.settingsTab = modelData[0] } } }
 
                         Group { visible: root.settingsTab === "listening"
+                            Row_ { label: "Wake word"; hint: "What you say to call Zade. Restart Zade after changing it." }
+                            Flow { Layout.fillWidth: true; Layout.bottomMargin: 12; spacing: 8
+                                Repeater { model: [["~/.local/share/zade/zade.onnx", "Hey Zade"], ["hey_jarvis", "Hey Jarvis"],
+                                                   ["alexa", "Alexa"], ["hey_mycroft", "Hey Mycroft"], ["hey_rhasspy", "Hey Rhasspy"]]
+                                    Chip { required property var modelData; text: modelData[1]
+                                           selected: root.settings && root.settings.wake.model === modelData[0]
+                                           onClicked: root.setSetting("wake.model", modelData[0]) } } }
+                            Divider {}
                             Row_ { label: "Speech recognition"; hint: "Small hears accents better; Base answers about 0.4 s faster."
                                 RowLayout { spacing: 8
                                     Repeater { model: [["base.en", "Base"], ["small.en", "Small"]]

@@ -2,6 +2,7 @@ import functools
 import io
 import re
 import logging
+import pathlib
 import wave
 
 import numpy as np
@@ -52,17 +53,31 @@ def transcribe(audio, cfg, prompt="", hotwords=()):
 
 
 # How Whisper tends to spell "Zade" (it has never seen the name): all accepted as the wake word.
-WAKE_WORDS = {"zade", "zayd", "zaid", "zayed", "sade", "jade", "zadie"}
+# Per wake word: what Whisper is primed with, and the spellings that count as hearing it.
+WAKE_WORDS = {
+    "zade": ("Zade, hey Zade", {"zade", "zayd", "zaid", "zayed", "sade", "jade", "zadie"}),
+    "jarvis": ("Jarvis, hey Jarvis", {"jarvis", "jarvus", "jervis", "javis"}),
+    "alexa": ("Alexa", {"alexa", "alexia", "alexis", "lexa"}),
+    "mycroft": ("Mycroft, hey Mycroft", {"mycroft", "microft", "mycraft", "microsoft"}),
+    "rhasspy": ("Rhasspy, hey Rhasspy", {"rhasspy", "raspy", "rhaspy", "raspi", "raspberry"}),
+}
 
 
-def heard_wake_word(text):
-    return any(w in WAKE_WORDS for w in re.findall(r"[a-z]+", text.lower()))
+def wake_word(model):
+    """The WAKE_WORDS key for a wake model name or path (a custom model counts as "zade")."""
+    stem = pathlib.Path(model).stem.lower()
+    return next((k for k in WAKE_WORDS if k in stem), "zade")
+
+
+def heard_wake_word(text, word="zade"):
+    return any(w in WAKE_WORDS[word][1] for w in re.findall(r"[a-z]+", text.lower()))
 
 
 def wake_check(audio, cfg):
-    """Second opinion on a wake: a tiny Whisper model must actually hear "hey zade" in the last ~2 s."""
+    """Second opinion on a wake: a tiny Whisper model must actually hear the wake word in the last ~2 s."""
+    word = wake_word(cfg["wake"]["model"])
     segments, _ = _whisper(cfg["wake"]["verify_model"], "cpu").transcribe(
-        audio.astype(np.float32) / 32768, language="en", beam_size=1, hotwords="Zade, hey Zade", vad_filter=False)
+        audio.astype(np.float32) / 32768, language="en", beam_size=1, hotwords=WAKE_WORDS[word][0], vad_filter=False)
     text = " ".join(seg.text.strip() for seg in segments)
     log.info("wake check heard %r", text)
-    return heard_wake_word(text)
+    return heard_wake_word(text, word)

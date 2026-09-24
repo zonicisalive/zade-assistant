@@ -72,5 +72,23 @@ def test_wake_check_transcribes_with_the_tiny_model(monkeypatch):
             return [NS(text=" Hey Zade", no_speech_prob=0.1, avg_logprob=-0.3)], None
 
     monkeypatch.setattr(stt, "_whisper", lambda m, d: seen.update(model=m) or Fake())
-    assert stt.wake_check(np.zeros(32000, np.int16), copy.deepcopy(config.DEFAULTS)) is True
+    c = copy.deepcopy(config.DEFAULTS)
+    c["wake"]["model"] = "~/.local/share/zade/zade.onnx"
+    assert stt.wake_check(np.zeros(32000, np.int16), c) is True
     assert seen["model"] == "tiny.en" and "Zade" in seen["hotwords"]
+
+
+def test_wake_check_follows_the_chosen_wake_word(monkeypatch):
+    assert stt.wake_word("~/.local/share/zade/zade.onnx") == "zade"
+    assert stt.wake_word("hey_jarvis") == "jarvis" and stt.wake_word("alexa") == "alexa"
+    assert stt.heard_wake_word("Hey Jarvis.", "jarvis") and not stt.heard_wake_word("Hey Zade", "jarvis")
+
+    class Fake:
+        def transcribe(self, audio, **kw):
+            assert "Jarvis" in kw["hotwords"]
+            return [NS(text=" Hey Jarvis")], None
+
+    monkeypatch.setattr(stt, "_whisper", lambda m, d: Fake())
+    c = copy.deepcopy(config.DEFAULTS)
+    c["wake"]["model"] = "hey_jarvis"
+    assert stt.wake_check(np.zeros(32000, np.int16), c) is True
