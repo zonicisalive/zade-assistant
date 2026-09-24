@@ -10,7 +10,7 @@ DEFAULTS = {
              "vad_threshold": 0.5, "verify": True, "verify_model": "tiny.en"},
     "audio": {"rms_threshold": 500, "noise_factor": 2.5, "silence_s": 0.8, "max_s": 10.0, "start_timeout_s": 4.0},
     "stt": {
-        "provider": "whisper", "model": "base.en", "device": "cpu", "beam_size": 5,
+        "provider": "whisper", "model": "small.en", "device": "cpu", "beam_size": 5,
         # Words to expect: big accuracy gain for accents and made-up names (shortcut phrases are added too).
         "hotwords": ["Zade", "workspace", "timer", "remind me", "minutes", "volume", "weather", "screenshot",
                      "Firefox", "Discord", "Steam", "YouTube", "clipboard", "brightness"],
