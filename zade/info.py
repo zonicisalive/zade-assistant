@@ -6,6 +6,7 @@ import pathlib
 import urllib.parse
 import urllib.request
 
+from . import actions
 from .actions import Failed
 
 DAYS = ["today", "tomorrow", "the day after tomorrow"]
@@ -46,7 +47,12 @@ def format_results(data, limit=5):
 
 
 def web_answer(query, cfg):
-    """Top web results as text for the LLM to answer from."""
+    """Top web results as text for the LLM to answer from, or a browser search when SearXNG is off."""
+    if not cfg["web"].get("searxng_enabled", True):
+        engine = cfg["web"].get("engine", "google")
+        actions._spawn(["xdg-open", actions.search_url(query, engine)])
+        return (f"Opened a {engine} search for \"{query}\" in the browser. You cannot see the results: "
+                "tell the user they are on screen, and do not make up an answer.")
     url = cfg["web"]["searxng_url"].rstrip("/") + "/search?" + urllib.parse.urlencode({"q": query, "format": "json"})
     try:
         data = _get_json(url, timeout=8)

@@ -208,6 +208,9 @@ def dispatch(ctx, action, from_model=False):
             return f"Synced {actions.all_app_count()} apps.", True
         if name == "weather":
             return info.weather(a.get("place", ""), a.get("day", 0)), True
+        if name == "web_search":
+            a = {**a, "engine": ctx.cfg["web"].get("engine", "google")}
+            return ctx.run_action({"name": name, "args": a}, ctx.confirm), True
         if name == "web_answer":
             return info.web_answer(a["query"], ctx.cfg), True
         if name == "note_add":

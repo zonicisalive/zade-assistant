@@ -219,6 +219,20 @@ def is_closing(keys):
         return False
 
 
+SEARCH_ENGINES = {
+    "google": "https://www.google.com/search?q=",
+    "duckduckgo": "https://duckduckgo.com/?q=",
+    "bing": "https://www.bing.com/search?q=",
+    "brave": "https://search.brave.com/search?q=",
+    "perplexity": "https://www.perplexity.ai/search?q=",
+    "youtube": "https://www.youtube.com/results?search_query=",
+}
+
+
+def search_url(query, engine="google"):
+    return SEARCH_ENGINES.get(engine, SEARCH_ENGINES["google"]) + urllib.parse.quote_plus(query)
+
+
 def site_url(site):
     s = site.lower().strip().removeprefix("the ").removesuffix(" website")
     if s.replace(" ", "") in SITES:
@@ -292,7 +306,7 @@ def run(action, confirm):
     if name == "date":
         return datetime.datetime.now().strftime("Today is %A, %B %-d.")
     if name == "web_search":
-        _spawn(["xdg-open", "https://duckduckgo.com/?q=" + urllib.parse.quote_plus(a["query"])])
+        _spawn(["xdg-open", search_url(a["query"], a.get("engine", "google"))])
         return ""
     if name == "lock_screen":
         _call(["loginctl", "lock-session"])

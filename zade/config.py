@@ -45,7 +45,8 @@ DEFAULTS = {
     "tts": {"provider": "kokoro", "voice": "af_heart", "speed": 1.2, "piper_voice": "en_US-lessac-medium"},
     "hotkey": {"enabled": True, "key": "KEY_LEFTMETA", "hold_s": 2.0},
     "dictation": {"enabled": True, "key": "KEY_RIGHTALT", "hold_s": 0.3},  # hold to type what you say
-    "web": {"searxng_url": "http://127.0.0.1:8080"},
+    # Questions that need the web: read results from SearXNG, or (disabled) open a search in the browser.
+    "web": {"searxng_enabled": False, "searxng_url": "http://127.0.0.1:8080", "engine": "google"},
     "followup": {"enabled": True, "listen_s": 5.0, "history_turns": 3, "history_s": 120},
     "ui": {
         "enabled": True,

@@ -873,8 +873,24 @@ ShellRoot {
                             Row_ { label: "Ollama"; hint: "Where the local model runs."
                                 Field { Layout.preferredWidth: 300; text: root.settings ? root.settings.llm.host : ""
                                         onEdited: root.setSetting("llm.host", text) } }
+                        }
+
+                        Muted { text: "Web search"; Layout.topMargin: 8 }
+                        Group {
+                            Row_ { label: "Search engine"; hint: "Used for \u201csearch \u2026\u201d and, while SearXNG is off, for questions that need the web." }
+                            Flow { Layout.fillWidth: true; Layout.bottomMargin: 12; spacing: 8
+                                Repeater { model: [["google", "Google"], ["duckduckgo", "DuckDuckGo"], ["bing", "Bing"],
+                                                   ["brave", "Brave"], ["perplexity", "Perplexity"], ["youtube", "YouTube"]]
+                                    Chip { required property var modelData; text: modelData[1]
+                                           selected: root.settings && root.settings.web.engine === modelData[0]
+                                           onClicked: root.setSetting("web.engine", modelData[0]) } } }
                             Divider {}
-                            Row_ { label: "Web search (SearXNG)"; hint: "For questions that need the web. Needs the json format enabled."
+                            Row_ { label: "Use SearXNG"; hint: "On: Zade reads the results and answers aloud. Off: it opens the search in your browser."
+                                Switch { checked: root.settings ? !!root.settings.web.searxng_enabled : false
+                                         onToggled: v => root.setSetting("web.searxng_enabled", v) } }
+                            Divider { visible: root.settings && root.settings.web.searxng_enabled }
+                            Row_ { label: "SearXNG address"; hint: "Needs the json format enabled in SearXNG's settings."
+                                visible: root.settings && root.settings.web.searxng_enabled
                                 Field { Layout.preferredWidth: 300; text: root.settings ? root.settings.web.searxng_url : ""
                                         onEdited: root.setSetting("web.searxng_url", text) } }
                         }

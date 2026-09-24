@@ -44,8 +44,10 @@ def test_web_search_unavailable_is_a_spoken_failure(monkeypatch, tmp_path):
         raise OSError("HTTP Error 403: FORBIDDEN")
 
     monkeypatch.setattr(info, "_get_json", forbidden)
+    c = cfg(tmp_path)
+    c["web"]["searxng_enabled"] = True
     with pytest.raises(actions.Failed, match="Web search isn't available"):
-        info.web_answer("tcp vs udp", cfg(tmp_path))
+        info.web_answer("tcp vs udp", c)
 
 
 def test_notes_add_and_read(tmp_path):
@@ -56,3 +58,14 @@ def test_notes_add_and_read(tmp_path):
     out = info.notes_read(c)
     assert "buy milk" in out and "call mom" in out
     assert out.index("call mom") < out.index("buy milk")  # newest first
+
+
+def test_without_searxng_web_answers_open_a_browser_search(monkeypatch, tmp_path):
+    c = cfg(tmp_path)
+    c["web"].update(searxng_enabled=False, engine="brave")
+    opened = []
+    monkeypatch.setattr(actions, "_spawn", opened.append)
+    monkeypatch.setattr(info, "_get_json", lambda url, timeout: pytest.fail("SearXNG must not be called"))
+    assert "do not make up an answer" in info.web_answer("tcp vs udp", c)
+    assert opened == [["xdg-open", "https://search.brave.com/search?q=tcp+vs+udp"]]
+    assert actions.search_url("x y", "nope") == "https://www.google.com/search?q=x+y"
