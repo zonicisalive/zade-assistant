@@ -17,7 +17,13 @@ Scope {
     property string reply: ""
     property real level: 0
     property bool shown: false
-    readonly property bool expanded: reply.length > 0 || (heard.length > 0 && mode !== "listening")
+    // Style from Zade's settings (sent with every state update, so changes apply live).
+    property var style: ({ position: "top", size: "medium", accent: "", linger_s: 0.5, reveal_cps: 18, show_heard: true })
+    readonly property bool fromTop: !style.position.startsWith("bottom")
+    readonly property string side: style.position.endsWith("left") ? "left" : style.position.endsWith("right") ? "right" : "center"
+    readonly property real sizeFactor: ({ small: 0.85, medium: 1.0, large: 1.2 })[style.size] || 1.0
+    readonly property color accent: style.accent ? style.accent : c.primary
+    readonly property bool expanded: reply.length > 0 || (heard.length > 0 && style.show_heard && mode !== "listening")
 
     // Material You palette; defaults are replaced by the generated colors.json.
     property var c: ({
@@ -35,9 +41,10 @@ Scope {
         heard = s.heard || ""
         reply = newReply
         level = s.level || 0
+        if (s.style) style = s.style
         if (mode !== "speaking") revealed = reply.length   // only the spoken part types itself out
         if (mode === "idle") { hideTimer.interval = 120; hideTimer.restart() }
-        else if (mode === "done") { hideTimer.interval = 500; hideTimer.restart() }   // fade right after speaking
+        else if (mode === "done") { hideTimer.interval = Math.max(100, style.linger_s * 1000); hideTimer.restart() }
         else { hideTimer.stop(); shown = true }
     }
 
@@ -62,7 +69,7 @@ Scope {
     // Reply text is revealed at roughly speaking pace (~17 characters a second at speed 1.2).
     property int revealed: 0
     Timer {
-        interval: 55; repeat: true
+        interval: Math.max(10, 1000 / (root.style.reveal_cps || 18)); repeat: true
         running: root.mode === "speaking" && root.revealed < root.reply.length
         onTriggered: root.revealed = Math.min(root.reply.length, root.revealed + 1)
     }
@@ -75,11 +82,15 @@ Scope {
     }
 
     PanelWindow {
-        anchors.top: true
-        exclusionMode: ExclusionMode.Ignore   // start at the very top edge, in line with the bar
-        margins.top: 0
-        implicitWidth: 720
-        implicitHeight: 280
+        anchors.top: root.fromTop
+        anchors.bottom: !root.fromTop
+        anchors.left: root.side === "left"
+        anchors.right: root.side === "right"
+        exclusionMode: ExclusionMode.Ignore   // start at the very screen edge, in line with the bar
+        margins.left: root.side === "left" ? 8 : 0
+        margins.right: root.side === "right" ? 8 : 0
+        implicitWidth: 720 * root.sizeFactor
+        implicitHeight: 280 * root.sizeFactor
         color: "transparent"
         visible: island.opacity > 0.01
         WlrLayershell.layer: WlrLayer.Overlay
@@ -102,8 +113,11 @@ Scope {
 
         Rectangle {
             id: island
-            anchors.horizontalCenter: parent.horizontalCenter
-            y: root.shown ? 8 : -height - 12  // drops down from above the screen edge
+            // Slides in from the nearest screen edge.
+            x: root.side === "left" ? 0 : root.side === "right" ? parent.width - width : (parent.width - width) / 2
+            y: root.fromTop ? (root.shown ? 8 : -height - 12) : (root.shown ? parent.height - height - 8 : parent.height + 12)
+            transformOrigin: root.fromTop ? (root.side === "left" ? Item.TopLeft : root.side === "right" ? Item.TopRight : Item.Top)
+                                          : (root.side === "left" ? Item.BottomLeft : root.side === "right" ? Item.BottomRight : Item.Bottom)
             width: root.expanded ? Math.min(560, Math.max(300, textCol.implicitWidth + 84)) : 128
             height: root.expanded ? Math.max(62, textCol.implicitHeight + 34) : 44
             radius: root.expanded ? 26 : 22
@@ -111,7 +125,7 @@ Scope {
             border.width: 1
             border.color: Qt.alpha(root.c.outline_variant, 0.55)
             opacity: root.shown ? 1 : 0
-            scale: 1
+            scale: root.sizeFactor
             clip: true
 
             Behavior on width { SpringAnimation { spring: 3.2; damping: 0.32; epsilon: 0.3 } }
@@ -130,7 +144,7 @@ Scope {
                 Behavior on x { NumberAnimation { duration: 260; easing.type: Easing.OutCubic } }
                 Behavior on y { NumberAnimation { duration: 260; easing.type: Easing.OutCubic } }
 
-                readonly property color tint: root.mode === "thinking" ? root.c.tertiary : root.c.primary
+                readonly property color tint: root.mode === "thinking" ? root.c.tertiary : root.accent
 
                 // Voice glow: grows with mic level while listening.
                 Rectangle {
@@ -182,7 +196,8 @@ Scope {
                     scale: root.mode === "listening" ? 1 + root.level * 0.35 : 1
                     gradient: Gradient {
                         GradientStop { position: 0; color: Qt.lighter(orb.tint, 1.15) }
-                        GradientStop { position: 1; color: root.mode === "thinking" ? root.c.tertiary : root.c.primary_container }
+                        GradientStop { position: 1; color: root.mode === "thinking" ? root.c.tertiary
+                                                            : (root.style.accent ? Qt.darker(root.accent, 1.35) : root.c.primary_container) }
                     }
                     Behavior on scale { NumberAnimation { duration: 110 } }
                 }
@@ -212,7 +227,7 @@ Scope {
                         anchors.verticalCenter: parent.verticalCenter
                         // No Behavior here: the height changes every frame, and a restarting animation would freeze it.
                         height: 4 + 24 * amount
-                        color: root.mode === "thinking" ? root.c.tertiary : root.c.primary
+                        color: root.mode === "thinking" ? root.c.tertiary : root.accent
                         opacity: 0.5 + 0.5 * Math.max(centre, amount)
                     }
                 }
@@ -229,7 +244,7 @@ Scope {
                 Behavior on opacity { NumberAnimation { duration: 200 } }
 
                 Text {
-                    visible: root.heard.length > 0
+                    visible: root.heard.length > 0 && root.style.show_heard
                     width: Math.min(implicitWidth, 476)
                     text: root.heard
                     color: Qt.alpha(root.c.on_surface_variant, 0.75)

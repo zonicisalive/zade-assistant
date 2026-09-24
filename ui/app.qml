@@ -27,6 +27,32 @@ ShellRoot {
     property var history: []
     property var voices: []
     property bool needsRestart: false
+    property var draftSteps: []          // shortcut builder
+    property string draftType: "open_app"
+    readonly property var stepTypes: [
+        { id: "open_app", name: "Open app", hint: "firefox" },
+        { id: "open_website", name: "Website", hint: "youtube" },
+        { id: "volume", name: "Volume", hint: "40" },
+        { id: "workspace", name: "Workspace", hint: "2" },
+        { id: "type_text", name: "Type text", hint: "hello" },
+        { id: "media", name: "Media", hint: "play-pause, next or previous" },
+        { id: "shell", name: "Command", hint: "a shell command (asks first)" }
+    ]
+    function makeStep(type, arg) {
+        if (type === "open_app") return { name: "open_app", args: { name: arg } }
+        if (type === "open_website") return { name: "open_website", args: { site: arg } }
+        if (type === "volume") return { name: "volume", args: { set: parseInt(arg) || 50 } }
+        if (type === "workspace") return { name: "window", args: { action: "workspace", workspace: arg } }
+        if (type === "type_text") return { name: "type_text", args: { text: arg } }
+        if (type === "media") return { name: "media", args: { cmd: arg } }
+        return { name: "shell", args: { cmd: arg } }
+    }
+    function describe(step) {
+        const a = step.args
+        if (step.name === "window") return "Go to workspace " + a.workspace
+        const t = stepTypes.find(x => x.id === step.name)
+        return (t ? t.name : step.name) + " " + (a.name || a.site || a.set || a.text || a.cmd || "")
+    }
     property string toast: ""
 
     FileView {
@@ -70,7 +96,8 @@ ShellRoot {
 
     function setSetting(key, value) {
         ctl(["set", key, String(value)], r => {
-            if (r && r.ok) { needsRestart = status.running; ctl(["settings"], s => { if (s) settings = s }) }
+            const live = ["ui.", "sound.", "quiet.", "safety."].some(p => key.startsWith(p) && key !== "ui.enabled")
+            if (r && r.ok) { if (!live) needsRestart = status.running; ctl(["settings"], s => { if (s) settings = s }) }
             else flash(r && r.error ? r.error : "Couldn't save that setting.")
         })
     }
@@ -375,6 +402,13 @@ ShellRoot {
                             }
                             Divider {}
                             Row_ {
+                                label: "Do not disturb"
+                                hint: "Ignore \u201chey zade\u201d and hold reminders. Holding Win still works."
+                                Switch { checked: root.settings ? root.settings.quiet.dnd : false
+                                         onToggled: v => root.setSetting("quiet.dnd", v) }
+                            }
+                            Divider {}
+                            Row_ {
                                 label: "Start on login"
                                 hint: "Runs Zade in the background as a user service."
                                 Switch { checked: root.status.autostart
@@ -525,11 +559,103 @@ ShellRoot {
                                         onEdited: root.setSetting("vision.model", text) } }
                         }
 
-                        Muted { text: "Screen"; Layout.topMargin: 8 }
+                        Muted { text: "Overlay"; Layout.topMargin: 8 }
                         Group {
-                            Row_ { label: "Overlay"; hint: "The island at the top that shows what Zade hears and says."
+                            Row_ { label: "Show the overlay"; hint: "The island that shows what Zade hears and says. Style changes apply instantly."
                                 Switch { checked: root.settings ? root.settings.ui.enabled : false; onToggled: v => root.setSetting("ui.enabled", v) } }
+                            Divider {}
+                            Row_ { label: "Position" }
+                            Flow { Layout.fillWidth: true; Layout.bottomMargin: 12; spacing: 8
+                                Repeater { model: [["top", "Top"], ["bottom", "Bottom"], ["top-left", "Top left"], ["top-right", "Top right"],
+                                                   ["bottom-left", "Bottom left"], ["bottom-right", "Bottom right"]]
+                                    Chip { required property var modelData; text: modelData[1]
+                                           selected: root.settings && root.settings.ui.position === modelData[0]
+                                           onClicked: root.setSetting("ui.position", modelData[0]) } } }
+                            Divider {}
+                            Row_ { label: "Size"
+                                RowLayout { spacing: 8
+                                    Repeater { model: [["small", "S"], ["medium", "M"], ["large", "L"]]
+                                        Chip { required property var modelData; text: modelData[1]
+                                               selected: root.settings && root.settings.ui.size === modelData[0]
+                                               onClicked: root.setSetting("ui.size", modelData[0]) } } } }
+                            Divider {}
+                            Row_ { label: "Accent colour"; hint: "Wallpaper follows your theme."
+                                RowLayout { spacing: 8
+                                    Chip { text: "Wallpaper"; selected: root.settings && !root.settings.ui.accent
+                                           onClicked: root.setSetting("ui.accent", "") }
+                                    Repeater { model: ["#ff9f43", "#ff6b81", "#a29bfe", "#48dbfb", "#1dd1a1", "#feca57"]
+                                        Rectangle { required property string modelData
+                                            implicitWidth: 26; implicitHeight: 26; radius: 13; color: modelData
+                                            border.width: root.settings && root.settings.ui.accent === modelData ? 3 : 0
+                                            border.color: root.c.on_surface
+                                            MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor
+                                                        onClicked: root.setSetting("ui.accent", parent.modelData) } } } } }
+                            Divider {}
+                            Row_ { label: "Stays on screen"; hint: "After Zade finishes speaking."
+                                RowLayout { spacing: 8
+                                    Repeater { model: [0.5, 2, 5]
+                                        Chip { required property real modelData; text: modelData + " s"
+                                               selected: root.settings && Math.abs(root.settings.ui.linger_s - modelData) < 0.01
+                                               onClicked: root.setSetting("ui.linger_s", modelData) } } } }
+                            Divider {}
+                            Row_ { label: "Text speed"; hint: "How fast the reply types itself out."
+                                RowLayout { spacing: 8
+                                    Repeater { model: [[12, "Slow"], [18, "Normal"], [40, "Fast"], [1000, "Instant"]]
+                                        Chip { required property var modelData; text: modelData[1]
+                                               selected: root.settings && root.settings.ui.reveal_cps === modelData[0]
+                                               onClicked: root.setSetting("ui.reveal_cps", modelData[0]) } } } }
+                            Divider {}
+                            Row_ { label: "Show what you said"
+                                Switch { checked: root.settings ? root.settings.ui.show_heard : true; onToggled: v => root.setSetting("ui.show_heard", v) } }
                         }
+
+                        Muted { text: "Sounds"; Layout.topMargin: 8 }
+                        Group {
+                            Row_ { label: "Listening sound"
+                                RowLayout { spacing: 8
+                                    Repeater { model: [["soft", "Soft"], ["classic", "Classic"], ["none", "None"]]
+                                        Chip { required property var modelData; text: modelData[1]
+                                               selected: root.settings && root.settings.sound.chime === modelData[0]
+                                               onClicked: root.setSetting("sound.chime", modelData[0]) } } } }
+                            Divider {}
+                            Row_ { label: "Volume"
+                                RowLayout { spacing: 8
+                                    Repeater { model: [[0.3, "Quiet"], [0.6, "Normal"], [1.0, "Loud"]]
+                                        Chip { required property var modelData; text: modelData[1]
+                                               selected: root.settings && Math.abs(root.settings.sound.volume - modelData[0]) < 0.01
+                                               onClicked: root.setSetting("sound.volume", modelData[0]) } } } }
+                            Divider {}
+                            Row_ { label: "Reply to the wake word"; hint: "Something Zade says before listening, like \u201cYes?\u201d. Leave empty for none."
+                                Field { Layout.preferredWidth: 200; placeholder: "Yes?"; text: root.settings ? root.settings.sound.wake_reply : ""
+                                        onEdited: root.setSetting("sound.wake_reply", text) } }
+                        }
+
+                        Muted { text: "Quiet hours"; Layout.topMargin: 8 }
+                        Group {
+                            Row_ { label: "Quiet hours"; hint: "Ignore \u201chey zade\u201d and hold reminders during this time. Holding Win still works."
+                                Switch { checked: root.settings ? root.settings.quiet.enabled : false; onToggled: v => root.setSetting("quiet.enabled", v) } }
+                            Divider {}
+                            Row_ { label: "From"; hint: "24-hour time, like 23:00."
+                                Field { Layout.preferredWidth: 100; text: root.settings ? root.settings.quiet.start : ""
+                                        onEdited: root.setSetting("quiet.start", text) } }
+                            Divider {}
+                            Row_ { label: "Until"
+                                Field { Layout.preferredWidth: 100; text: root.settings ? root.settings.quiet.end : ""
+                                        onEdited: root.setSetting("quiet.end", text) } }
+                        }
+
+                        Muted { text: "Safety"; Layout.topMargin: 8 }
+                        Group {
+                            Row_ { label: "Ask before"; hint: "Which actions need your spoken \u201cyes\u201d first."
+                                RowLayout { spacing: 8
+                                    Repeater { model: [["commands", "Commands"], ["risky", "Risky actions"], ["everything", "Everything"]]
+                                        Chip { required property var modelData; text: modelData[1]
+                                               selected: root.settings && root.settings.safety.confirm === modelData[0]
+                                               onClicked: root.setSetting("safety.confirm", modelData[0]) } } } }
+                            Muted { Layout.bottomMargin: 12; font.pixelSize: 12
+                                    text: root.settings ? ({ commands: "Shell commands and power (shut down, restart) always ask.",
+                                                             risky: "Also closing apps and windows, typing and copying.",
+                                                             everything: "Anything that changes something: opening apps, volume, music, windows." })[root.settings.safety.confirm] : "" } }
                     }
 
                     // ── Memory
@@ -585,6 +711,56 @@ ShellRoot {
                                     Button { text: "Delete"; danger: true
                                              onClicked: root.ctl(["shortcut-del", parent.modelData.phrase], () => root.ctl(["shortcuts"], r => { if (r) root.shortcuts = r })) }
                                 }
+                            }
+                        }
+
+                        Muted { text: "New shortcut"; Layout.topMargin: 8 }
+                        Group {
+                            RowLayout {
+                                Layout.fillWidth: true; Layout.topMargin: 6; spacing: 10
+                                Label { text: "When I say" }
+                                Field { id: draftPhrase; Layout.fillWidth: true; placeholder: "gaming mode" }
+                            }
+                            Flow {
+                                Layout.fillWidth: true; Layout.topMargin: 10; spacing: 8
+                                Repeater { model: root.stepTypes
+                                    Chip { required property var modelData; text: modelData.name
+                                           selected: root.draftType === modelData.id
+                                           onClicked: root.draftType = modelData.id } }
+                            }
+                            RowLayout {
+                                Layout.fillWidth: true; Layout.topMargin: 8; Layout.bottomMargin: 6; spacing: 10
+                                Field { id: draftArg; Layout.fillWidth: true
+                                        placeholder: (root.stepTypes.find(t => t.id === root.draftType) || {}).hint || ""
+                                        onAccepted: addStep.clicked() }
+                                Button { id: addStep; text: "Add step"
+                                         onClicked: { if (!draftArg.text.trim()) return
+                                                      root.draftSteps = root.draftSteps.concat([root.makeStep(root.draftType, draftArg.text.trim())])
+                                                      draftArg.text = "" } }
+                            }
+                            Repeater {
+                                model: root.draftSteps
+                                RowLayout {
+                                    required property var modelData
+                                    required property int index
+                                    Layout.fillWidth: true; Layout.minimumHeight: 40
+                                    Muted { text: (parent.index + 1) + "."; font.pixelSize: 13 }
+                                    Label { text: root.describe(parent.modelData); Layout.fillWidth: true }
+                                    Button { text: "Remove"; danger: true
+                                             onClicked: root.draftSteps = root.draftSteps.filter((_, i) => i !== parent.index) }
+                                }
+                            }
+                            RowLayout {
+                                Layout.topMargin: 6; Layout.bottomMargin: 10
+                                Button { text: "Save shortcut"; accent: true
+                                         onClicked: {
+                                             if (!draftPhrase.text.trim() || root.draftSteps.length === 0) { root.flash("Add a phrase and at least one step."); return }
+                                             root.ctl(["shortcut-save", draftPhrase.text, JSON.stringify(root.draftSteps)], r => {
+                                                 if (r && r.ok) { root.flash("Saved. Say \u201c" + draftPhrase.text + "\u201d any time.")
+                                                                  draftPhrase.text = ""; root.draftSteps = []
+                                                                  root.ctl(["shortcuts"], x => { if (x) root.shortcuts = x }) }
+                                                 else root.flash(r && r.error ? r.error : "Couldn't save the shortcut.") })
+                                         } }
                             }
                         }
 

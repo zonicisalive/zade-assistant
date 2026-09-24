@@ -74,3 +74,25 @@ hold_s = 0.3
 [vision]
 # "What's on my screen?" uses this Ollama vision model (loaded only when asked).
 model = "qwen2.5vl:3b"
+
+# Overlay style: position = top | bottom | top-left | top-right | bottom-left | bottom-right
+# [ui]
+# size = "medium"            # small | medium | large
+# accent = ""                # "" = wallpaper colour, or e.g. "#ff9f43"
+# linger_s = 0.5             # seconds the reply stays after Zade stops talking
+# reveal_cps = 18            # reply typing speed (characters per second)
+# show_heard = true
+
+[sound]
+chime = "soft"               # soft | classic | none
+volume = 0.6
+wake_reply = ""              # e.g. "Yes?"
+
+[quiet]
+enabled = false              # ignore the wake word and hold reminders in this window
+start = "23:00"
+end = "08:00"
+dnd = false                  # Do Not Disturb, any time (holding Win still works)
+
+[safety]
+confirm = "commands"         # commands | risky | everything
