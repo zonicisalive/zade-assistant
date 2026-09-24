@@ -153,3 +153,28 @@ def test_voice_level_is_zero_at_room_noise_and_full_when_speaking(monkeypatch):
     assert 0.15 < seen[1] < 0.5    # quiet speech
     assert seen[2] > 0.6           # normal speech
     assert seen[3] == 1.0          # loud: capped
+
+
+def test_wake_needs_the_second_opinion(monkeypatch):
+    import numpy as np
+
+    monkeypatch.setattr(audio, "read", lambda stream: np.full(audio.FRAME, 100, np.int16))
+    monkeypatch.setattr(audio, "noise", [])
+    scores = iter([0.1, 0.9, 0.1] + [0.1] * 12 + [0.9] + [0.1] * 50)  # two candidate wakes
+
+    class Model:
+        def reset(self):
+            pass
+
+        def predict(self, frame):
+            return {"hey_zade": next(scores)}
+
+    verdicts = iter([False, True])  # the first candidate was noise, the second was real
+    heard = []
+
+    def verify(clip):
+        heard.append(len(clip))
+        return next(verdicts)
+
+    assert audio.wait_for_wake(object(), Model(), 0.5, verify=verify) == "wake"
+    assert len(heard) == 2 and heard[0] > 0  # the recent audio was handed to the checker

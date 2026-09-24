@@ -1,7 +1,11 @@
+import collections
+import logging
 import pathlib
 
 import numpy as np
 import sounddevice as sd
+
+log = logging.getLogger("zade")
 
 RATE, FRAME = 16000, 1280
 FRAME_S = FRAME / RATE
@@ -47,6 +51,8 @@ def wake_model(cfg):
     if w["verifier"]:
         kw = {"custom_verifier_models": {pathlib.Path(model).stem: str(pathlib.Path(w["verifier"]).expanduser())},
               "custom_verifier_threshold": w["verifier_threshold"]}
+    if w.get("vad_threshold"):
+        kw["vad_threshold"] = w["vad_threshold"]  # Silero VAD: scores only count during real speech
     return Model(wakeword_models=[model], inference_framework="onnx", **kw)
 
 
@@ -62,17 +68,32 @@ NOISE_FRAMES = 125  # ~10 s of room sound kept while waiting for the wake word
 noise = []
 
 
-def wait_for_wake(stream, model, threshold, poll=None):
-    """Return "wake" on the wake word, or whatever `poll()` returns when it is truthy (e.g. "hotkey")."""
+RECENT_FRAMES = 25   # ~2 s of audio kept for the wake word's second opinion
+COOLDOWN_FRAMES = 12  # ~1 s ignored after a rejected wake, so the same sound can't re-trigger
+
+
+def wait_for_wake(stream, model, threshold, poll=None, verify=None):
+    """Return "wake" on the wake word, or whatever `poll()` returns when it is truthy (e.g. "hotkey").
+    With `verify`, a candidate wake only counts if verify(last ~2 s of audio) agrees."""
     model.reset()
+    recent = collections.deque(maxlen=RECENT_FRAMES)
+    cooldown = 0
     while True:
         f = read(stream)
+        recent.append(f)
         noise.append(rms(f))
         del noise[:-NOISE_FRAMES]
         if poll is not None and (reason := poll()):
             return reason
-        if max(model.predict(f).values()) >= threshold:
-            return "wake"
+        score = max(model.predict(f).values())  # always fed, so the model's audio history stays continuous
+        if cooldown:
+            cooldown -= 1
+            continue
+        if score >= threshold:
+            if verify is None or verify(np.concatenate(recent)):
+                return "wake"
+            log.info("wake rejected by the second check (score %.2f)", score)
+            cooldown = COOLDOWN_FRAMES
 
 
 def record(stream, cfg, start_timeout_s=None, released=None, cancelled=None, on_level=None):

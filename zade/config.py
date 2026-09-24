@@ -4,7 +4,10 @@ import pathlib
 import tomllib
 
 DEFAULTS = {
-    "wake": {"model": "hey_jarvis", "threshold": 0.5, "verifier": "", "verifier_threshold": 0.3},
+    "wake": {"model": "hey_jarvis", "threshold": 0.5, "verifier": "", "verifier_threshold": 0.3,
+             # 3-stage wake check: the wake model fires, Silero VAD confirms speech, then a tiny Whisper
+             # model re-listens to the last 2 s and must hear "hey zade" (or a close variant).
+             "vad_threshold": 0.5, "verify": True, "verify_model": "tiny.en"},
     "audio": {"rms_threshold": 500, "noise_factor": 2.5, "silence_s": 0.8, "max_s": 10.0, "start_timeout_s": 4.0},
     "stt": {
         "provider": "whisper", "model": "base.en", "device": "cpu", "beam_size": 5,

@@ -54,3 +54,23 @@ def test_whisper_loads_from_cache_without_internet(monkeypatch):
     stt._whisper("not-downloaded", "cpu")
     assert calls == [True, True, False]    # first run: falls back to downloading
     stt._whisper.cache_clear()
+
+
+def test_heard_wake_word():
+    for t in ["Hey Zade.", "hey zayd", "Hey, Sade!", "Zade", "hey jade what's up", "Hey Zaid"]:
+        assert stt.heard_wake_word(t), t
+    for t in ["Night's good.", "hey", "Okay.", "hey there", "made it", "", "Thank you."]:
+        assert not stt.heard_wake_word(t), t
+
+
+def test_wake_check_transcribes_with_the_tiny_model(monkeypatch):
+    seen = {}
+
+    class Fake:
+        def transcribe(self, audio, **kw):
+            seen.update(kw)
+            return [NS(text=" Hey Zade", no_speech_prob=0.1, avg_logprob=-0.3)], None
+
+    monkeypatch.setattr(stt, "_whisper", lambda m, d: seen.update(model=m) or Fake())
+    assert stt.wake_check(np.zeros(32000, np.int16), copy.deepcopy(config.DEFAULTS)) is True
+    assert seen["model"] == "tiny.en" and "Zade" in seen["hotwords"]

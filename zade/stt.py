@@ -1,5 +1,6 @@
 import functools
 import io
+import re
 import logging
 import wave
 
@@ -48,3 +49,20 @@ def transcribe(audio, cfg, prompt="", hotwords=()):
     # Drop what Whisper invents from noise: likely-silent or very unsure segments.
     return " ".join(seg.text.strip() for seg in segments
                     if seg.no_speech_prob <= 0.6 and seg.avg_logprob >= -1.0).strip()
+
+
+# How Whisper tends to spell "Zade" (it has never seen the name): all accepted as the wake word.
+WAKE_WORDS = {"zade", "zayd", "zaid", "zayed", "sade", "jade", "zadie"}
+
+
+def heard_wake_word(text):
+    return any(w in WAKE_WORDS for w in re.findall(r"[a-z]+", text.lower()))
+
+
+def wake_check(audio, cfg):
+    """Second opinion on a wake: a tiny Whisper model must actually hear "hey zade" in the last ~2 s."""
+    segments, _ = _whisper(cfg["wake"]["verify_model"], "cpu").transcribe(
+        audio.astype(np.float32) / 32768, language="en", beam_size=1, hotwords="Zade, hey Zade", vad_filter=False)
+    text = " ".join(seg.text.strip() for seg in segments)
+    log.info("wake check heard %r", text)
+    return heard_wake_word(text)

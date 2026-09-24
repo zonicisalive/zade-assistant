@@ -490,6 +490,8 @@ def main():
         return reply
 
     stt.transcribe(np.zeros(audio.RATE, np.int16), cfg)  # load whisper before the first command
+    if cfg["wake"]["verify"]:
+        stt.wake_check(np.zeros(audio.RATE, np.int16), cfg)  # and the wake word's second-opinion model
     log.info("ready")
     (pathlib.Path(cfg["paths"]["data"]).expanduser() / "zade.ready").write_text(str(os.getpid()))  # for the app
     while True:
@@ -497,7 +499,8 @@ def main():
             source = barge.pop()
             barge.clear()
         else:
-            source = audio.wait_for_wake(stream, wake, cfg["wake"]["threshold"], poll)
+            source = audio.wait_for_wake(stream, wake, cfg["wake"]["threshold"], poll,
+                                         verify=(lambda clip: stt.wake_check(clip, cfg)) if cfg["wake"]["verify"] else None)
         if source == "wake" and is_quiet(cfg):  # quiet hours / Do Not Disturb: ignore the wake word
             log.info("wake word ignored (quiet)")
             continue
