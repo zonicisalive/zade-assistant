@@ -239,7 +239,9 @@ def site_url(site):
         return SITES[s.replace(" ", "")]
     if re.fullmatch(r"[\w-]+(\.[\w-]+)+(/\S*)?", s):
         return "https://" + s
-    return "https://duckduckgo.com/?q=" + urllib.parse.quote_plus(s)
+    # Unknown name: DuckDuckGo's "\" search jumps straight to the first result, i.e. the site itself
+    # ("dominos pizza" opens dominos.co.in, not a page of results).
+    return "https://duckduckgo.com/?q=" + urllib.parse.quote_plus("\\" + s)
 
 
 def _spawn(cmd):

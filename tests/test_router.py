@@ -103,6 +103,8 @@ def test_new_fast_patterns():
         "name": "window", "args": {"action": "move_to_workspace", "workspace": "3"}}
     assert P("close this window", find) == {"name": "window", "args": {"action": "close"}}
     assert P("open youtube", find) == {"name": "open_website", "args": {"site": "youtube"}}
+    assert P("open dominas pizza website", find) == {"name": "open_website", "args": {"site": "dominas pizza website"}}
+    assert P("open irctc.co.in", find) == {"name": "open_website", "args": {"site": "irctc.co.in"}}
     assert P("open my dev setup", find) is None  # unknown app and not a known site: goes to the LLM
     assert P("set a timer for 5 minutes", find) == {"name": "set_timer", "args": {"seconds": 300}}
     assert P("timer 90 seconds", find) == {"name": "set_timer", "args": {"seconds": 90}}

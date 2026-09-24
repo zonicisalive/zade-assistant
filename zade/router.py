@@ -60,6 +60,9 @@ def _open_one(name, find_app):
         return {"name": "open_app", "args": {"name": name}}
     if name.replace(" ", "") in SITES:
         return {"name": "open_website", "args": {"site": name}}
+    # "dominos pizza website", "the irctc site", "github.com": a website even if we don't know it
+    if re.fullmatch(r".+ (?:website|web site|site|webpage)|[\w-]+(\.[\w-]+)+(/\S*)?", name):
+        return {"name": "open_website", "args": {"site": name}}
     return None
 
 
@@ -83,7 +86,7 @@ def _open_targets(target, find_app):
 
 
 def parse_pattern(text, find_app):
-    if m := re.fullmatch(r"(?:open|launch|start|run) (?:the )?(.+?)(?: app| website)?", text):
+    if m := re.fullmatch(r"(?:open|launch|start|run) (?:the )?(.+?)(?: app)?", text):
         actions = _open_targets(m[1], find_app)
         if not actions:
             return None

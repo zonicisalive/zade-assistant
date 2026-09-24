@@ -120,7 +120,7 @@ def test_open_website(monkeypatch):
     assert calls == [
         ["xdg-open", "https://www.youtube.com"],
         ["xdg-open", "https://github.com"],
-        ["xdg-open", "https://duckduckgo.com/?q=some+band"],
+        ["xdg-open", "https://duckduckgo.com/?q=%5Csome+band"],
     ]
 
 
