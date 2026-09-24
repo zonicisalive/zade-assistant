@@ -110,3 +110,13 @@ def test_connect_falls_back_to_the_app(monkeypatch):
     assert calls == [("app", "spotify:track:9")]
     calls.clear()
     assert music.play("scars", "app") == "Playing Scars by Juice WRLD." and calls == [("app", "spotify:track:9")]
+
+
+def test_youtube_plays_the_first_result_in_the_browser(monkeypatch):
+    opened = []
+    monkeypatch.setattr(music.subprocess, "Popen", lambda cmd, **kw: opened.append(cmd))
+    monkeypatch.setattr(music, "_youtube_id", lambda q: "GZyj2wU0NPU")
+    assert music.play("scars juice wrld", provider="youtube music") == "Playing scars juice wrld on YouTube Music."
+    assert opened == [["xdg-open", "https://music.youtube.com/watch?v=GZyj2wU0NPU"]]
+    monkeypatch.setattr(music, "_youtube_id", lambda q: None)
+    assert "search" in music.play("x", provider="youtube")

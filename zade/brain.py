@@ -70,7 +70,8 @@ TOOLS = [
     _t("brightness", "Monitor brightness: set to 0-100, or change by delta.",
        set={"type": "integer"}, delta={"type": "integer"}),
     _t("screenshot", "Take a screenshot of the screen."),
-    _t("play_music", "Play a song, artist or album in Spotify by name.", ["query"], query=S),
+    _t("play_music", "Play a song, artist or album by name. provider only when the user names one.", ["query"],
+       query=S, provider={"type": "string", "enum": ["spotify", "youtube", "youtube music"]}),
     _t("look_at_screen", "Look at the user's screen and answer a question about it (read text, errors, "
        "describe what is shown).", ["question"], question=S),
     _t("set_reminder", "Remind the user at a clock time. at is like \"17:00\" or \"5 pm\"; daily repeats it "

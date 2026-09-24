@@ -141,7 +141,35 @@ def login(cid, secret, open_browser=None, timeout_s=180):
                                      "redirect_uri": REDIRECT})["refresh_token"]
 
 
-def play(query, mode="app"):
+YOUTUBE = {"youtube": "https://www.youtube.com/watch?v=", "youtube music": "https://music.youtube.com/watch?v="}
+
+
+def _youtube_id(query):
+    """The first video in YouTube's search results (no API key needed), or None."""
+    url = "https://www.youtube.com/results?" + urllib.parse.urlencode({"search_query": query})
+    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0", "Accept-Language": "en"})
+    try:
+        with urllib.request.urlopen(req, timeout=8) as r:
+            m = re.search(r'"videoId":"([A-Za-z0-9_-]{11})"', r.read().decode("utf-8", "replace"))
+    except OSError:
+        return None
+    return m[1] if m else None
+
+
+def play_youtube(query, provider="youtube"):
+    name = "YouTube Music" if provider == "youtube music" else "YouTube"
+    if vid := _youtube_id(query):
+        subprocess.Popen(["xdg-open", YOUTUBE[provider] + vid], stdout=subprocess.DEVNULL,
+                         stderr=subprocess.DEVNULL, start_new_session=True)
+        return f"Playing {query} on {name}."
+    subprocess.Popen(["xdg-open", "https://www.youtube.com/results?search_query=" + urllib.parse.quote_plus(query)],
+                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+    return f"I opened {name} search for {query}."
+
+
+def play(query, mode="app", provider="spotify"):
+    if provider in YOUTUBE:
+        return play_youtube(query, provider)
     config.load_env()  # keys saved in the app since Zade started
     cid, secret = os.environ.get("SPOTIFY_CLIENT_ID"), os.environ.get("SPOTIFY_CLIENT_SECRET")
     if not cid or not secret:

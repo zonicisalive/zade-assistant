@@ -856,6 +856,16 @@ ShellRoot {
                         Muted { text: "Keys are stored only in ~/.config/zade/env, readable by you alone. Zade reads them when it starts."
                                 Layout.fillWidth: true }
 
+                        Muted { text: "Music"; Layout.topMargin: 8 }
+                        Group {
+                            Row_ { label: "Play songs with"; hint: "Say \u201cplay \u2026 on YouTube\u201d (or Spotify, YouTube Music) to pick one for a single song. YouTube needs no key."
+                                RowLayout { spacing: 8
+                                    Repeater { model: [["spotify", "Spotify"], ["youtube", "YouTube"], ["youtube music", "YouTube Music"]]
+                                        Chip { required property var modelData; text: modelData[1]
+                                               selected: root.settings && root.settings.music.provider === modelData[0]
+                                               onClicked: root.setSetting("music.provider", modelData[0]) } } } }
+                        }
+
                         Muted { text: "Spotify"; Layout.topMargin: 8 }
                         Group {
                             Row_ { label: "Client ID"; hint: "Free: create an app at developer.spotify.com/dashboard. Lets \u201cplay \u2026\u201d find the exact song."

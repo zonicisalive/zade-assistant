@@ -120,8 +120,10 @@ def parse_pattern(text, find_app):
         return {"name": "dnd", "args": {"on": not (m[3] or m[2] == "off")}}
     if re.fullmatch(r"(?:sync|refresh|rescan)(?: my| the)?(?: apps| applications| games)?", text):
         return {"name": "sync_apps", "args": {}}
-    if m := re.fullmatch(r"play (?!music$|pause$|next$|previous$)(.+?)(?: on spotify)?", text):
-        return {"name": "play_music", "args": {"query": m[1]}}
+    if m := re.fullmatch(r"play (?!music$|pause$|next$|previous$)(.+?)"
+                         r"(?: (?:on|in|from) (spotify|youtube music|youtube|yt music|yt))?", text):
+        provider = {"yt": "youtube", "yt music": "youtube music"}.get(m[2], m[2])
+        return {"name": "play_music", "args": {"query": m[1], **({"provider": provider} if provider else {})}}
     if re.fullmatch(r"mute(?: the)?(?: sound| volume| audio| it| speakers?)?", text):
         return {"name": "mute", "args": {"on": True}}
     if re.fullmatch(r"unmute(?: the)?(?: sound| volume| audio| it| speakers?)?|(?:turn )?(?:the )?sound (?:back )?on", text):

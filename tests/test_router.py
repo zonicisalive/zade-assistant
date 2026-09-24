@@ -153,7 +153,11 @@ def test_screen_patterns():
 def test_play_music_pattern_keeps_media_controls():
     P = router.parse_pattern
     assert P("play killshot by eminem", find) == {"name": "play_music", "args": {"query": "killshot by eminem"}}
-    assert P("play lose yourself on spotify", find) == {"name": "play_music", "args": {"query": "lose yourself"}}
+    assert P("play lose yourself on spotify", find) == {"name": "play_music",
+                                                        "args": {"query": "lose yourself", "provider": "spotify"}}
+    assert P("play scars on youtube", find)["args"] == {"query": "scars", "provider": "youtube"}
+    assert P("play scars on youtube music", find)["args"] == {"query": "scars", "provider": "youtube music"}
+    assert P("play scars from yt", find)["args"] == {"query": "scars", "provider": "youtube"}
     assert P("play", find) is None and P("play music", find) is None  # plain resume stays a media control
 
 

@@ -65,7 +65,9 @@ DEFAULTS = {
     "vision": {"model": "qwen2.5vl:3b"},
     "learning": {"promote_after": 3},
     "history": {"keep": 1000},
-    "music": {"mode": "app"},  # app: play in the Spotify app | connect: Spotify Connect (Premium, needs login)  # requests kept for the app's History page
+    # provider: spotify | youtube | youtube music ("play X on youtube" picks one for a single request).
+    # mode (Spotify): app = play in the Spotify app | connect = Spotify Connect (Premium, needs login)
+    "music": {"provider": "spotify", "mode": "app"},  # requests kept for the app's History page
     "paths": {"data": "~/.local/share/zade"},
 }
 
