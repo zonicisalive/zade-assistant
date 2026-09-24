@@ -51,13 +51,39 @@ def _seconds(n, unit):
     return int(n) * UNITS[unit.rstrip("s") if unit.rstrip("s") in UNITS else unit]
 
 
+def _open_one(name, find_app):
+    if find_app(name):
+        return {"name": "open_app", "args": {"name": name}}
+    if name.replace(" ", "") in SITES:
+        return {"name": "open_website", "args": {"site": name}}
+    return None
+
+
+def _open_targets(target, find_app):
+    """ "discord whatsapp and telegram" -> one open action per app or site. None if any part is unknown."""
+    if action := _open_one(target, find_app):
+        return [action]
+    out = []
+    for part in re.split(r",\s*|\s+(?:and|then|plus)\s+", target):
+        words = part.split()
+        i = 0
+        while i < len(words):  # longest known name first, so "google chrome" stays one app
+            for j in range(len(words), i, -1):
+                if action := _open_one(" ".join(words[i:j]), find_app):
+                    out.append(action)
+                    i = j
+                    break
+            else:
+                return None
+    return out or None
+
+
 def parse_pattern(text, find_app):
     if m := re.fullmatch(r"(?:open|launch|start|run) (?:the )?(.+?)(?: app| website)?", text):
-        if find_app(m[1]):
-            return {"name": "open_app", "args": {"name": m[1]}}
-        if m[1].replace(" ", "") in SITES:
-            return {"name": "open_website", "args": {"site": m[1]}}
-        return None
+        actions = _open_targets(m[1], find_app)
+        if not actions:
+            return None
+        return actions[0] if len(actions) == 1 else actions
     if m := re.fullmatch(r"(?:go|switch|move) to workspace (\w+)", text):
         return {"name": "window", "args": {"action": "workspace", "workspace": m[1]}}
     if m := re.fullmatch(r"move (?:this|this window|the window|it) to workspace (\w+)", text):
@@ -166,7 +192,8 @@ def route(text, table, cfg, predict=None, find_app=lambda name: None):
     if phrase := match_shortcut(text, table, cfg["shortcut_min_score"]):
         return Route("run", table[phrase], "shortcut", phrase, phrase)
     if action := parse_pattern(text, find_app):
-        return Route("run", [action], "pattern", action["name"])
+        actions = action if isinstance(action, list) else [action]
+        return Route("run", actions, "pattern", actions[0]["name"])
     if predict:
         try:
             actions, label, conf = laya_pick(predict, text, table)

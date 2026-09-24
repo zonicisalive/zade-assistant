@@ -155,3 +155,18 @@ def test_play_music_pattern_keeps_media_controls():
     assert P("play killshot by eminem", find) == {"name": "play_music", "args": {"query": "killshot by eminem"}}
     assert P("play lose yourself on spotify", find) == {"name": "play_music", "args": {"query": "lose yourself"}}
     assert P("play", find) is None and P("play music", find) is None  # plain resume stays a media control
+
+
+def test_open_several_apps_at_once():
+    apps = {"discord": ("discord", "discord"), "telegram": ("org.telegram.desktop", "Telegram")}
+    find2 = lambda n: apps.get(n)
+    assert router.parse_pattern("open discord whatsapp and telegram", find2) == [
+        {"name": "open_app", "args": {"name": "discord"}},
+        {"name": "open_website", "args": {"site": "whatsapp"}},
+        {"name": "open_app", "args": {"name": "telegram"}},
+    ]
+    assert router.parse_pattern("open discord, telegram", find2) == [
+        {"name": "open_app", "args": {"name": "discord"}}, {"name": "open_app", "args": {"name": "telegram"}}]
+    assert router.parse_pattern("open discord and my notes thing", find2) is None  # unknown part: ask the model
+    r = router.route("open discord and telegram", {}, CFG, find_app=find2)
+    assert (r.kind, len(r.actions)) == ("run", 2)

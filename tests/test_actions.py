@@ -218,3 +218,10 @@ def test_never_pkill_generic_launchers(monkeypatch):
         with pytest.raises(actions.Failed, match="close this window"):
             actions.run({"name": "close_app", "args": {"name": "spotify"}}, lambda q: True)
     assert calls == []
+
+
+def test_a_long_phrase_does_not_match_an_app_inside_it(tmp_path):
+    (tmp_path / "discord.desktop").write_text("[Desktop Entry]\nName=Discord\nExec=discord\n")
+    assert actions.find_app("discord whatsapp and telegram", [tmp_path]) is None
+    assert actions.find_app("discord", [tmp_path]) == ("discord", "discord")
+    assert actions.find_app("discrd", [tmp_path]) == ("discord", "discord")  # small mishearings still match

@@ -72,6 +72,9 @@ def find_app(name, dirs=None):
         name = _default_browser().removesuffix(".desktop") or name
     apps = _apps(dirs or APP_DIRS)
     m = process.extractOne(name.lower(), list(apps), scorer=fuzz.WRatio, score_cutoff=85)
+    # A short app name inside a long request ("discord" in "discord whatsapp and telegram") is not a match.
+    if m and len(name) > len(m[0]) * 1.6:
+        return None
     return apps[m[0]] if m else None
 
 
