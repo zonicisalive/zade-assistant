@@ -91,3 +91,10 @@ def test_cancel_reminder(conn):
     assert memory.cancel_reminder(conn, "water") == 1
     assert memory.cancel_reminder(conn, "  ") == 0
     assert [m for _, m, _ in memory.reminders(conn)] == ["call mom"]
+
+
+def test_request_history_keeps_only_the_newest(tmp_path):
+    conn = memory.connect(tmp_path / "z.db")
+    for i in range(5):
+        memory.log_request(conn, f"say {i}", "ok", "pattern", 1, keep=3)
+    assert [r["heard"] for r in memory.requests(conn)] == ["say 4", "say 3", "say 2"]

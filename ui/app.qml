@@ -108,7 +108,7 @@ ShellRoot {
 
     function setSetting(key, value) {
         ctl(["set", key, String(value)], r => {
-            const live = ["ui.", "sound.", "quiet.", "safety.", "persona.", "llm.personality"].some(p => key.startsWith(p) && key !== "ui.enabled")
+            const live = ["ui.", "sound.", "quiet.", "safety.", "persona.", "history.", "web.", "llm.personality"].some(p => key.startsWith(p) && key !== "ui.enabled")
             if (r && r.ok) { if (!live) needsRestart = status.running; ctl(["settings"], s => { if (s) settings = s }) }
             else flash(r && r.error ? r.error : "Couldn't save that setting.")
         })
@@ -1039,6 +1039,14 @@ ShellRoot {
                         spacing: 16
                         Label { text: "History"; font.pixelSize: 26; font.weight: Font.Medium }
                         Muted { text: "What Zade heard, what it did, and how long it took. Mishearings show up here: add the right word under Settings → Words to expect." }
+                        Group {
+                            Row_ { label: "Keep"; hint: "Older requests are deleted. The newest 200 are shown here."
+                                RowLayout { spacing: 8
+                                    Repeater { model: [100, 500, 1000, 5000, 10000]
+                                        Chip { required property int modelData; text: modelData.toLocaleString(Qt.locale(), "f", 0)
+                                               selected: root.settings && root.settings.history.keep === modelData
+                                               onClicked: root.setSetting("history.keep", modelData) } } } }
+                        }
                         Group {
                             Muted { visible: root.history.length === 0; text: "Nothing yet."; Layout.topMargin: 12; Layout.bottomMargin: 12 }
                             Repeater {

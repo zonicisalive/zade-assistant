@@ -112,7 +112,7 @@ def is_quiet(cfg, now=None):
     return start <= minutes < end if start <= end else minutes >= start or minutes < end
 
 
-LIVE_SECTIONS = ("ui", "sound", "quiet", "safety", "persona")  # settings that apply without a restart
+LIVE_SECTIONS = ("ui", "sound", "quiet", "safety", "persona", "history", "web")  # settings that apply without a restart
 
 
 def apply_live(cfg, new):
@@ -342,7 +342,7 @@ def safe_handle(ctx, text):
         reply = handle(ctx, text)
         if ctx.route or reply:  # silence and "stop" are not worth a history entry
             memory.log_request(ctx.conn, text.strip(), reply, ctx.route or "none",
-                               (time.perf_counter() - t) * 1000)
+                               (time.perf_counter() - t) * 1000, ctx.cfg["history"]["keep"])
         return reply
     except Exception:  # one bad request must not kill the assistant
         log.exception("handling %r failed", text)

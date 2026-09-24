@@ -158,9 +158,10 @@ def cancel_reminder(conn, query):
     return cur.rowcount
 
 
-def log_request(conn, heard, reply, route, ms):
+def log_request(conn, heard, reply, route, ms, keep=1000):
     conn.execute("INSERT INTO requests (heard, reply, route, ms) VALUES (?, ?, ?, ?)", (heard, reply, route, int(ms)))
-    conn.execute("DELETE FROM requests WHERE id <= (SELECT MAX(id) FROM requests) - 1000")  # keep the last 1000
+    conn.execute("DELETE FROM requests WHERE id NOT IN (SELECT id FROM requests ORDER BY id DESC LIMIT ?)",
+                 (max(1, int(keep)),))
     conn.commit()
 
 
