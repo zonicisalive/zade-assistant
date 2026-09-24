@@ -11,6 +11,7 @@ from zade import config, music
 def no_real_keys(monkeypatch):
     monkeypatch.setattr(music, "config", SimpleNamespace(load_env=lambda *a, **k: None))  # never the real keys
     monkeypatch.delenv("SPOTIFY_REFRESH_TOKEN", raising=False)
+    monkeypatch.setattr(music, "_user_cache", {})  # no login carried over between tests
 
 
 def test_env_file_is_loaded_without_overriding(tmp_path, monkeypatch):
@@ -160,3 +161,20 @@ def test_pick_track_prefers_the_named_song():
     assert music.pick_track("scars by juice wrld", items)["name"] == "Scars"
     assert music.pick_track("scars by juice wrld", items)["artists"][0]["name"] == "Juice WRLD"
     assert music.pick_track("scars", items)["name"] == "No Good"  # no "by": trust Spotify's order
+
+
+def test_this_system_plays_in_the_local_app(monkeypatch):
+    calls, searched = [], []
+    connect(monkeypatch, calls, searched)
+    assert music.play("cola berry d on this system", "connect") == "Playing Scars by Juice WRLD."
+    assert searched == ["cola berry d"] and calls == [("app", "spotify:track:9")]
+    calls.clear()
+    assert music.play("scars", "connect", device="my pc") == "Playing Scars by Juice WRLD."
+    assert calls == [("app", "spotify:track:9")]
+
+
+def test_user_token_is_reused(monkeypatch):
+    posts = []
+    monkeypatch.setattr(music, "_post_token", lambda c, s, form: posts.append(1) or {"access_token": "A", "expires_in": 3600})
+    assert music._user_token("id", "s", "R") == music._user_token("id", "s", "R") == "A"
+    assert len(posts) == 1

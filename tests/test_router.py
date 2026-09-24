@@ -218,3 +218,8 @@ def test_audit_regressions_router():
                        ("set volume to 40", {"set": 40}), ("raise volume to 70", {"set": 70}),
                        ("volume 55", {"set": 55})]:
         assert P(text, find) == {"name": "volume", "args": args}, text
+
+
+def test_workspace_without_a_space():
+    assert router.parse_pattern("go to workspace1", lambda q: None) == \
+        {"name": "window", "args": {"action": "workspace", "workspace": "1"}}

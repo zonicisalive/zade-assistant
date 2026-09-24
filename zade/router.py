@@ -89,9 +89,9 @@ def parse_pattern(text, find_app):
     if m := re.fullmatch(r"(?:open|launch|start|run) (?:the )?(.+?)(?: app)?", text):
         if actions := _open_targets(m[1], find_app):  # otherwise later patterns ("start do not disturb")
             return actions[0] if len(actions) == 1 else actions
-    if m := re.fullmatch(r"(?:go|switch|move) to workspace (\w+)", text):
+    if m := re.fullmatch(r"(?:go|switch|move) to workspace ?(\w+)", text):  # "workspace1" too
         return {"name": "window", "args": {"action": "workspace", "workspace": m[1]}}
-    if m := re.fullmatch(r"move (?:this|this window|the window|it) to workspace (\w+)", text):
+    if m := re.fullmatch(r"move (?:this|this window|the window|it) to workspace ?(\w+)", text):
         return {"name": "window", "args": {"action": "move_to_workspace", "workspace": m[1]}}
     if re.fullmatch(r"close (?:this|this window|the window|window)", text):
         return {"name": "window", "args": {"action": "close"}}

@@ -111,8 +111,26 @@ def _api(method, path, token, body=None):
         return json.loads(raw) if raw else None
 
 
+_user_cache = {}
+
+
 def _user_token(cid, secret, refresh):
-    return _post_token(cid, secret, {"grant_type": "refresh_token", "refresh_token": refresh})["access_token"]
+    """Access token for your account, reused for its hour of life (a fresh one per song cost seconds)."""
+    if _user_cache.get("refresh") != refresh or time.time() > _user_cache.get("expires", 0) - 60:
+        data = _post_token(cid, secret, {"grant_type": "refresh_token", "refresh_token": refresh})
+        _user_cache.update(refresh=refresh, token=data["access_token"],
+                           expires=time.time() + data.get("expires_in", 3600))
+    return _user_cache["token"]
+
+
+# "on this system", "on my pc", "here": this computer, which plays through its own Spotify app.
+THIS_PC = re.compile(r"(?:(?:this|my|the) )?(?:system|pc|computer|laptop|desktop|machine|device)|here")
+
+
+def split_this_pc(query):
+    if (m := re.fullmatch(r"(.+) (?:on|in) (.+)", query)) and THIS_PC.fullmatch(m[2]):
+        return m[1], True
+    return query, False
 
 
 def _devices(token):
@@ -221,9 +239,13 @@ def play(query, mode="app", provider="spotify", device=""):
             return f"Playing {found[1]}."
         _open("spotify:search:" + urllib.parse.quote(query))
         return f"I couldn't find {query}, so I opened Spotify's search. Pick the song there."
+    if device and THIS_PC.fullmatch(device.lower().strip()):
+        device, here = "", True
+    else:
+        query, here = split_this_pc(query)
     refresh = os.environ.get("SPOTIFY_REFRESH_TOKEN")
     user = devices = chosen = None
-    if refresh and (mode == "connect" or device or " on " in query):
+    if refresh and not here and (mode == "connect" or device or " on " in query):
         try:
             user = _user_token(cid, secret, refresh)
             devices = _devices(user)
