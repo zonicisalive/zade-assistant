@@ -18,6 +18,7 @@ CONFIG = pathlib.Path("~/.config/zade/config.toml").expanduser()
 DATA = pathlib.Path(config.DEFAULTS["paths"]["data"]).expanduser()
 DB = DATA / "zade.db"
 LOCK = DATA / "zade.lock"
+READY = DATA / "zade.ready"   # holds the pid of the Zade that finished starting up
 INBOX = pathlib.Path(os.environ.get("XDG_RUNTIME_DIR", "/tmp")) / "zade" / "inbox"
 REPO = pathlib.Path(__file__).resolve().parent.parent
 SERVICE = pathlib.Path("~/.config/systemd/user/zade.service").expanduser()
@@ -85,7 +86,12 @@ def _systemctl(*args):
 
 
 def status():
-    return {"running": _running(), "pid": _pid(),
+    running = _running()
+    try:
+        ready = running and READY.read_text().strip() == str(_pid())
+    except OSError:
+        ready = False
+    return {"running": running, "ready": ready, "pid": _pid(),
             "autostart": SERVICE.exists() and _systemctl("is-enabled", "zade").stdout.strip() == "enabled"}
 
 

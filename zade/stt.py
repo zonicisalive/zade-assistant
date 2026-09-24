@@ -14,7 +14,10 @@ log = logging.getLogger("zade")
 def _whisper(model, device):
     from faster_whisper import WhisperModel
 
-    return WhisperModel(model, device=device, compute_type="int8")
+    try:  # from the local cache: skips an online update check (~0.4 s) and works offline
+        return WhisperModel(model, device=device, compute_type="int8", local_files_only=True)
+    except Exception:  # not downloaded yet (first run): fetch it
+        return WhisperModel(model, device=device, compute_type="int8")
 
 
 def to_wav(audio, rate=16000):

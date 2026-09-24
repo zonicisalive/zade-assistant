@@ -70,3 +70,18 @@ def test_status_uses_the_lock_not_a_stale_pid(env, monkeypatch):
     assert run("status")["running"] is True
     assert run("start") == {"ok": True, "already": True}  # never starts a second copy
     held.close()
+
+
+def test_status_reports_ready_only_for_the_running_zade(env, monkeypatch):
+    from zade import __main__ as z
+
+    monkeypatch.setattr(ctl, "LOCK", env / "zade.lock")
+    monkeypatch.setattr(ctl, "READY", env / "zade.ready")
+    held = z.single_instance(env / "zade.lock")
+    monkeypatch.setattr(ctl, "_pid", lambda: 4242)
+    assert run("status")["ready"] is False          # starting up
+    (env / "zade.ready").write_text("4242")
+    assert run("status")["ready"] is True
+    (env / "zade.ready").write_text("1111")         # left over from an older Zade
+    assert run("status")["ready"] is False
+    held.close()

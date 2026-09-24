@@ -34,3 +34,23 @@ def test_uses_beam_search_and_hotwords(monkeypatch):
     assert stt.transcribe(np.zeros(16000, np.int16), cfg, hotwords=["gaming mode"]) == "gaming mode"
     assert calls["beam_size"] == 5
     assert "gaming mode" in calls["hotwords"] and "Zade" in calls["hotwords"]
+
+
+def test_whisper_loads_from_cache_without_internet(monkeypatch):
+    import faster_whisper
+
+    calls = []
+
+    class Fake:
+        def __init__(self, model, **kw):
+            calls.append(kw.get("local_files_only", False))
+            if kw.get("local_files_only") and model == "not-downloaded":
+                raise RuntimeError("not in cache")
+
+    monkeypatch.setattr(faster_whisper, "WhisperModel", Fake)
+    stt._whisper.cache_clear()
+    stt._whisper("base.en", "cpu")
+    assert calls == [True]                 # cached: no online check
+    stt._whisper("not-downloaded", "cpu")
+    assert calls == [True, True, False]    # first run: falls back to downloading
+    stt._whisper.cache_clear()

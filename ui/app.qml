@@ -105,6 +105,30 @@ ShellRoot {
     }
 
     function flash(text) { toast = text; toastTimer.restart() }
+
+    // Start / stop / restart with visible progress: poll quickly until Zade is ready (or stopped).
+    property string busy: ""        // "Starting", "Stopping", "Restarting" while a power action runs
+    property string busyCmd: ""
+    property real busySince: 0
+    function power(cmd) {
+        if (busy) return
+        busy = ({ start: "Starting", stop: "Stopping", restart: "Restarting" })[cmd]
+        busyCmd = cmd; busySince = Date.now(); needsRestart = false
+        ctl([cmd], () => busyPoll.start())
+    }
+    Timer {
+        id: busyPoll
+        interval: 250; repeat: true
+        onTriggered: root.ctl(["status"], r => {
+            if (!r) return
+            root.status = r
+            const done = root.busyCmd === "stop" ? !r.running : r.ready
+            if (done) { busyPoll.stop(); root.busy = ""; root.refresh() }
+            else if (Date.now() - root.busySince > 20000) {
+                busyPoll.stop(); root.busy = ""; root.flash("Zade didn't come back. Check ~/.local/share/zade/zade.log.")
+            }
+        })
+    }
     Timer { id: toastTimer; interval: 2600; onTriggered: root.toast = "" }
 
     Component.onCompleted: { refresh(); ctl(["voices"], r => { if (r) voices = r }) }
@@ -359,7 +383,7 @@ ShellRoot {
                             anchors.fill: parent; anchors.leftMargin: 18; anchors.rightMargin: 8
                             Label { text: "Restart Zade to use the new settings."; Layout.fillWidth: true }
                             Button { text: "Restart"; accent: true
-                                     onClicked: { root.needsRestart = false; root.ctl(["restart"], () => root.refresh()) } }
+                                     onClicked: root.power("restart") }
                         }
                     }
 
@@ -373,7 +397,8 @@ ShellRoot {
                             Orb { size: 64 }
                             ColumnLayout {
                                 spacing: 4
-                                Label { text: root.status.running ? "Zade is listening" : "Zade is stopped"; font.pixelSize: 26; font.weight: Font.Medium }
+                                Label { text: root.busy ? root.busy + "\u2026" : root.status.running ? "Zade is listening" : "Zade is stopped"
+                                        font.pixelSize: 26; font.weight: Font.Medium }
                                 Muted { text: root.status.running ? "Say “hey zade”, hold Win, or type below."
                                                                   : "Start Zade to talk to it." }
                             }
@@ -381,9 +406,11 @@ ShellRoot {
                         RowLayout {
                             spacing: 10
                             Button { text: root.status.running ? "Stop" : "Start Zade"; accent: !root.status.running; danger: root.status.running
-                                     onClicked: root.ctl([root.status.running ? "stop" : "start"], () => statusLater.restart()) }
+                                     opacity: root.busy ? 0.5 : 1
+                                     onClicked: root.power(root.status.running ? "stop" : "start") }
                             Button { text: "Restart"; visible: root.status.running
-                                     onClicked: { root.needsRestart = false; root.ctl(["restart"], () => statusLater.restart()) } }
+                                     opacity: root.busy ? 0.5 : 1
+                                     onClicked: root.power("restart") }
                         }
                         Timer { id: statusLater; interval: 1500; onTriggered: root.ctl(["status"], r => { if (r) root.status = r }) }
 

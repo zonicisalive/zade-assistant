@@ -34,3 +34,16 @@ def test_other_key_after_trigger_cancels():
     assert d.due(2.0) and not d.cancelled()
     d.key(Z, 1, 3.0)  # a Win shortcut pressed after the beep
     assert d.cancelled()
+
+
+def test_keyboards_found_by_id_links(tmp_path):
+    from zade import hotkey
+
+    (tmp_path / "event5").write_text("")
+    (tmp_path / "event9").write_text("")
+    byid = tmp_path / "by-id"
+    byid.mkdir()
+    (byid / "usb-ROYUAN_Keyboard-event-kbd").symlink_to(tmp_path / "event5")
+    (byid / "usb-Mouse-if01-event-kbd").symlink_to(tmp_path / "event9")
+    (byid / "usb-Mouse-event-mouse").symlink_to(tmp_path / "event9")
+    assert hotkey.keyboard_paths(byid) == [str(tmp_path / "event5"), str(tmp_path / "event9")]

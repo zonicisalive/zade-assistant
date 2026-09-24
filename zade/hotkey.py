@@ -5,6 +5,7 @@ Reads keyboards through evdev (/dev/input, needs the `input` group). Only the ho
 """
 
 import logging
+import pathlib
 import select
 import threading
 import time
@@ -43,9 +44,17 @@ class HoldDetector:
         return False
 
 
+def keyboard_paths(byid=pathlib.Path("/dev/input/by-id")):
+    """Keyboards from udev's *-event-kbd links: instant, instead of opening all ~30 input devices."""
+    try:
+        return sorted({str(link.resolve()) for link in byid.glob("*-event-kbd")})
+    except OSError:
+        return []
+
+
 def _keyboards(ecodes, evdev, hold_code):
     out = []
-    for path in evdev.list_devices():
+    for path in keyboard_paths() or evdev.list_devices():  # full scan only if udev links are missing
         try:
             dev = evdev.InputDevice(path)
             if hold_code in dev.capabilities().get(ecodes.EV_KEY, []):
@@ -57,37 +66,39 @@ def _keyboards(ecodes, evdev, hold_code):
     return out
 
 
-def watch(key, hold_s, trigger):
-    """Background thread: set `trigger` whenever the hold key is held alone long enough.
-    Returns the HoldDetector (its held() tells when the key is released), or None if unavailable."""
+def watch_all(bindings):
+    """One background thread for all hold keys. bindings: [(key name, hold seconds, threading.Event)].
+    Returns a HoldDetector per binding (its held()/cancelled() drive push-to-talk), or None each if unavailable."""
     try:
         import evdev
         from evdev import ecodes
     except ImportError as e:
-        log.warning("hold-to-talk disabled, evdev missing: %s", e)
-        return None
-    code = ecodes.ecodes[key]
-    devices = _keyboards(ecodes, evdev, code)
+        log.warning("hotkeys disabled, evdev missing: %s", e)
+        return [None] * len(bindings)
+    codes = [ecodes.ecodes[key] for key, _, _ in bindings]
+    devices = _keyboards(ecodes, evdev, codes[0]) if codes else []
     if not devices:
-        log.warning("hold-to-talk disabled: no readable keyboard (is the user in the 'input' group?)")
-        return None
-
-    detector = HoldDetector(code, hold_s)
+        log.warning("hotkeys disabled: no readable keyboard (is the user in the 'input' group?)")
+        return [None] * len(bindings)
+    detectors = [HoldDetector(code, hold_s) for code, (_, hold_s, _) in zip(codes, bindings)]
 
     def loop():
         while True:
             ready, _, _ = select.select(devices, [], [], 0.05)
+            now = time.monotonic()
             for dev in ready:
                 try:
                     for ev in dev.read():
                         if ev.type == ecodes.EV_KEY:
-                            detector.key(ev.code, ev.value, time.monotonic())
+                            for d in detectors:
+                                d.key(ev.code, ev.value, now)
                 except OSError:  # keyboard unplugged
                     devices.remove(dev)
-            if detector.due(time.monotonic()):
-                log.info("hotkey: %s held %.1fs", key, hold_s)
-                trigger.set()
+            for d, (key, hold_s, trigger) in zip(detectors, bindings):
+                if d.due(time.monotonic()):
+                    log.info("hotkey: %s held %.1fs", key, hold_s)
+                    trigger.set()
 
-    threading.Thread(target=loop, daemon=True, name="hotkey").start()
-    log.info("hotkey: hold %s for %.1fs (%d keyboards)", key, hold_s, len(devices))
-    return detector
+    threading.Thread(target=loop, daemon=True, name="hotkeys").start()
+    log.info("hotkeys: %s (%d keyboards)", ", ".join(f"hold {k} {h:.1f}s" for k, h, _ in bindings), len(devices))
+    return detectors

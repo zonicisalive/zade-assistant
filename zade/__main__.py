@@ -376,13 +376,12 @@ def main():
     pid_file.write_text(str(os.getpid()))
     from . import hotkey
 
-    ptt = None  # push-to-talk key detector
-    if cfg["hotkey"]["enabled"]:
-        ptt = hotkey.watch(cfg["hotkey"]["key"], cfg["hotkey"]["hold_s"], trigger)
     dictate = threading.Event()
-    typer = None  # voice-typing key detector
-    if cfg["dictation"]["enabled"]:
-        typer = hotkey.watch(cfg["dictation"]["key"], cfg["dictation"]["hold_s"], dictate)
+    bindings = [(cfg["hotkey"]["key"], cfg["hotkey"]["hold_s"], trigger) if cfg["hotkey"]["enabled"] else None,
+                (cfg["dictation"]["key"], cfg["dictation"]["hold_s"], dictate) if cfg["dictation"]["enabled"] else None]
+    detectors = iter(hotkey.watch_all([b for b in bindings if b]))
+    ptt = next(detectors) if bindings[0] else None    # push-to-talk key detector
+    typer = next(detectors) if bindings[1] else None  # voice-typing key detector
 
     def hear(timeout=None, released=None, cancelled=None, keep_reply=False):
         # keep_reply: while answering a question, keep it (e.g. a command to approve) on screen
@@ -483,6 +482,7 @@ def main():
 
     stt.transcribe(np.zeros(audio.RATE, np.int16), cfg)  # load whisper before the first command
     log.info("ready")
+    (pathlib.Path(cfg["paths"]["data"]).expanduser() / "zade.ready").write_text(str(os.getpid()))  # for the app
     while True:
         if barge:  # interrupted mid-speech: listen right away, as if woken
             source = barge.pop()
