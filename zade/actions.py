@@ -50,8 +50,20 @@ def _default_browser():
     return r.stdout.strip()
 
 
+_app_cache = {}
+
+
 def _apps(dirs):
-    """{lowercase name or desktop id: (desktop id, executable)} for every visible app."""
+    """{lowercase name or desktop id: (desktop id, executable)} for every visible app. Cached until an
+    app folder changes (installing or removing an app updates the folder's modification time)."""
+    key = tuple((str(d), d.stat().st_mtime if d.exists() else 0) for d in dirs)
+    if key not in _app_cache:
+        _app_cache.clear()
+        _app_cache[key] = _scan_apps(dirs)
+    return _app_cache[key]
+
+
+def _scan_apps(dirs):
     apps = {}
     for d in dirs:
         for f in sorted(d.glob("*.desktop")) if d.exists() else []:
@@ -210,13 +222,21 @@ def _blocked(mods, key):
            ({"ctrl", "alt"} <= set(mods) and key in ("Delete", "BackSpace"))
 
 
+def key_combos(keys):
+    """ "ctrl+a, ctrl+c" -> ["ctrl+a", "ctrl+c"] (empty entries dropped), for pressing and for safety checks."""
+    return [c.strip() for c in re.split(r",|\s+then\s+", keys) if c.strip()]
+
+
 def is_closing(keys):
     """True if any combo in `keys` usually closes a window or app (Alt+F4, Ctrl+Q/W, Super+Q)."""
-    try:
-        return any((m, k) in CLOSING_COMBOS for c in re.split(r",\s*|\s+then\s+", keys)
-                   for mods, k in [_key_parts(c)] for m in mods)
-    except Failed:
-        return False
+    for c in key_combos(keys):
+        try:
+            mods, k = _key_parts(c)
+        except Failed:
+            continue  # run() refuses the whole sequence anyway
+        if any((m, k) in CLOSING_COMBOS for m in mods):
+            return True
+    return False
 
 
 SEARCH_ENGINES = {
@@ -341,7 +361,7 @@ def run(action, confirm):
             _call(["ddcutil", "setvcp", "10", "+" if d >= 0 else "-", str(abs(d))])
         return ""
     if name == "press_keys":
-        combos = [c for c in re.split(r",\s*|\s+then\s+", a["keys"]) if c.strip()]
+        combos = key_combos(a["keys"])
         parsed = [_key_parts(c) for c in combos]  # validate every combo before pressing any
         for c, (mods, key) in zip(combos, parsed):
             if _blocked(mods, key):

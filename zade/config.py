@@ -72,6 +72,15 @@ DEFAULTS = {
 }
 
 
+# Settings the running Zade picks up without a restart (it re-reads config.toml when it changes).
+LIVE_SECTIONS = ("ui", "sound", "quiet", "safety", "persona", "history", "web", "music")
+LIVE_KEYS = ("llm.personality", "llm.keep_alive")
+
+
+def is_live(key):
+    return key != "ui.enabled" and (key.split(".")[0] in LIVE_SECTIONS or key in LIVE_KEYS)
+
+
 def _merge(base, over):
     for k, v in over.items():
         if isinstance(v, dict) and isinstance(base.get(k), dict):
@@ -87,15 +96,17 @@ def load(path=None):
     return _merge(copy.deepcopy(DEFAULTS), user)
 
 
-def load_env(path=None):
-    """Read KEY=VALUE lines (API keys) from ~/.config/zade/env; variables already set win."""
+def load_env(path=None, override=False):
+    """Read KEY=VALUE lines (API keys) from ~/.config/zade/env. Variables already set win, unless override
+    (for keys changed in the app while Zade runs)."""
     p = pathlib.Path(path or "~/.config/zade/env").expanduser()
     if not p.exists():
         return
     for line in p.read_text().splitlines():
         key, sep, value = line.partition("=")
         if sep and not key.strip().startswith("#"):
-            os.environ.setdefault(key.strip(), value.strip().strip("'\""))
+            if override or key.strip() not in os.environ:
+                os.environ[key.strip()] = value.strip().strip("'\"")
 
 
 def _toml_value(v):

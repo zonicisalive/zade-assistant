@@ -16,7 +16,7 @@ import numpy as np
 
 from . import audio, config, ctl
 
-OUT = pathlib.Path(config.DEFAULTS["paths"]["data"]).expanduser() / "wake_samples"
+OUT = pathlib.Path(config.load(ctl.CONFIG)["paths"]["data"]).expanduser() / "wake_samples"
 STYLES = ["normally", "a bit faster", "slowly", "quietly", "loudly", "from further away (lean back)",
           "tired", "excited", "like you're busy", "like a question"]
 NEAR_MISSES = ["hey Jade", "hey Kate", "hey there", "hey Siri", "hey say", "okay", "hey made it",

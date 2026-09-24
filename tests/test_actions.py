@@ -272,3 +272,18 @@ def test_press_a_sequence(monkeypatch):
     calls = _calls(monkeypatch)
     actions.run({"name": "press_keys", "args": {"keys": "ctrl+a, ctrl+c"}}, lambda q: True)
     assert calls == [["wtype", "-M", "ctrl", "-k", "a", "-m", "ctrl"], ["wtype", "-M", "ctrl", "-k", "c", "-m", "ctrl"]]
+
+
+def test_empty_combo_does_not_hide_a_closing_key():
+    assert actions.is_closing("enter, , alt+f4") and actions.is_closing("ctrl+a then ctrl+w")
+    assert not actions.is_closing("enter, ctrl+c")
+
+
+def test_app_list_is_cached_until_an_app_is_installed(tmp_path):
+    (tmp_path / "a.desktop").write_text("[Desktop Entry]\nName=Alpha\nExec=alpha\n")
+    assert "alpha" in actions._apps([tmp_path])
+    before = tmp_path.stat().st_mtime_ns
+    (tmp_path / "b.desktop").write_text("[Desktop Entry]\nName=Beta\nExec=beta\n")
+    import os
+    os.utime(tmp_path, ns=(before + 10**9, before + 10**9))  # folder changed
+    assert "beta" in actions._apps([tmp_path])

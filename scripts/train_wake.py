@@ -18,6 +18,7 @@ Options: --samples 50000 --steps 50000 --penalty 1500 --audioset-parts 3 --acav-
 """
 
 import argparse
+import ast
 import glob
 import io
 import json
@@ -168,7 +169,7 @@ def get_features(work, acav_gb):
             head = r.read()
         header_len = int.from_bytes(head[8:10], "little")
         offset = 10 + header_len
-        meta = eval(head[10:offset].decode("latin1"))  # the .npy header is a Python dict literal
+        meta = ast.literal_eval(head[10:offset].decode("latin1"))  # the .npy header is a Python dict literal
         rows_total, *frame = meta["shape"]
         row_bytes = int(np.prod(frame)) * np.dtype(meta["descr"]).itemsize
         rows = min(rows_total, int(acav_gb * 1e9 // row_bytes))

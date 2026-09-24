@@ -297,3 +297,12 @@ def test_model_pressing_a_closing_combo_asks_first():
     ctx.confirm = lambda q: asked.append(q) or False
     z.handle(ctx, "tidy up")
     assert asked == ["Press keys alt+f4?"] and ran == []
+
+
+def test_inbox_keeps_its_file_so_the_app_can_append_safely(tmp_path):
+    inbox = tmp_path / "inbox"
+    inbox.write_text("open firefox\n")
+    assert z.read_inbox(inbox) == ["open firefox"]
+    with inbox.open("a") as f:  # the app appending after a read
+        f.write("what time is it\n")
+    assert z.read_inbox(inbox) == ["what time is it"] and z.read_inbox(inbox) == []

@@ -9,7 +9,7 @@ from zade import config, music
 
 @pytest.fixture(autouse=True)
 def no_real_keys(monkeypatch):
-    monkeypatch.setattr(music, "config", SimpleNamespace(load_env=lambda *a: None))  # never the real keys
+    monkeypatch.setattr(music, "config", SimpleNamespace(load_env=lambda *a, **k: None))  # never the real keys
     monkeypatch.delenv("SPOTIFY_REFRESH_TOKEN", raising=False)
 
 

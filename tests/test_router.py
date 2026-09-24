@@ -208,3 +208,13 @@ def test_media_control_patterns():
                       ("previous track", "previous"), ("go back to the last song", "previous")]:
         assert P(text, find) == {"name": "media", "args": {"cmd": cmd}}, text
     assert P("play scars", find)["name"] == "play_music"
+
+
+def test_audit_regressions_router():
+    P, find = router.parse_pattern, lambda q: None
+    assert P("start do not disturb", find) == {"name": "dnd", "args": {"on": True}}  # not swallowed by "start X"
+    for text, args in [("increase volume 30", {"delta": 30}), ("volume up 10", {"delta": 10}),
+                       ("lower volume by 20", {"delta": -20}), ("turn the volume down 15", {"delta": -15}),
+                       ("set volume to 40", {"set": 40}), ("raise volume to 70", {"set": 70}),
+                       ("volume 55", {"set": 55})]:
+        assert P(text, find) == {"name": "volume", "args": args}, text

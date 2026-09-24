@@ -17,7 +17,7 @@ from . import config, memory
 CONFIG = pathlib.Path("~/.config/zade/config.toml").expanduser()
 ENV = pathlib.Path("~/.config/zade/env").expanduser()   # API keys, readable only by you
 KEYS = ["SPOTIFY_CLIENT_ID", "SPOTIFY_CLIENT_SECRET", "SPOTIFY_REFRESH_TOKEN", "ANTHROPIC_API_KEY", "OPENAI_API_KEY"]
-DATA = pathlib.Path(config.DEFAULTS["paths"]["data"]).expanduser()
+DATA = pathlib.Path(config.load(CONFIG)["paths"]["data"]).expanduser()  # the same folder Zade uses
 DB = DATA / "zade.db"
 LOCK = DATA / "zade.lock"
 READY = DATA / "zade.ready"   # holds the pid of the Zade that finished starting up
@@ -57,8 +57,10 @@ def set_setting(key, text):
         node = node.setdefault(t, {})
     node[name] = _coerce(default[name], text)
     CONFIG.parent.mkdir(parents=True, exist_ok=True)
-    CONFIG.write_text("# Written by the Zade app; edit freely.\n" + config.dumps(user) + "\n")
-    return {"ok": True}
+    tmp = CONFIG.with_suffix(".tmp")  # write then rename: Zade's live reload never sees half a file
+    tmp.write_text("# Written by the Zade app; edit freely.\n" + config.dumps(user) + "\n")
+    os.replace(tmp, CONFIG)
+    return {"ok": True, "live": config.is_live(key)}
 
 
 def _env_lines():
@@ -207,6 +209,7 @@ def run(argv):
     if cmd == "say":  # a typed command for the running Zade
         INBOX.parent.mkdir(parents=True, exist_ok=True)
         with INBOX.open("a") as f:
+            fcntl.flock(f, fcntl.LOCK_EX)  # Zade empties the inbox under this lock
             f.write(args[0].replace("\n", " ") + "\n")
         return {"ok": True}
 
@@ -226,11 +229,15 @@ def run(argv):
         if not steps or any(not isinstance(st, dict) or st.get("name") not in allowed
                             or not isinstance(st.get("args", {}), dict) for st in steps):
             return {"ok": False, "error": "Each step needs a known action."}
-        memory.add_shortcut(conn, args[0].strip().lower(), [{"name": st["name"], "args": st.get("args", {})}
+        from .router import normalize  # stored the way speech is matched ("Hey Zade, gaming mode" -> "gaming mode")
+
+        memory.add_shortcut(conn, normalize(args[0]), [{"name": st["name"], "args": st.get("args", {})}
                                                            for st in steps])
         return {"ok": True}
     if cmd == "shortcut-rename":
-        return {"ok": memory.rename_shortcut(conn, args[0], args[1].strip().lower()) > 0}
+        from .router import normalize
+
+        return {"ok": memory.rename_shortcut(conn, args[0], normalize(args[1])) > 0}
     if cmd == "shortcut-del":
         return {"ok": memory.delete_shortcut(conn, args[0]) > 0}
     if cmd == "reminders":

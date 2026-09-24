@@ -20,9 +20,10 @@ def run(*args):
 
 
 def test_set_setting_keeps_other_user_settings(env):
-    assert run("set", "tts.speed", "1.3") == {"ok": True}
-    assert run("set", "ui.enabled", "false") == {"ok": True}
-    assert run("set", "llm.personality", "Be sarcastic.") == {"ok": True}
+    assert run("set", "tts.speed", "1.3") == {"ok": True, "live": False}  # needs a restart
+    assert run("set", "ui.enabled", "false") == {"ok": True, "live": False}
+    assert run("set", "llm.personality", "Be sarcastic.") == {"ok": True, "live": True}
+    assert run("set", "music.mode", "connect")["live"] is True
     cfg = config.load(env / "config.toml")
     assert cfg["tts"]["speed"] == 1.3 and cfg["ui"]["enabled"] is False
     assert cfg["llm"]["model"] == "qwen3:4b-instruct" and cfg["llm"]["personality"] == "Be sarcastic."
@@ -101,3 +102,9 @@ def test_api_keys_are_saved_privately_and_never_read_back(env, monkeypatch):
     assert (env / "env").stat().st_mode & 0o777 == 0o600
     assert run("key-set", "SPOTIFY_CLIENT_ID", "") == {"ok": True}
     assert run("keys")["SPOTIFY_CLIENT_ID"] is False
+
+
+def test_shortcut_phrases_are_stored_the_way_speech_is_matched(env):
+    step = json.dumps([{"name": "open_app", "args": {"name": "steam"}}])
+    assert run("shortcut-save", "Hey Zade, Gaming Mode!", step) == {"ok": True}
+    assert [s["phrase"] for s in run("shortcuts")] == ["gaming mode"]

@@ -87,10 +87,8 @@ def _open_targets(target, find_app):
 
 def parse_pattern(text, find_app):
     if m := re.fullmatch(r"(?:open|launch|start|run) (?:the )?(.+?)(?: app)?", text):
-        actions = _open_targets(m[1], find_app)
-        if not actions:
-            return None
-        return actions[0] if len(actions) == 1 else actions
+        if actions := _open_targets(m[1], find_app):  # otherwise later patterns ("start do not disturb")
+            return actions[0] if len(actions) == 1 else actions
     if m := re.fullmatch(r"(?:go|switch|move) to workspace (\w+)", text):
         return {"name": "window", "args": {"action": "workspace", "workspace": m[1]}}
     if m := re.fullmatch(r"move (?:this|this window|the window|it) to workspace (\w+)", text):
@@ -162,9 +160,14 @@ def parse_pattern(text, find_app):
         return {"name": "screenshot", "args": {}}
     if m := re.fullmatch(r"(?:close|quit|kill|exit) (?:the )?(.+?)(?: app)?", text):
         return {"name": "close_app", "args": {"name": m[1]}} if find_app(m[1]) else None
-    verb = r"(?:set|increase|decrease|raise|lower|turn)(?: up| down)?"
-    if m := re.fullmatch(rf"(?:{verb} )?(?:the )?volume(?: up| down)? (?:to )?(\d{{1,3}})(?: percent)?", text):
-        return {"name": "volume", "args": {"set": int(m[1])}}
+    if m := re.fullmatch(r"(?:(set|increase|decrease|raise|lower|turn)(?: (up|down))? )?(?:the )?volume"
+                         r"(?: (up|down))? (?:(to|by) )?(\d{1,3})(?: percent)?", text):
+        verb, up_down, prep, n = m[1], m[2] or m[3], m[4], int(m[5])
+        direction = 1 if verb in ("increase", "raise") or up_down == "up" else \
+            -1 if verb in ("decrease", "lower") or up_down == "down" else 0
+        if prep == "to" or not direction:  # "volume 40", "set volume to 40", "raise volume to 70"
+            return {"name": "volume", "args": {"set": n}}
+        return {"name": "volume", "args": {"delta": direction * n}}  # "volume up 10", "lower volume by 20"
     if m := re.fullmatch(r"(?:turn )?(?:the )?volume (up|down)(?: a bit| a little)?", text):
         return {"name": "volume", "args": {"delta": 10 if m[1] == "up" else -10}}
     if m := re.fullmatch(r"(increase|raise|lower|decrease)(?: the)? volume(?: a bit| a little)?", text):

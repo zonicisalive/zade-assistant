@@ -213,7 +213,7 @@ def play_youtube(query, provider="youtube"):
 def play(query, mode="app", provider="spotify", device=""):
     if provider in YOUTUBE:
         return play_youtube(query, provider)
-    config.load_env()  # keys saved in the app since Zade started
+    config.load_env(override=True)  # keys saved (or replaced) in the app since Zade started
     cid, secret = os.environ.get("SPOTIFY_CLIENT_ID"), os.environ.get("SPOTIFY_CLIENT_SECRET")
     if not cid or not secret:
         if found := _find_keyless(query):

@@ -112,14 +112,14 @@ def is_quiet(cfg, now=None):
     return start <= minutes < end if start <= end else minutes >= start or minutes < end
 
 
-LIVE_SECTIONS = ("ui", "sound", "quiet", "safety", "persona", "history", "web", "music")  # settings that apply without a restart
 
 
 def apply_live(cfg, new):
-    for section in LIVE_SECTIONS:
+    for section in config.LIVE_SECTIONS:
         cfg[section] = new[section]
-    for key in ("personality", "keep_alive"):  # read on every request, so they can change live
-        cfg["llm"][key] = new["llm"][key]
+    for key in config.LIVE_KEYS:  # read on every request, so they can change live
+        table, name = key.split(".")
+        cfg[table][name] = new[table][name]
 
 
 # Actions that need a spoken yes at each safety level (shell and power always ask, in actions.py).
@@ -328,10 +328,13 @@ def single_instance(path):
 
 
 def read_inbox(path):
-    """Commands typed in the desktop app, one per line; the file is emptied once read."""
+    """Commands typed in the desktop app, one per line; the file is emptied once read. The app appends
+    under the same lock, so a command written while this runs lands before or after, never lost."""
     try:
-        lines = path.read_text().splitlines()
-        path.unlink()
+        with open(path, "r+") as f:
+            fcntl.flock(f, fcntl.LOCK_EX)
+            lines = f.read().splitlines()
+            f.truncate(0)
     except OSError:
         return []
     return [line.strip() for line in lines if line.strip()]
@@ -526,7 +529,7 @@ def main():
                 ui.show("idle")
             continue
         if source == "alert":
-            while ctx.alerts:
+            while ctx.alerts and not barge:  # cut in: the rest wait until the user is done
                 say("Reminder: " + ctx.alerts.pop(0))
             continue
         audio.cue(stream, cfg=cfg)

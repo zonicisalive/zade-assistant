@@ -52,7 +52,7 @@ ShellRoot {
     function makeStep(type, arg) {
         if (type === "open_app") return { name: "open_app", args: { name: arg } }
         if (type === "open_website") return { name: "open_website", args: { site: arg } }
-        if (type === "volume") return { name: "volume", args: { set: parseInt(arg) || 50 } }
+        if (type === "volume") { const v = parseInt(arg); return { name: "volume", args: { set: isNaN(v) ? 50 : v } } }
         if (type === "workspace") return { name: "window", args: { action: "workspace", workspace: arg } }
         if (type === "type_text") return { name: "type_text", args: { text: arg } }
         if (type === "media") return { name: "media", args: { cmd: arg } }
@@ -115,8 +115,7 @@ ShellRoot {
 
     function setSetting(key, value) {
         ctl(["set", key, String(value)], r => {
-            const live = ["ui.", "sound.", "quiet.", "safety.", "persona.", "history.", "web.", "music.", "llm.personality", "llm.keep_alive"].some(p => key.startsWith(p) && key !== "ui.enabled")
-            if (r && r.ok) { if (!live) needsRestart = status.running; ctl(["settings"], s => { if (s) settings = s }) }
+            if (r && r.ok) { if (!r.live) needsRestart = status.running; ctl(["settings"], s => { if (s) settings = s }) }
             else flash(r && r.error ? r.error : "Couldn't save that setting.")
         })
     }
