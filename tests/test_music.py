@@ -89,11 +89,11 @@ def test_connect_mode_plays_on_the_active_device(monkeypatch):
     def api(method, path, token, body=None):
         calls.append((method, path, token, json.dumps(body) if body else None))
         if path == "/me/player/devices":
-            return {"devices": [{"id": "pc", "name": "PC", "is_active": False},
-                                {"id": "ph", "name": "Phone", "is_active": True}]}
+            return {"devices": [{"id": "pc", "name": "PC", "type": "Computer", "is_active": False},
+                                {"id": "ph", "name": "Phone", "type": "Smartphone", "is_active": True}]}
 
     monkeypatch.setattr(music, "_api", api)
-    assert music.play("scars", "connect") == "Playing Scars by Juice WRLD on Phone."
+    assert music.play("scars", "connect", play_on="last_used") == "Playing Scars by Juice WRLD on Phone."
     assert calls[-1] == ("PUT", "/me/player/play?device_id=ph", "USER", '{"uris": ["spotify:track:9"]}')
     assert not [c for c in calls if c[0] == "app"]
 
@@ -123,12 +123,13 @@ def test_youtube_plays_the_first_result_in_the_browser(monkeypatch):
     assert "search" in music.play("x", provider="youtube")
 
 
-DEVICES = [{"id": "pc", "name": "archlinux", "type": "Computer", "is_active": True},
-           {"id": "echo", "name": "Main Echo Dot (3rd Gen)", "type": "Speaker", "is_active": False}]
+DEVICES = [{"id": "pc", "name": "archlinux", "type": "Computer", "is_active": False},
+           {"id": "echo", "name": "Main Echo Dot (3rd Gen)", "type": "Speaker", "is_active": True}]
 
 
 def connect(monkeypatch, calls, searched):
     keyed(monkeypatch, calls)
+    monkeypatch.setattr(music.socket, "gethostname", lambda: "archlinux")
     monkeypatch.setenv("SPOTIFY_REFRESH_TOKEN", "R")
     monkeypatch.setattr(music, "_post_token", lambda cid, secret, form: {"access_token": "USER"})
     monkeypatch.setattr(music, "_search", lambda q, t: searched.append(q) or {"tracks": {"items": [
@@ -189,3 +190,16 @@ def test_misheard_artist_searches_the_song_alone(monkeypatch):
     monkeypatch.setattr(music, "_search", lambda q, tok: searched.append(q) or {"tracks": {"items": results[q]}})
     assert music.play("business by amine am") == "Playing Business by Eminem."
     assert searched == ["business amine am", "business"]
+
+
+def test_connect_defaults_to_this_pc(monkeypatch):
+    calls, searched = [], []
+    connect(monkeypatch, calls, searched)
+    assert music.play("scars", "connect") == "Playing Scars by Juice WRLD on archlinux."
+    assert calls == [("PUT", "/me/player/play?device_id=pc")]
+    calls.clear()
+    monkeypatch.setattr(music.socket, "gethostname", lambda: "otherbox")  # this PC's Spotify isn't open
+    assert music.play("scars", "connect") == "Playing Scars by Juice WRLD."
+    assert calls == [("app", "spotify:track:9")]
+    calls.clear()
+    assert music.play("scars on echo dot", "connect").endswith("on Main Echo Dot (3rd Gen).")

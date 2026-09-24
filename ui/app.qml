@@ -881,6 +881,14 @@ ShellRoot {
                                                onClicked: root.setSetting("music.mode", modelData[0]) } } } }
                             Divider { visible: root.settings && root.settings.music.mode === "connect" }
                             Row_ { visible: root.settings && root.settings.music.mode === "connect"
+                                label: "Play on"; hint: "Where songs go when you don\u2019t name a device. \u201cplay \u2026 on echo dot\u201d always works."
+                                RowLayout { spacing: 8
+                                    Repeater { model: [["this_pc", "This PC"], ["last_used", "Last used device"]]
+                                        Chip { required property var modelData; text: modelData[1]
+                                               selected: root.settings && root.settings.music.play_on === modelData[0]
+                                               onClicked: root.setSetting("music.play_on", modelData[0]) } } } }
+                            Divider { visible: root.settings && root.settings.music.mode === "connect" }
+                            Row_ { visible: root.settings && root.settings.music.mode === "connect"
                                 label: root.keys.SPOTIFY_REFRESH_TOKEN ? "Spotify account: connected" : "Spotify account"
                                 hint: "First add http://127.0.0.1:8888/callback as a Redirect URI in your Spotify app\u2019s settings. Without a login, songs play in the app."
                                 Button { text: root.keys.SPOTIFY_REFRESH_TOKEN ? "Log in again" : "Log in"; accent: !root.keys.SPOTIFY_REFRESH_TOKEN

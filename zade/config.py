@@ -67,7 +67,8 @@ DEFAULTS = {
     "history": {"keep": 1000},
     # provider: spotify | youtube | youtube music ("play X on youtube" picks one for a single request).
     # mode (Spotify): app = play in the Spotify app | connect = Spotify Connect (Premium, needs login)
-    "music": {"provider": "spotify", "mode": "app"},  # requests kept for the app's History page
+    # play_on (Spotify Connect, no device named): this_pc | last_used (wherever Spotify played last)
+    "music": {"provider": "spotify", "mode": "app", "play_on": "this_pc"},  # requests kept for the app's History page
     "paths": {"data": "~/.local/share/zade"},
 }
 

@@ -12,6 +12,7 @@ import json
 import logging
 import os
 import re
+import socket
 import subprocess
 import time
 import urllib.parse
@@ -238,7 +239,7 @@ def play_youtube(query, provider="youtube"):
     return f"I opened {name} search for {query}."
 
 
-def play(query, mode="app", provider="spotify", device=""):
+def play(query, mode="app", provider="spotify", device="", play_on="this_pc"):
     if provider in YOUTUBE:
         return play_youtube(query, provider)
     config.load_env(override=True)  # keys saved (or replaced) in the app since Zade started
@@ -287,6 +288,13 @@ def play(query, mode="app", provider="spotify", device=""):
         if best and artist_score(m[2], best) >= 70:
             track = best
     name = f"{track['name']} by {track['artists'][0]['name']}"
+    if user and not chosen and mode == "connect" and play_on == "this_pc":
+        # No speaker named: this PC's own Spotify (a Connect device named after the computer), or the app
+        # below when it isn't open. Only "last used" follows Spotify to wherever it played last.
+        chosen = next((d for d in devices if d["type"].lower() == "computer"
+                       and d["name"].lower() == socket.gethostname().lower()), None)
+        if not chosen:
+            user = None
     if user and (mode == "connect" or chosen):  # a named speaker always plays there
         try:
             if where := _play_connect(track["uri"], user, devices, chosen):

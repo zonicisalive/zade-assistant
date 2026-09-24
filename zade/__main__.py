@@ -189,7 +189,8 @@ def dispatch(ctx, action, from_model=False):
             from . import music
 
             return music.play(a["query"], ctx.cfg["music"]["mode"],
-                              a.get("provider") or ctx.cfg["music"]["provider"], a.get("device", "")), True
+                              a.get("provider") or ctx.cfg["music"]["provider"], a.get("device", ""),
+                              ctx.cfg["music"]["play_on"]), True
         if name == "look_at_screen":
             from . import vision
 
