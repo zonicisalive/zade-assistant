@@ -43,6 +43,7 @@ class Ctx:
     history: list = field(default_factory=list)  # (time, user text, reply) for follow-ups
     turn: list = field(default_factory=list)  # actions done so far in the current request
     app_words: list = field(default_factory=list)  # installed app names, given to Whisper as hotwords
+    route: str = ""  # how the last request was handled (shortcut, pattern, llm, ...), for History
 
 
 def dictation_text(raw):
@@ -190,12 +191,14 @@ def handle(ctx, raw):
         ctx.say(reply)
         return reply
     ctx.turn = []
+    ctx.route = "llm"
     r = router.route(text, memory.shortcuts(ctx.conn), ctx.cfg["router"], ctx.predict, ctx.find_app)
     if r.kind == "none":  # nothing (or only noise) was said after the wake word: stay silent
         return ""
     if r.kind == "confirm" and not ctx.confirm(f"Did you mean {r.label}?"):
         r = router.Route("llm")
     if r.kind in ("run", "confirm"):
+        ctx.route = r.source
         results = [dispatch(ctx, a) for a in r.actions]
         ok = all(k for _, k in results)
         ctx.turn = [a for a, (_, k) in zip(r.actions, results) if k and a["name"] not in MEMORY_TOOLS]
@@ -227,9 +230,25 @@ def handle(ctx, raw):
     return reply
 
 
-def safe_handle(ctx, text):
+def read_inbox(path):
+    """Commands typed in the desktop app, one per line; the file is emptied once read."""
     try:
-        return handle(ctx, text)
+        lines = path.read_text().splitlines()
+        path.unlink()
+    except OSError:
+        return []
+    return [line.strip() for line in lines if line.strip()]
+
+
+def safe_handle(ctx, text):
+    t = time.perf_counter()
+    ctx.route = ""
+    try:
+        reply = handle(ctx, text)
+        if ctx.route or reply:  # silence and "stop" are not worth a history entry
+            memory.log_request(ctx.conn, text.strip(), reply, ctx.route or "none",
+                               (time.perf_counter() - t) * 1000)
+        return reply
     except Exception:  # one bad request must not kill the assistant
         log.exception("handling %r failed", text)
         try:
@@ -331,11 +350,16 @@ def main():
         atexit.register(overlay.terminate)
 
     last_check = [0.0]
+    typed = []  # commands typed in the desktop app
+    inbox = pathlib.Path(os.environ.get("XDG_RUNTIME_DIR", "/tmp")) / "zade" / "inbox"
 
     def poll():
-        if time.monotonic() - last_check[0] >= 1:  # check stored reminders once a second
+        if time.monotonic() - last_check[0] >= 0.5:  # reminders and typed commands, twice a second
             last_check[0] = time.monotonic()
             pump_reminders(ctx)
+            typed.extend(read_inbox(inbox))
+        if typed:
+            return "typed"
         if ctx.alerts:
             return "alert"
         if trigger.is_set():
@@ -372,6 +396,13 @@ def main():
                 actions._call(["wtype", "--", typed])
                 log.info("typed %r", typed)
             ui.show("idle")
+            continue
+        if source == "typed":  # from the app: no microphone, straight to handling
+            text = typed.pop(0)
+            ui.show("thinking", heard=text, reply="")
+            respond(text)
+            if not spoke_at:
+                ui.show("idle")
             continue
         if source == "alert":
             while ctx.alerts:

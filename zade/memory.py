@@ -30,6 +30,14 @@ CREATE TABLE IF NOT EXISTS reminders (
   message  TEXT    NOT NULL,
   repeat_s REAL                       -- NULL = once; 86400 = daily
 );
+CREATE TABLE IF NOT EXISTS requests (
+  id    INTEGER PRIMARY KEY,
+  ts    TEXT    NOT NULL DEFAULT (datetime('now', 'localtime')),
+  heard TEXT    NOT NULL,
+  reply TEXT    NOT NULL,
+  route TEXT    NOT NULL,
+  ms    INTEGER NOT NULL
+);
 CREATE TABLE IF NOT EXISTS facts (
   id      INTEGER PRIMARY KEY,
   fact    TEXT NOT NULL UNIQUE,
@@ -148,3 +156,52 @@ def cancel_reminder(conn, query):
     cur = conn.execute("DELETE FROM reminders WHERE message LIKE ?", (f"%{query.strip()}%",))
     conn.commit()
     return cur.rowcount
+
+
+def log_request(conn, heard, reply, route, ms):
+    conn.execute("INSERT INTO requests (heard, reply, route, ms) VALUES (?, ?, ?, ?)", (heard, reply, route, int(ms)))
+    conn.execute("DELETE FROM requests WHERE id <= (SELECT MAX(id) FROM requests) - 1000")  # keep the last 1000
+    conn.commit()
+
+
+def requests(conn, limit=200):
+    rows = conn.execute("SELECT ts, heard, reply, route, ms FROM requests ORDER BY id DESC LIMIT ?", (limit,))
+    return [dict(zip(("ts", "heard", "reply", "route", "ms"), r)) for r in rows]
+
+
+def fact_rows(conn):
+    return [{"id": i, "text": f} for i, f in conn.execute("SELECT id, fact FROM facts ORDER BY id DESC")]
+
+
+def delete_fact(conn, fact_id):
+    n = conn.execute("DELETE FROM facts WHERE id = ?", (fact_id,)).rowcount
+    conn.commit()
+    return n
+
+
+def shortcut_rows(conn):
+    rows = conn.execute("SELECT phrase, actions, uses FROM shortcuts ORDER BY uses DESC, phrase")
+    return [{"phrase": p, "actions": json.loads(a), "uses": u} for p, a, u in rows]
+
+
+def rename_shortcut(conn, old, new):
+    n = conn.execute("UPDATE shortcuts SET phrase = ? WHERE phrase = ?", (new, old)).rowcount
+    conn.commit()
+    return n
+
+
+def delete_shortcut(conn, phrase):
+    n = conn.execute("DELETE FROM shortcuts WHERE phrase = ?", (phrase,)).rowcount
+    conn.commit()
+    return n
+
+
+def reminder_rows(conn):
+    rows = conn.execute("SELECT id, due, message, repeat_s FROM reminders ORDER BY due")
+    return [{"id": i, "due": d, "message": m, "daily": bool(r)} for i, d, m, r in rows]
+
+
+def delete_reminder(conn, reminder_id):
+    n = conn.execute("DELETE FROM reminders WHERE id = ?", (reminder_id,)).rowcount
+    conn.commit()
+    return n

@@ -106,3 +106,12 @@ def test_prompt_states_local_timezone(monkeypatch):
     monkeypatch.setattr(providers, "chat", fake)
     brain.ask("hello", [], cfg(), None, vram=lambda: 8.0)
     assert "time zone" in got["system"] and "UTC" in got["system"]
+
+
+def test_personality_goes_into_the_prompt(monkeypatch):
+    got = {}
+    monkeypatch.setattr(providers, "chat", lambda name, system, *rest: got.update(system=system) or "ok")
+    c = cfg()
+    c["llm"]["personality"] = "Call the user boss."
+    brain.ask("hello", [], c, None, vram=lambda: 8.0)
+    assert "Call the user boss." in got["system"]

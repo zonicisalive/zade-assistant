@@ -239,3 +239,19 @@ def test_dictation_text_keeps_punctuation_and_drops_noise():
     assert z.dictation_text("  Hey, are you free at 5? ") == "Hey, are you free at 5? "
     assert z.dictation_text("Thank you.") == ""  # Whisper's noise phantom
     assert z.dictation_text("") == ""
+
+
+def test_every_request_is_logged_for_history():
+    said = []
+    ctx = make(said, ask=lambda *a, **k: "TCP is reliable.")
+    z.safe_handle(ctx, "what is tcp")
+    (h,) = memory.requests(ctx.conn)
+    assert (h["heard"], h["reply"], h["route"]) == ("what is tcp", "TCP is reliable.", "llm")
+
+
+def test_read_inbox_takes_typed_commands_once(tmp_path):
+    inbox = tmp_path / "inbox"
+    assert z.read_inbox(inbox) == []
+    inbox.write_text("what time is it\nopen firefox\n")
+    assert z.read_inbox(inbox) == ["what time is it", "open firefox"]
+    assert z.read_inbox(inbox) == []

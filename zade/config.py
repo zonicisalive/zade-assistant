@@ -21,6 +21,7 @@ DEFAULTS = {
         "keep_alive": "60s",
         "vram_min_free_gb": 4.0,
         "fallback": "cpu",
+        "personality": "",  # your own instructions for how Zade talks, added to its system prompt
     },
     "providers": {
         "anthropic": {
@@ -74,3 +75,26 @@ def load_env(path=None):
         key, sep, value = line.partition("=")
         if sep and not key.strip().startswith("#"):
             os.environ.setdefault(key.strip(), value.strip().strip("'\""))
+
+
+def _toml_value(v):
+    if isinstance(v, bool):
+        return "true" if v else "false"
+    if isinstance(v, (int, float)):
+        return repr(v)
+    if isinstance(v, list):
+        return "[" + ", ".join(_toml_value(x) for x in v) + "]"
+    return '"' + str(v).replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n") + '"'
+
+
+def dumps(data, prefix=""):
+    """TOML for Zade's nested settings (tables of strings, numbers, booleans and lists)."""
+    lines = [f"{k} = {_toml_value(v)}" for k, v in data.items() if not isinstance(v, dict)]
+    for k, v in data.items():
+        if isinstance(v, dict):
+            name = f"{prefix}{k}"
+            body = dumps(v, name + ".")
+            if any(not isinstance(x, dict) for x in v.values()):
+                lines.append(f"\n[{name}]")
+            lines.append(body)
+    return "\n".join(line for line in lines if line)
