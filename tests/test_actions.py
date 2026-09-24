@@ -1,3 +1,4 @@
+import json
 import pytest
 
 from zade import actions
@@ -287,3 +288,16 @@ def test_app_list_is_cached_until_an_app_is_installed(tmp_path):
     import os
     os.utime(tmp_path, ns=(before + 10**9, before + 10**9))  # folder changed
     assert "beta" in actions._apps([tmp_path])
+
+
+def test_open_app_focuses_a_running_window(monkeypatch):
+    calls = _calls(monkeypatch)
+    monkeypatch.setattr(actions, "find_app", lambda name: ("discord", "discord"))
+    windows = [{"id": 7, "app_id": "kitty"}, {"id": 9, "app_id": "discord"}]
+    monkeypatch.setattr(actions, "_output", lambda cmd: json.dumps(windows))
+    actions.run({"name": "open_app", "args": {"name": "discord"}}, lambda q: True)
+    assert calls == [["niri", "msg", "action", "focus-window", "--id", "9"]]
+    calls.clear()
+    windows.pop()  # Discord not open: launch it
+    actions.run({"name": "open_app", "args": {"name": "discord"}}, lambda q: True)
+    assert calls == [["gtk-launch", "discord"]]

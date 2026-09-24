@@ -1,5 +1,6 @@
 import configparser
 import datetime
+import json
 import pathlib
 import re
 import shlex
@@ -152,6 +153,21 @@ def _output(cmd):
     return subprocess.run(cmd, capture_output=True, text=True, timeout=5).stdout
 
 
+def _focus_open_window(app):
+    """Focus the app's window if it's already open (niri). Relaunching a running Electron app like
+    Discord takes seconds: it starts, finds the running copy, hands over and quits."""
+    desktop_id, exe = app
+    names = {desktop_id.lower(), desktop_id.lower().rsplit(".", 1)[-1], exe.lower()}
+    try:
+        windows = json.loads(_output(["niri", "msg", "-j", "windows"]) or "[]")
+    except (OSError, ValueError, subprocess.SubprocessError):
+        return False
+    w = next((w for w in windows if (w.get("app_id") or "").lower() in names), None)
+    if w:
+        _call(["niri", "msg", "action", "focus-window", "--id", str(w["id"])])
+    return bool(w)
+
+
 SITES = {
     "youtube": "https://www.youtube.com", "github": "https://github.com", "reddit": "https://www.reddit.com",
     "gmail": "https://mail.google.com", "google": "https://www.google.com", "chatgpt": "https://chatgpt.com",
@@ -295,7 +311,8 @@ def run(action, confirm):
             guess = closest_app(a["name"]) if name == "open_app" else None
             raise Failed(f"I couldn't find {a['name']}." + (f" Did you mean {guess}?" if guess else ""))
         if name == "open_app":
-            _spawn(["gtk-launch", app[0]])
+            if not _focus_open_window(app):
+                _spawn(["gtk-launch", app[0]])
         elif app[1] in PROTECTED or any(p in app[1].lower() for p in ("niri", "quickshell", "portal", "pipewire")):
             raise Failed(f"I won't close {a['name']}, it keeps your desktop running.")
         elif app[1] == "steam":  # a Steam game's launcher is Steam itself; pkill would close all of Steam
