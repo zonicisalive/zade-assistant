@@ -16,6 +16,10 @@ Scope {
     property string heard: ""
     property string reply: ""
     property real level: 0
+    property string emotion: "neutral"
+    property var persona: ({ enabled: true, shape: "round", eyes: "round", mouth: "smile", color: "", blush: true })
+    readonly property bool hasFace: persona.enabled !== false
+    readonly property real faceSize: expanded ? 40 : 30
     property bool shown: false
     // Style from Zade's settings (sent with every state update, so changes apply live).
     property var style: ({ position: "top", size: "medium", accent: "", linger_s: 0.5, reveal_cps: 18, show_heard: true })
@@ -42,6 +46,8 @@ Scope {
         reply = newReply
         level = s.level || 0
         if (s.style) style = s.style
+        if (s.persona && s.persona.shape) persona = s.persona
+        emotion = s.emotion || "neutral"
         if (mode !== "speaking") revealed = reply.length   // only the spoken part types itself out
         if (mode === "idle") { hideTimer.interval = 120; hideTimer.restart() }
         else if (mode === "done") { hideTimer.interval = Math.max(100, style.linger_s * 1000); hideTimer.restart() }
@@ -118,7 +124,7 @@ Scope {
             y: root.fromTop ? (root.shown ? 8 : -height - 12) : (root.shown ? parent.height - height - 8 : parent.height + 12)
             transformOrigin: root.fromTop ? (root.side === "left" ? Item.TopLeft : root.side === "right" ? Item.TopRight : Item.Top)
                                           : (root.side === "left" ? Item.BottomLeft : root.side === "right" ? Item.BottomRight : Item.Bottom)
-            width: root.expanded ? Math.min(560, Math.max(300, textCol.implicitWidth + 84)) : 128
+            width: root.expanded ? Math.min(570, Math.max(300, textCol.implicitWidth + textCol.x + 26)) : (root.hasFace ? 136 : 128)
             height: root.expanded ? Math.max(62, textCol.implicitHeight + 34) : 44
             radius: root.expanded ? 26 : 22
             color: Qt.alpha(root.c.surface_container_low, 0.96)
@@ -135,9 +141,26 @@ Scope {
             Behavior on scale { NumberAnimation { duration: 320; easing.type: Easing.OutBack } }
             Behavior on y { NumberAnimation { duration: 380; easing.type: Easing.OutBack; easing.overshoot: 0.9 } }
 
+            // The character (when enabled) replaces the orb.
+            Face {
+                visible: root.hasFace
+                size: root.faceSize
+                x: 14
+                y: root.expanded ? 14 : (island.height - size) / 2
+                Behavior on size { NumberAnimation { duration: 260; easing.type: Easing.OutCubic } }
+                Behavior on y { NumberAnimation { duration: 260; easing.type: Easing.OutCubic } }
+                mode: root.mode
+                emotion: root.emotion
+                level: root.level
+                look: root.persona
+                accent: root.style.accent ? root.style.accent : root.c.primary
+                ink: Qt.darker(root.persona.color ? root.persona.color : (root.style.accent ? root.style.accent : root.c.primary), 3.4)
+            }
+
             // The orb: breathes, swells with your voice, orbits while thinking, ripples while speaking.
             Item {
                 id: orb
+                visible: !root.hasFace
                 width: 22; height: 22
                 x: root.expanded ? 20 : 16
                 y: root.expanded ? 20 : (island.height - height) / 2
@@ -206,7 +229,7 @@ Scope {
             // Voice ribbon in the pill: your mic level while listening, a slow wave while thinking.
             Row {
                 anchors.verticalCenter: parent.verticalCenter
-                x: 50
+                x: root.hasFace ? 56 : 50
                 spacing: 4
                 opacity: root.expanded ? 0 : 1
                 visible: opacity > 0
@@ -236,7 +259,7 @@ Scope {
             // What you said (quiet context) and Zade's reply.
             Column {
                 id: textCol
-                x: 58
+                x: root.hasFace ? 68 : 58
                 y: 17
                 spacing: 4
                 opacity: root.expanded ? 1 : 0

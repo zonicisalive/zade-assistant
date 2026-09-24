@@ -112,3 +112,12 @@ def test_do_not_disturb_by_voice(monkeypatch):
     assert z.dispatch(ctx, {"name": "dnd", "args": {"on": True}}) == (
         "Do not disturb is on. Hold Win to talk to me.", True)
     assert ctx.cfg["quiet"]["dnd"] is True and saved == [("quiet.dnd", "true")]
+
+
+def test_personality_and_character_apply_live():
+    c = cfg()
+    new = cfg()
+    new["llm"]["personality"] = "Be playful."
+    new["persona"]["name"] = "Nova"
+    z.apply_live(c, new)
+    assert c["llm"]["personality"] == "Be playful." and c["persona"]["name"] == "Nova"

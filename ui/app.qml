@@ -27,6 +27,8 @@ ShellRoot {
     property var history: []
     property var voices: []
     property bool needsRestart: false
+    property string previewEmotion: "happy"   // character editor preview
+    property string previewMode: "idle"
     property var draftSteps: []          // shortcut builder
     property string draftType: "open_app"
     readonly property var stepTypes: [
@@ -96,7 +98,7 @@ ShellRoot {
 
     function setSetting(key, value) {
         ctl(["set", key, String(value)], r => {
-            const live = ["ui.", "sound.", "quiet.", "safety."].some(p => key.startsWith(p) && key !== "ui.enabled")
+            const live = ["ui.", "sound.", "quiet.", "safety.", "persona.", "llm.personality"].some(p => key.startsWith(p) && key !== "ui.enabled")
             if (r && r.ok) { if (!live) needsRestart = status.running; ctl(["settings"], s => { if (s) settings = s }) }
             else flash(r && r.error ? r.error : "Couldn't save that setting.")
         })
@@ -303,7 +305,7 @@ ShellRoot {
                     }
                     Repeater {
                         model: [
-                            { id: "home", name: "Home" }, { id: "personalize", name: "Personalize" },
+                            { id: "home", name: "Home" }, { id: "character", name: "Character" }, { id: "personalize", name: "Voice" },
                             { id: "settings", name: "Settings" }, { id: "memory", name: "Memory" },
                             { id: "history", name: "History" }
                         ]
@@ -434,12 +436,137 @@ ShellRoot {
                         }
                     }
 
+                    // ── Character
+                    ColumnLayout {
+                        visible: root.page === "character" && root.settings !== null
+                        Layout.fillWidth: true
+                        spacing: 16
+                        Label { text: "Character"; font.pixelSize: 26; font.weight: Font.Medium }
+
+                        // Live preview: try each expression
+                        Rectangle {
+                            Layout.fillWidth: true
+                            implicitHeight: 230; radius: 16
+                            color: root.c.surface_container
+                            border.width: 1; border.color: Qt.alpha(root.c.outline_variant, 0.4)
+                            RowLayout {
+                                anchors.fill: parent; anchors.margins: 22
+                                spacing: 28
+                                Face {
+                                    id: previewFace
+                                    size: 150
+                                    Layout.alignment: Qt.AlignVCenter
+                                    mode: root.previewMode
+                                    emotion: root.previewEmotion
+                                    level: root.previewMode === "listening" ? 0.5 + 0.4 * Math.sin(root.phase * 3) : 0
+                                    look: root.settings ? root.settings.persona : ({})
+                                    accent: root.settings && root.settings.ui.accent ? root.settings.ui.accent : root.c.primary
+                                    ink: Qt.darker(root.settings && root.settings.persona.color ? root.settings.persona.color
+                                                   : (root.settings && root.settings.ui.accent ? root.settings.ui.accent : root.c.primary), 3.4)
+                                }
+                                ColumnLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 10
+                                    Label { text: root.settings ? root.settings.persona.name : ""; font.pixelSize: 22; font.weight: Font.Medium }
+                                    Muted { text: "Try an expression" }
+                                    Flow {
+                                        Layout.fillWidth: true; spacing: 8
+                                        Repeater {
+                                            model: ["neutral", "happy", "excited", "sad", "confused", "surprised", "annoyed", "curious"]
+                                            Chip { required property string modelData
+                                                   text: modelData.charAt(0).toUpperCase() + modelData.slice(1)
+                                                   selected: root.previewMode === "idle" && root.previewEmotion === modelData
+                                                   onClicked: { root.previewMode = "idle"; root.previewEmotion = modelData } }
+                                        }
+                                        Repeater {
+                                            model: [["listening", "Listening"], ["thinking", "Thinking"], ["speaking", "Talking"]]
+                                            Chip { required property var modelData
+                                                   text: modelData[1]
+                                                   selected: root.previewMode === modelData[0]
+                                                   onClicked: { root.previewMode = modelData[0]; root.previewEmotion = "neutral" } }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        Group {
+                            Row_ { label: "Show the character"; hint: "Off shows the simple orb instead."
+                                Switch { checked: root.settings ? root.settings.persona.enabled : true; onToggled: v => root.setSetting("persona.enabled", v) } }
+                            Divider {}
+                            Row_ { label: "Name"; hint: "What it calls itself."
+                                Field { Layout.preferredWidth: 200; text: root.settings ? root.settings.persona.name : ""
+                                        onEdited: if (text.trim()) root.setSetting("persona.name", text.trim()) } }
+                            Divider {}
+                            Row_ { label: "Shape"
+                                RowLayout { spacing: 8
+                                    Repeater { model: [["round", "Round"], ["squircle", "Squircle"], ["blob", "Blob"]]
+                                        Chip { required property var modelData; text: modelData[1]
+                                               selected: root.settings && root.settings.persona.shape === modelData[0]
+                                               onClicked: root.setSetting("persona.shape", modelData[0]) } } } }
+                            Divider {}
+                            Row_ { label: "Eyes"
+                                RowLayout { spacing: 8
+                                    Repeater { model: [["round", "Round"], ["oval", "Oval"], ["anime", "Anime"], ["line", "Sleepy"]]
+                                        Chip { required property var modelData; text: modelData[1]
+                                               selected: root.settings && root.settings.persona.eyes === modelData[0]
+                                               onClicked: root.setSetting("persona.eyes", modelData[0]) } } } }
+                            Divider {}
+                            Row_ { label: "Mouth"
+                                RowLayout { spacing: 8
+                                    Repeater { model: [["smile", "Smile"], ["cat", "Cat"], ["small", "Small"]]
+                                        Chip { required property var modelData; text: modelData[1]
+                                               selected: root.settings && root.settings.persona.mouth === modelData[0]
+                                               onClicked: root.setSetting("persona.mouth", modelData[0]) } } } }
+                            Divider {}
+                            Row_ { label: "Colour"; hint: "Accent follows the overlay colour."
+                                RowLayout { spacing: 8
+                                    Chip { text: "Accent"; selected: root.settings && !root.settings.persona.color
+                                           onClicked: root.setSetting("persona.color", "") }
+                                    Repeater { model: ["#a5d0bb", "#ff9f43", "#ff6b81", "#a29bfe", "#48dbfb", "#feca57", "#dfe6e9"]
+                                        Rectangle { required property string modelData
+                                            implicitWidth: 26; implicitHeight: 26; radius: 13; color: modelData
+                                            border.width: root.settings && root.settings.persona.color === modelData ? 3 : 0
+                                            border.color: root.c.on_surface
+                                            MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor
+                                                        onClicked: root.setSetting("persona.color", parent.modelData) } } } } }
+                            Divider {}
+                            Row_ { label: "Blush"; hint: "Rosy cheeks when happy or excited."
+                                Switch { checked: root.settings ? root.settings.persona.blush : true; onToggled: v => root.setSetting("persona.blush", v) } }
+                        }
+
+                        Group {
+                            Row_ { label: "Personality"; hint: "How your character talks. For example: “Be playful and call me boss.” or “Answer in Hinglish.”" }
+                            Rectangle {
+                                Layout.fillWidth: true; Layout.bottomMargin: 12
+                                implicitHeight: 110; radius: 10
+                                color: root.c.surface_container_low
+                                border.width: 1
+                                border.color: personality.activeFocus ? root.c.primary : Qt.alpha(root.c.outline_variant, 0.7)
+                                TextEdit {
+                                    id: personality
+                                    anchors.fill: parent; anchors.margins: 12
+                                    text: root.settings ? root.settings.llm.personality : ""
+                                    color: root.c.on_surface
+                                    font.family: "Readex Pro"; font.pixelSize: 14
+                                    wrapMode: TextEdit.Wrap
+                                    selectionColor: Qt.alpha(root.c.primary, 0.4)
+                                }
+                            }
+                            RowLayout {
+                                Layout.bottomMargin: 10
+                                Button { text: "Save personality"; accent: true
+                                         onClicked: { root.setSetting("llm.personality", personality.text); root.flash("Saved.") } }
+                            }
+                        }
+                    }
+
                     // ── Personalize
                     ColumnLayout {
                         visible: root.page === "personalize" && root.settings !== null
                         Layout.fillWidth: true
                         spacing: 16
-                        Label { text: "Personalize"; font.pixelSize: 26; font.weight: Font.Medium }
+                        Label { text: "Voice"; font.pixelSize: 26; font.weight: Font.Medium }
                         Group {
                             Row_ { label: "Voice"; hint: "a = American, b = British; f = female, m = male." }
                             Flow {
@@ -473,30 +600,6 @@ ShellRoot {
                                         }
                                     }
                                 }
-                            }
-                        }
-                        Group {
-                            Row_ { label: "Personality"; hint: "How Zade should talk. For example: “Be playful and call me boss.” or “Answer in Hinglish.”" }
-                            Rectangle {
-                                Layout.fillWidth: true; Layout.bottomMargin: 12
-                                implicitHeight: 110; radius: 10
-                                color: root.c.surface_container_low
-                                border.width: 1
-                                border.color: personality.activeFocus ? root.c.primary : Qt.alpha(root.c.outline_variant, 0.7)
-                                TextEdit {
-                                    id: personality
-                                    anchors.fill: parent; anchors.margins: 12
-                                    text: root.settings ? root.settings.llm.personality : ""
-                                    color: root.c.on_surface
-                                    font.family: "Readex Pro"; font.pixelSize: 14
-                                    wrapMode: TextEdit.Wrap
-                                    selectionColor: Qt.alpha(root.c.primary, 0.4)
-                                }
-                            }
-                            RowLayout {
-                                Layout.bottomMargin: 10
-                                Button { text: "Save personality"; accent: true
-                                         onClicked: { root.setSetting("llm.personality", personality.text); root.flash("Saved.") } }
                             }
                         }
                     }
