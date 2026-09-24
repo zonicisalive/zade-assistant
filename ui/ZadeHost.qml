@@ -3,9 +3,8 @@
 // Hook, inside the shell's ShellRoot:
 //     LazyLoader { active: true; source: "file:///home/you/Zade/ui/ZadeHost.qml" }
 //
-// Shells often run with hot reload off, so they would keep an old copy of the overlay forever.
-// This watches Zade's own UI files and reloads the shell only when one of them changes
-// (i.e. when Zade is updated), never during normal use.
+// It never reloads the shell by itself: an automatic reload restarted the whole desktop shell
+// mid-use. After updating Zade's overlay code, restart the shell once to load the new version.
 import QtQuick
 import Quickshell
 import Quickshell.Io
@@ -18,19 +17,5 @@ Scope {
         active: true
         source: host.dir + "Overlay.qml"
         onItemChanged: if (item) console.info("[Zade] overlay loaded")
-    }
-
-    FileView { path: host.dir + "Overlay.qml"; watchChanges: true; onFileChanged: reloadLater.restart() }
-    FileView { path: host.dir + "Face.qml"; watchChanges: true; onFileChanged: reloadLater.restart() }
-    FileView { path: host.dir + "ZadeHost.qml"; watchChanges: true; onFileChanged: reloadLater.restart() }
-
-    // Debounced: an update touches several files at once.
-    Timer {
-        id: reloadLater
-        interval: 1000
-        onTriggered: {
-            console.info("[Zade] overlay files changed, reloading the shell")
-            Quickshell.reload(false)
-        }
     }
 }
