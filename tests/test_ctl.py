@@ -85,3 +85,19 @@ def test_status_reports_ready_only_for_the_running_zade(env, monkeypatch):
     (env / "zade.ready").write_text("1111")         # left over from an older Zade
     assert run("status")["ready"] is False
     held.close()
+
+
+def test_api_keys_are_saved_privately_and_never_read_back(env, monkeypatch):
+    monkeypatch.setattr(ctl, "ENV", env / "env")
+    (env / "env").write_text("# keys\nOTHER=keep\n")
+    assert run("key-set", "SPOTIFY_CLIENT_ID", "abc123") == {"ok": True}
+    assert run("key-set", "SPOTIFY_CLIENT_ID", "new456") == {"ok": True}
+    assert run("key-set", "EVIL", "x")["ok"] is False
+    keys = run("keys")
+    assert keys["SPOTIFY_CLIENT_ID"] is True and keys["ANTHROPIC_API_KEY"] is False
+    assert "new456" not in json.dumps(keys)
+    text = (env / "env").read_text()
+    assert "OTHER=keep" in text and "SPOTIFY_CLIENT_ID=new456" in text and "abc123" not in text
+    assert (env / "env").stat().st_mode & 0o777 == 0o600
+    assert run("key-set", "SPOTIFY_CLIENT_ID", "") == {"ok": True}
+    assert run("keys")["SPOTIFY_CLIENT_ID"] is False

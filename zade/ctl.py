@@ -15,6 +15,8 @@ import tomllib
 from . import config, memory
 
 CONFIG = pathlib.Path("~/.config/zade/config.toml").expanduser()
+ENV = pathlib.Path("~/.config/zade/env").expanduser()   # API keys, readable only by you
+KEYS = ["SPOTIFY_CLIENT_ID", "SPOTIFY_CLIENT_SECRET", "ANTHROPIC_API_KEY", "OPENAI_API_KEY"]
 DATA = pathlib.Path(config.DEFAULTS["paths"]["data"]).expanduser()
 DB = DATA / "zade.db"
 LOCK = DATA / "zade.lock"
@@ -56,6 +58,30 @@ def set_setting(key, text):
     node[name] = _coerce(default[name], text)
     CONFIG.parent.mkdir(parents=True, exist_ok=True)
     CONFIG.write_text("# Written by the Zade app; edit freely.\n" + config.dumps(user) + "\n")
+    return {"ok": True}
+
+
+def _env_lines():
+    return ENV.read_text().splitlines() if ENV.exists() else []
+
+
+def keys():
+    """Which API keys are saved (never the values)."""
+    saved = {line.partition("=")[0].strip() for line in _env_lines() if "=" in line}
+    return {k: k in saved for k in KEYS}
+
+
+def set_key(name, value):
+    if name not in KEYS:
+        return {"ok": False, "error": f"unknown key {name}"}
+    lines = [line for line in _env_lines() if line.partition("=")[0].strip() != name]
+    if value.strip():
+        lines.append(f"{name}={value.strip()}")
+    ENV.parent.mkdir(parents=True, exist_ok=True)
+    fd = os.open(ENV, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w") as f:
+        f.write("\n".join(lines) + "\n")
+    os.chmod(ENV, 0o600)
     return {"ok": True}
 
 
@@ -158,6 +184,10 @@ def run(argv):
         return config.load(CONFIG)
     if cmd == "set":
         return set_setting(args[0], args[1])
+    if cmd == "keys":
+        return keys()
+    if cmd == "key-set":
+        return set_key(args[0], args[1])
     if cmd == "voices":
         return KOKORO_VOICES
     if cmd == "preview":

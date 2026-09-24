@@ -19,6 +19,8 @@ ShellRoot {
     })
 
     property string page: "home"
+    property string settingsTab: "listening"
+    property var keys: ({})              // which API keys are saved (never their values)
     property var status: ({ running: false, autostart: false })
     property var settings: null
     property var facts: []
@@ -94,6 +96,14 @@ ShellRoot {
         ctl(["shortcuts"], r => { if (r) shortcuts = r })
         ctl(["reminders"], r => { if (r) reminders = r })
         ctl(["history"], r => { if (r) history = r })
+        ctl(["keys"], r => { if (r) keys = r })
+    }
+    function setKey(name, value) {
+        ctl(["key-set", name, value], r => {
+            if (r && r.ok) { needsRestart = status.running; flash(value ? "Key saved." : "Key removed.")
+                             ctl(["keys"], k => { if (k) keys = k }) }
+            else flash("Couldn't save that key.")
+        })
     }
 
     function setSetting(key, value) {
@@ -175,6 +185,7 @@ ShellRoot {
     component Field: Rectangle {
         id: field
         property alias text: input.text
+        property alias echoMode: input.echoMode
         property string placeholder: ""
         signal accepted
         signal edited
@@ -201,6 +212,21 @@ ShellRoot {
             color: Qt.alpha(root.c.on_surface_variant, 0.6)
             font: input.font
         }
+    }
+
+    // An API key: shows only whether one is saved; typing a new one and pressing Enter replaces it.
+    component KeyField: RowLayout {
+        property string name: ""
+        readonly property bool saved: !!root.keys[name]
+        spacing: 8
+        Field {
+            id: keyInput
+            Layout.preferredWidth: 260
+            placeholder: parent.saved ? "Saved ••••  (paste to replace)" : "Paste key, press Enter"
+            echoMode: TextInput.Password
+            onAccepted: { if (text.trim()) { root.setKey(parent.name, text.trim()); text = "" } }
+        }
+        Button { text: "Remove"; danger: true; visible: parent.saved; onClicked: root.setKey(parent.name, "") }
     }
 
     component Switch: Rectangle {
@@ -330,7 +356,8 @@ ShellRoot {
                     Repeater {
                         model: [
                             { id: "home", name: "Home" }, { id: "character", name: "Character" }, { id: "personalize", name: "Voice" },
-                            { id: "settings", name: "Settings" }, { id: "memory", name: "Memory" },
+                            { id: "settings", name: "Settings" }, { id: "integrations", name: "Integrations" },
+                            { id: "memory", name: "Memory" },
                             { id: "history", name: "History" }
                         ]
                         Rectangle {
@@ -645,9 +672,21 @@ ShellRoot {
                         Layout.fillWidth: true
                         spacing: 16
                         Label { text: "Settings"; font.pixelSize: 26; font.weight: Font.Medium }
+                        RowLayout { spacing: 8
+                            Repeater { model: [["listening", "Listening"], ["brain", "Brain"], ["overlay", "Overlay"],
+                                               ["sounds", "Sounds"], ["quiet", "Quiet & safety"]]
+                                Chip { required property var modelData; text: modelData[1]
+                                       selected: root.settingsTab === modelData[0]
+                                       onClicked: root.settingsTab = modelData[0] } } }
 
-                        Muted { text: "Listening" }
-                        Group {
+                        Group { visible: root.settingsTab === "listening"
+                            Row_ { label: "Speech recognition"; hint: "Small hears accents better; Base answers about 0.4 s faster."
+                                RowLayout { spacing: 8
+                                    Repeater { model: [["base.en", "Base"], ["small.en", "Small"]]
+                                        Chip { required property var modelData; text: modelData[1]
+                                               selected: root.settings && root.settings.stt.model === modelData[0]
+                                               onClicked: root.setSetting("stt.model", modelData[0]) } } } }
+                            Divider {}
                             Row_ { label: "Wake word sensitivity"; hint: "Lower hears you more easily; higher avoids false wakes."
                                 RowLayout { spacing: 8
                                     Repeater { model: [0.35, 0.5, 0.65]
@@ -674,9 +713,8 @@ ShellRoot {
                                         onEdited: root.setSetting("stt.hotwords", text) } }
                         }
 
-                        Muted { text: "Brain"; Layout.topMargin: 8 }
-                        Group {
-                            Row_ { label: "Model provider"; hint: "Local runs on your PC; cloud needs an API key in ~/.config/zade/env."
+                        Group { visible: root.settingsTab === "brain"
+                            Row_ { label: "Model provider"; hint: "Local runs on your PC; cloud needs an API key (see Integrations)."
                                 RowLayout { spacing: 8
                                     Repeater { model: [{ id: "ollama", name: "Local" }, { id: "anthropic", name: "Claude" }, { id: "openai", name: "OpenAI-compatible" }]
                                         Chip { required property var modelData
@@ -688,17 +726,12 @@ ShellRoot {
                                 Field { Layout.preferredWidth: 220; text: root.settings ? root.settings.llm.model : ""
                                         onEdited: root.setSetting("llm.model", text) } }
                             Divider {}
-                            Row_ { label: "Claude model"
-                                Field { Layout.preferredWidth: 220; text: root.settings ? root.settings.providers.anthropic.model : ""
-                                        onEdited: root.setSetting("providers.anthropic.model", text) } }
-                            Divider {}
                             Row_ { label: "Vision model"; hint: "Used for “what's on my screen”."
                                 Field { Layout.preferredWidth: 220; text: root.settings ? root.settings.vision.model : ""
                                         onEdited: root.setSetting("vision.model", text) } }
                         }
 
-                        Muted { text: "Overlay"; Layout.topMargin: 8 }
-                        Group {
+                        Group { visible: root.settingsTab === "overlay"
                             Row_ { label: "Show the overlay"; hint: "The island that shows what Zade hears and says. Style changes apply instantly."
                                 Switch { checked: root.settings ? root.settings.ui.enabled : false; onToggled: v => root.setSetting("ui.enabled", v) } }
                             Divider {}
@@ -747,8 +780,7 @@ ShellRoot {
                                 Switch { checked: root.settings ? root.settings.ui.show_heard : true; onToggled: v => root.setSetting("ui.show_heard", v) } }
                         }
 
-                        Muted { text: "Sounds"; Layout.topMargin: 8 }
-                        Group {
+                        Group { visible: root.settingsTab === "sounds"
                             Row_ { label: "Listening sound"
                                 RowLayout { spacing: 8
                                     Repeater { model: [["soft", "Soft"], ["classic", "Classic"], ["none", "None"]]
@@ -768,8 +800,7 @@ ShellRoot {
                                         onEdited: root.setSetting("sound.wake_reply", text) } }
                         }
 
-                        Muted { text: "Quiet hours"; Layout.topMargin: 8 }
-                        Group {
+                        Group { visible: root.settingsTab === "quiet"
                             Row_ { label: "Quiet hours"; hint: "Ignore \u201chey zade\u201d and hold reminders during this time. Holding Win still works."
                                 Switch { checked: root.settings ? root.settings.quiet.enabled : false; onToggled: v => root.setSetting("quiet.enabled", v) } }
                             Divider {}
@@ -782,8 +813,7 @@ ShellRoot {
                                         onEdited: root.setSetting("quiet.end", text) } }
                         }
 
-                        Muted { text: "Safety"; Layout.topMargin: 8 }
-                        Group {
+                        Group { visible: root.settingsTab === "quiet"
                             Row_ { label: "Ask before"; hint: "Which actions need your spoken \u201cyes\u201d first."
                                 RowLayout { spacing: 8
                                     Repeater { model: [["commands", "Commands"], ["risky", "Risky actions"], ["everything", "Everything"]]
@@ -794,6 +824,60 @@ ShellRoot {
                                     text: root.settings ? ({ commands: "Shell commands and power (shut down, restart) always ask.",
                                                              risky: "Also closing apps and windows, typing and copying.",
                                                              everything: "Anything that changes something: opening apps, volume, music, windows." })[root.settings.safety.confirm] : "" } }
+                    }
+
+                    // ── Integrations
+                    ColumnLayout {
+                        visible: root.page === "integrations" && root.settings !== null
+                        Layout.fillWidth: true
+                        spacing: 16
+                        Label { text: "Integrations"; font.pixelSize: 26; font.weight: Font.Medium }
+                        Muted { text: "Keys are stored only in ~/.config/zade/env, readable by you alone. Zade reads them when it starts."
+                                Layout.fillWidth: true }
+
+                        Muted { text: "Spotify"; Layout.topMargin: 8 }
+                        Group {
+                            Row_ { label: "Client ID"; hint: "Free: create an app at developer.spotify.com/dashboard. Lets \u201cplay \u2026\u201d find the exact song."
+                                KeyField { name: "SPOTIFY_CLIENT_ID" } }
+                            Divider {}
+                            Row_ { label: "Client secret"
+                                KeyField { name: "SPOTIFY_CLIENT_SECRET" } }
+                        }
+
+                        Muted { text: "Claude"; Layout.topMargin: 8 }
+                        Group {
+                            Row_ { label: "API key"; hint: "From console.anthropic.com. Used when the model provider is Claude."
+                                KeyField { name: "ANTHROPIC_API_KEY" } }
+                            Divider {}
+                            Row_ { label: "Model"
+                                Field { Layout.preferredWidth: 220; text: root.settings ? root.settings.providers.anthropic.model : ""
+                                        onEdited: root.setSetting("providers.anthropic.model", text) } }
+                        }
+
+                        Muted { text: "OpenAI-compatible"; Layout.topMargin: 8 }
+                        Group {
+                            Row_ { label: "API key"; hint: "OpenAI, OpenRouter, Groq, Gemini\u2019s OpenAI endpoint and similar."
+                                KeyField { name: "OPENAI_API_KEY" } }
+                            Divider {}
+                            Row_ { label: "Server URL"
+                                Field { Layout.preferredWidth: 300; text: root.settings ? root.settings.providers.openai.base_url : ""
+                                        onEdited: root.setSetting("providers.openai.base_url", text) } }
+                            Divider {}
+                            Row_ { label: "Model"
+                                Field { Layout.preferredWidth: 220; text: root.settings ? root.settings.providers.openai.model : ""
+                                        onEdited: root.setSetting("providers.openai.model", text) } }
+                        }
+
+                        Muted { text: "Local services"; Layout.topMargin: 8 }
+                        Group {
+                            Row_ { label: "Ollama"; hint: "Where the local model runs."
+                                Field { Layout.preferredWidth: 300; text: root.settings ? root.settings.llm.host : ""
+                                        onEdited: root.setSetting("llm.host", text) } }
+                            Divider {}
+                            Row_ { label: "Web search (SearXNG)"; hint: "For questions that need the web. Needs the json format enabled."
+                                Field { Layout.preferredWidth: 300; text: root.settings ? root.settings.web.searxng_url : ""
+                                        onEdited: root.setSetting("web.searxng_url", text) } }
+                        }
                     }
 
                     // ── Memory
