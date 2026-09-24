@@ -39,7 +39,7 @@ def test_play_finds_track_and_plays_it_in_spotify(monkeypatch):
     monkeypatch.setattr(music, "_search", search)
     monkeypatch.setattr(music, "_open", lambda uri: calls.append(("open", uri)))
     assert music.play("killshot by eminem") == "Playing Killshot by Eminem."
-    assert calls == [("search", "killshot by eminem", "TOKEN"), ("open", "spotify:track:123")]
+    assert calls == [("search", "killshot eminem", "TOKEN"), ("open", "spotify:track:123")]
 
 
 def test_without_keys_opens_spotify_search(monkeypatch):
@@ -152,3 +152,11 @@ def test_on_in_a_song_title_is_not_a_device(monkeypatch):
     assert searched == ["dancing on my own"]
     with pytest.raises(music.Failed, match="can't find kitchen"):
         music.play("scars", "connect", device="kitchen")
+
+
+def test_pick_track_prefers_the_named_song():
+    t = lambda name, artist: {"name": name, "artists": [{"name": artist}]}
+    items = [t("No Good", "Juice WRLD"), t("Scars", "Juice WRLD"), t("Scars", "Papa Roach")]
+    assert music.pick_track("scars by juice wrld", items)["name"] == "Scars"
+    assert music.pick_track("scars by juice wrld", items)["artists"][0]["name"] == "Juice WRLD"
+    assert music.pick_track("scars", items)["name"] == "No Good"  # no "by": trust Spotify's order

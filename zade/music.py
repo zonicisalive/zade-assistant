@@ -36,7 +36,7 @@ def _token(cid, secret):
 
 
 def _search(query, token):
-    url = "https://api.spotify.com/v1/search?" + urllib.parse.urlencode({"q": query, "type": "track", "limit": 1})
+    url = "https://api.spotify.com/v1/search?" + urllib.parse.urlencode({"q": query, "type": "track", "limit": 10})
     req = urllib.request.Request(url, headers={"Authorization": f"Bearer {token}"})
     with urllib.request.urlopen(req, timeout=8) as r:
         return json.load(r)
@@ -58,6 +58,23 @@ def _find_keyless(query):
     title = re.sub(r"\s*\|\s*Spotify\s*$", "", html.unescape(m[2]))
     title = re.sub(r"\s+-\s+(?:single|song|album)(?: and lyrics)? by\s+", " by ", title, flags=re.I)
     return f"spotify:track:{m[1]}", title
+
+
+def pick_track(query, items):
+    """The result that best matches "song by artist" (Spotify's own top hit is often another song
+    by the same artist); for a bare query, Spotify's order."""
+    from rapidfuzz import fuzz
+
+    m = re.fullmatch(r"(.+) by (.+)", query.lower())
+    if not m or not items:
+        return items[0] if items else None
+    song, artist = m[1], m[2]
+
+    def score(t):
+        artists = " ".join(a["name"] for a in t["artists"]).lower()
+        return fuzz.ratio(song, t["name"].lower()) + (40 if fuzz.partial_ratio(artist, artists) >= 70 else 0)
+
+    return max(items, key=score)  # max keeps Spotify's order on ties
 
 
 def _running():
@@ -221,12 +238,12 @@ def play(query, mode="app", provider="spotify", device=""):
         else:
             query, chosen = split_device(query, devices)
     try:
-        items = _search(query, _token(cid, secret))["tracks"]["items"]
+        items = _search(re.sub(r" by ", " ", query), _token(cid, secret))["tracks"]["items"]
     except (OSError, ValueError, KeyError) as e:
         raise Failed("I couldn't reach Spotify right now.") from e
     if not items:
         raise Failed(f"I couldn't find {query} on Spotify.")
-    track = items[0]
+    track = pick_track(query, items)
     name = f"{track['name']} by {track['artists'][0]['name']}"
     if user and (mode == "connect" or chosen):  # a named speaker always plays there
         try:

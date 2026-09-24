@@ -13,7 +13,7 @@ DEFAULTS = {
         "provider": "whisper", "model": "small.en", "device": "cpu", "beam_size": 5,
         # Words to expect: big accuracy gain for accents and made-up names (shortcut phrases are added too).
         "hotwords": ["Zade", "workspace", "timer", "remind me", "minutes", "volume", "weather", "screenshot",
-                     "Firefox", "Discord", "Steam", "YouTube", "clipboard", "brightness"],
+                     "Firefox", "Discord", "Steam", "YouTube", "clipboard", "brightness", "play", "Spotify"],
     },
     "router": {"shortcut_min_score": 90, "laya_accept": 0.90, "laya_confirm": 0.60, "laya_enabled": False},
     "llm": {
