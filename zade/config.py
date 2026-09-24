@@ -85,7 +85,7 @@ DEFAULTS = {
 
 # Settings the running Zade picks up without a restart (it re-reads config.toml when it changes).
 LIVE_SECTIONS = ("ui", "sound", "quiet", "safety", "persona", "history", "web", "music")
-LIVE_KEYS = ("llm.personality", "llm.keep_alive")
+LIVE_KEYS = ("llm.personality", "llm.keep_alive", "stt.keep_alive_s")
 
 
 def is_live(key):
