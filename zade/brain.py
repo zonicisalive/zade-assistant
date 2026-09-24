@@ -1,6 +1,7 @@
 import datetime
 import logging
 import pathlib
+import re
 
 import httpx
 import ollama
@@ -161,6 +162,29 @@ def ask(text, facts, cfg, run_tool, history=(), vram=vram_free_gb, resident=resi
             if ran:  # retrying elsewhere would repeat actions that already happened
                 return "I did part of that, then lost my connection."
     return "My brain is offline right now."
+
+
+FIX_SONG = ("A speech recognizer transcribed a request to play a song. It often mishears names, because the user "
+            "speaks English with an Indian accent: words are replaced by similar-sounding ones. Think of famous songs "
+            "and artists whose names SOUND like the words. Examples: \"lucid dreams by juice world\" -> Lucid Dreams "
+            "by Juice WRLD; \"shape of you by ed shiran\" -> Shape of You by Ed Sheeran; \"lose yourself by am in em\" "
+            "-> Lose Yourself by Eminem; \"tum hi ho by are it sing\" -> Tum Hi Ho by Arijit Singh. Reply with only the "
+            "real song and artist as song by artist. No other words.")
+
+
+def fix_song(query, cfg, vram=vram_free_gb, resident=resident_on_gpu):
+    """The model's best guess at a misheard song request ("cola berry d" -> "why this kolaveri di by
+    anirudh ravichander"); the request unchanged if no model answers."""
+    for name, extra in candidates(cfg, vram, resident):
+        try:
+            out = providers.chat(name, FIX_SONG, query, [], lambda *a: "", cfg, extra)
+        except providers.ProviderError as e:
+            log.warning("LLM %s could not fix %r: %s", name, query, e)
+            continue
+        lines = re.sub(r"^\[\w+\]\s*", "", (out or "").strip()).splitlines()
+        first = re.split(r"\s*(?:->|→)\s*", lines[0])[0].strip().strip('"').strip() if lines else ""  # no rambling
+        return first if 0 < len(first) < 120 else query
+    return query
 
 
 def _load(cfg, keep_alive):

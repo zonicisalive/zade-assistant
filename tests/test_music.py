@@ -203,3 +203,18 @@ def test_connect_defaults_to_this_pc(monkeypatch):
     assert calls == [("app", "spotify:track:9")]
     calls.clear()
     assert music.play("scars on echo dot", "connect").endswith("on Main Echo Dot (3rd Gen).")
+
+
+def test_model_fixes_a_misheard_song_only_when_the_match_is_poor(monkeypatch):
+    calls, asked = [], []
+    keyed(monkeypatch, calls)
+    t = lambda name, artist: {"uri": f"spotify:track:{name}", "name": name, "artists": [{"name": artist}]}
+    results = {"cola berry d": [t("Cola", "Lana Del Rey")],
+               "why this kolaveri di anirudh": [t("Why This Kolaveri Di", "Anirudh Ravichander")],
+               "scars juice wrld": [t("Scars", "Juice WRLD")]}
+    monkeypatch.setattr(music, "_search", lambda q, tok: {"tracks": {"items": results.get(q, [])}})
+    fix = lambda q: asked.append(q) or "Why This Kolaveri Di by Anirudh"
+    assert music.play("cola berry d", fix=fix) == "Playing Why This Kolaveri Di by Anirudh Ravichander."
+    assert asked == ["cola berry d"]
+    assert music.play("scars by juice wrld", fix=fix) == "Playing Scars by Juice WRLD."
+    assert asked == ["cola berry d"]  # a good match never waits for the model

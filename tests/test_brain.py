@@ -137,3 +137,12 @@ def test_warm_up_skips_when_the_model_unloads_instantly(monkeypatch):
     assert loads == []
     brain.warm_up(cfg(keep_alive="5m"))
     assert loads == ["5m"]
+
+
+def test_fix_song_returns_one_clean_line(monkeypatch):
+    monkeypatch.setattr(providers, "chat", lambda *a, **k: '[happy] "Business by Eminem"\nextra')
+    assert brain.fix_song("business by amine am", cfg(), vram=lambda: 8.0) == "Business by Eminem"
+    def down(*a, **k):
+        raise providers.ProviderError("off")
+    monkeypatch.setattr(providers, "chat", down)
+    assert brain.fix_song("business by amine am", cfg(), vram=lambda: 8.0) == "business by amine am"

@@ -88,6 +88,34 @@ def pick_track(query, items):
     return max(items, key=score)  # max keeps Spotify's order on ties
 
 
+GOOD_MATCH = 75
+
+
+def match_score(query, track):
+    """0-100: how well a track matches what was asked ("song by artist" checks both)."""
+    from rapidfuzz import fuzz
+
+    if m := re.fullmatch(r"(.+) by (.+)", query.lower()):
+        return min(fuzz.ratio(m[1], track["name"].lower()), artist_score(m[2], track))
+    artists = " ".join(a["name"] for a in track["artists"])
+    return fuzz.token_set_ratio(query.lower(), f"{track['name']} {artists}".lower())
+
+
+def _find(query, token):
+    """(best track, match score) for a request, or (None, 0)."""
+    items = _search(re.sub(r" by ", " ", query), token)["tracks"]["items"]
+    if not items:
+        return None, 0
+    track = pick_track(query, items)
+    if (m := re.fullmatch(r"(.+) by (.+)", query.lower())) and artist_score(m[2], track) < 70:
+        # A misheard artist ("Amine AM") steers the search away: look for the song alone and take the
+        # version whose artist sounds closest.
+        best = max(_search(m[1], token)["tracks"]["items"], key=lambda t: artist_score(m[2], t), default=None)
+        if best and artist_score(m[2], best) >= 70:
+            track = best
+    return track, match_score(query, track)
+
+
 def _running():
     players = subprocess.run(["playerctl", "-l"], capture_output=True, text=True).stdout
     return "spotify" in players
@@ -239,7 +267,8 @@ def play_youtube(query, provider="youtube"):
     return f"I opened {name} search for {query}."
 
 
-def play(query, mode="app", provider="spotify", device="", play_on="this_pc"):
+def play(query, mode="app", provider="spotify", device="", play_on="this_pc", fix=None):
+    """fix: optional callable turning a misheard request into the likely real "song by artist"."""
     if provider in YOUTUBE:
         return play_youtube(query, provider)
     config.load_env(override=True)  # keys saved (or replaced) in the app since Zade started
@@ -271,22 +300,21 @@ def play(query, mode="app", provider="spotify", device="", play_on="this_pc"):
         else:
             query, chosen = split_device(query, devices)
     try:
-        items = _search(re.sub(r" by ", " ", query), _token(cid, secret))["tracks"]["items"]
+        token = _token(cid, secret)
+        track, score = _find(query, token)
+        if score < GOOD_MATCH and fix:
+            # Names are often misheard ("cola berry d", "Amine AM"): ask the model for the real song and
+            # keep whichever search matches its own request better.
+            better = (fix(query) or "").strip().lower()
+            if better and better != query.lower():
+                track2, score2 = _find(better, token)
+                if track2 and (not track or score2 > score):
+                    log.info("song name fixed: %r -> %r", query, better)
+                    track = track2
     except (OSError, ValueError, KeyError) as e:
         raise Failed("I couldn't reach Spotify right now.") from e
-    if not items:
+    if not track:
         raise Failed(f"I couldn't find {query} on Spotify.")
-    track = pick_track(query, items)
-    if (m := re.fullmatch(r"(.+) by (.+)", query.lower())) and artist_score(m[2], track) < 70:
-        # A misheard artist ("Amine AM") steers the search away: look for the song alone and take the
-        # version whose artist sounds closest.
-        try:
-            same_song = _search(m[1], _token(cid, secret))["tracks"]["items"]
-        except (OSError, ValueError, KeyError):
-            same_song = []
-        best = max(same_song, key=lambda t: artist_score(m[2], t), default=None)
-        if best and artist_score(m[2], best) >= 70:
-            track = best
     name = f"{track['name']} by {track['artists'][0]['name']}"
     if user and not chosen and mode == "connect" and play_on == "this_pc":
         # No speaker named: this PC's own Spotify (a Connect device named after the computer), or the app
