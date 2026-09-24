@@ -20,6 +20,13 @@ ShellRoot {
 
     property string page: "home"
     property string settingsTab: "listening"
+    readonly property var wakeWords: [["~/.local/share/zade/zade.onnx", "Hey Zade"], ["hey_jarvis", "Hey Jarvis"],
+                                      ["alexa", "Alexa"], ["hey_mycroft", "Hey Mycroft"], ["hey_rhasspy", "Hey Rhasspy"]]
+    // What to say to wake Zade, for hints: the chosen built-in word, or "hey zade" for a custom model.
+    readonly property string wakePhrase: {
+        const w = settings ? wakeWords.find(x => x[0] === settings.wake.model) : null
+        return (w ? w[1] : "Hey Zade").toLowerCase()
+    }
     property var keys: ({})              // which API keys are saved (never their values)
     property var status: ({ running: false, autostart: false })
     property var settings: null
@@ -426,7 +433,7 @@ ShellRoot {
                                 spacing: 4
                                 Label { text: root.busy ? root.busy + "\u2026" : root.status.running ? "Zade is listening" : "Zade is stopped"
                                         font.pixelSize: 26; font.weight: Font.Medium }
-                                Muted { text: root.status.running ? "Say “hey zade”, hold Win, or type below."
+                                Muted { text: root.status.running ? "Say “" + root.wakePhrase + "”, hold Win, or type below."
                                                                   : "Start Zade to talk to it." }
                             }
                         }
@@ -459,7 +466,7 @@ ShellRoot {
                             Divider {}
                             Row_ {
                                 label: "Do not disturb"
-                                hint: "Ignore \u201chey zade\u201d and hold reminders. Holding Win still works."
+                                hint: "Ignore \u201c" + root.wakePhrase + "\u201d and hold reminders. Holding Win still works."
                                 Switch { checked: root.settings ? root.settings.quiet.dnd : false
                                          onToggled: v => root.setSetting("quiet.dnd", v) }
                             }
@@ -682,8 +689,7 @@ ShellRoot {
                         Group { visible: root.settingsTab === "listening"
                             Row_ { label: "Wake word"; hint: "What you say to call Zade. Restart Zade after changing it." }
                             Flow { Layout.fillWidth: true; Layout.bottomMargin: 12; spacing: 8
-                                Repeater { model: [["~/.local/share/zade/zade.onnx", "Hey Zade"], ["hey_jarvis", "Hey Jarvis"],
-                                                   ["alexa", "Alexa"], ["hey_mycroft", "Hey Mycroft"], ["hey_rhasspy", "Hey Rhasspy"]]
+                                Repeater { model: root.wakeWords
                                     Chip { required property var modelData; text: modelData[1]
                                            selected: root.settings && root.settings.wake.model === modelData[0]
                                            onClicked: root.setSetting("wake.model", modelData[0]) } } }
@@ -816,7 +822,7 @@ ShellRoot {
                         }
 
                         Group { visible: root.settingsTab === "quiet"
-                            Row_ { label: "Quiet hours"; hint: "Ignore \u201chey zade\u201d and hold reminders during this time. Holding Win still works."
+                            Row_ { label: "Quiet hours"; hint: "Ignore \u201c" + root.wakePhrase + "\u201d and hold reminders during this time. Holding Win still works."
                                 Switch { checked: root.settings ? root.settings.quiet.enabled : false; onToggled: v => root.setSetting("quiet.enabled", v) } }
                             Divider {}
                             Row_ { label: "From"; hint: "24-hour time, like 23:00."
