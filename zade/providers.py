@@ -57,7 +57,8 @@ def _ollama(system, text, tools, run_tool, cfg, extra, history):
     for _ in range(MAX_ROUNDS):
         r = client.chat(
             model=llm["model"], messages=msgs, tools=specs, think=False,
-            options={"num_ctx": llm["num_ctx"], **extra}, keep_alive=llm["keep_alive"],
+            options={"num_ctx": llm["num_ctx"], "num_predict": llm.get("max_tokens", 400), **extra},
+            keep_alive=llm["keep_alive"],
         )
         if not r.message.tool_calls:
             return (r.message.content or "").strip()

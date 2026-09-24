@@ -177,7 +177,7 @@ def fix_song(query, cfg, vram=vram_free_gb, resident=resident_on_gpu):
     anirudh ravichander"); the request unchanged if no model answers."""
     for name, extra in candidates(cfg, vram, resident):
         try:
-            out = providers.chat(name, FIX_SONG, query, [], lambda *a: "", cfg, extra)
+            out = providers.chat(name, FIX_SONG, query, [], lambda *a: "", cfg, {**extra, "num_predict": 40})
         except providers.ProviderError as e:
             log.warning("LLM %s could not fix %r: %s", name, query, e)
             continue

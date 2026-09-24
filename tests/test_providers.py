@@ -34,7 +34,7 @@ def test_ollama_tool_loop(monkeypatch):
     calls, run = recorder()
     assert providers.chat("ollama", "sys", "mute it", TOOLS, run, CFG, {"num_gpu": 0}) == "Muted."
     assert calls == [("mute", {})]
-    assert seq.kwargs[0]["options"] == {"num_ctx": 4096, "num_gpu": 0}
+    assert seq.kwargs[0]["options"] == {"num_ctx": 4096, "num_predict": 400, "num_gpu": 0}  # replies are capped
     assert seq.kwargs[0]["think"] is False
     assert seq.kwargs[1]["messages"][-1] == {"role": "tool", "content": "ok", "tool_name": "mute"}
 
