@@ -35,7 +35,7 @@ TOOLS = [
     _t("close_app", "Close a running application by name.", ["name"], name=S),
     _t("volume", "Change speaker volume: delta in percent (negative lowers) or set to 0-100.",
        delta={"type": "integer"}, set={"type": "integer"}),
-    _t("mute", "Toggle mute."),
+    _t("mute", "Mute (on=true) or unmute (on=false) the speakers.", ["on"], on={"type": "boolean"}),
     _t("media", "Control media playback.", ["cmd"],
        cmd={"type": "string", "enum": ["play-pause", "play", "pause", "next", "previous"]}),
     _t("web_search", "Open a web search in the browser.", ["query"], query=S),

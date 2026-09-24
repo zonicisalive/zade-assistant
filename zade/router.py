@@ -118,6 +118,10 @@ def parse_pattern(text, find_app):
         return {"name": "sync_apps", "args": {}}
     if m := re.fullmatch(r"play (?!music$|pause$|next$|previous$)(.+?)(?: on spotify)?", text):
         return {"name": "play_music", "args": {"query": m[1]}}
+    if re.fullmatch(r"mute(?: the)?(?: sound| volume| audio| it| speakers?)?", text):
+        return {"name": "mute", "args": {"on": True}}
+    if re.fullmatch(r"unmute(?: the)?(?: sound| volume| audio| it| speakers?)?|(?:turn )?(?:the )?sound (?:back )?on", text):
+        return {"name": "mute", "args": {"on": False}}
     if m := re.fullmatch(r"type (.+)", text):
         return {"name": "type_text", "args": {"text": m[1]}}
     # Local time and date come from the clock, never from the model. "in india" = local time here.
@@ -145,7 +149,8 @@ def parse_pattern(text, find_app):
 
 OTHER = "something else"
 BUILTINS = {
-    "mute": ("mute or unmute the sound", {"name": "mute", "args": {}}),
+    "mute": ("mute the sound", {"name": "mute", "args": {"on": True}}),
+    "unmute": ("unmute the sound, turn it back on", {"name": "mute", "args": {"on": False}}),
     "play or pause media": ("play, pause, resume or stop music or video",
                             {"name": "media", "args": {"cmd": "play-pause"}}),
     "next track": ("skip to the next song or video", {"name": "media", "args": {"cmd": "next"}}),

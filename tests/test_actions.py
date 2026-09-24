@@ -235,3 +235,13 @@ def test_system_components_can_never_be_closed(monkeypatch):
         with pytest.raises(actions.Failed, match="keeps your desktop running"):
             actions.run({"name": "close_app", "args": {"name": name}}, lambda q: True)
     assert calls == []
+
+
+def test_mute_sets_state_instead_of_toggling(monkeypatch):
+    calls = _calls(monkeypatch)
+    actions.run({"name": "mute", "args": {"on": True}}, lambda q: True)
+    actions.run({"name": "mute", "args": {"on": False}}, lambda q: True)
+    actions.run({"name": "mute", "args": {}}, lambda q: True)  # old-style call: mute
+    assert calls == [["wpctl", "set-mute", "@DEFAULT_AUDIO_SINK@", "1"],
+                     ["wpctl", "set-mute", "@DEFAULT_AUDIO_SINK@", "0"],
+                     ["wpctl", "set-mute", "@DEFAULT_AUDIO_SINK@", "1"]]

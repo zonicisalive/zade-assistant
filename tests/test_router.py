@@ -170,3 +170,11 @@ def test_open_several_apps_at_once():
     assert router.parse_pattern("open discord and my notes thing", find2) is None  # unknown part: ask the model
     r = router.route("open discord and telegram", {}, CFG, find_app=find2)
     assert (r.kind, len(r.actions)) == ("run", 2)
+
+
+def test_mute_and_unmute_patterns():
+    P = router.parse_pattern
+    for t in ["mute", "mute the sound", "mute the volume", "mute it"]:
+        assert P(router.normalize(t), find) == {"name": "mute", "args": {"on": True}}, t
+    for t in ["unmute", "unmute the sound", "turn the sound back on", "turn sound on", "sound on"]:
+        assert P(router.normalize(t), find) == {"name": "mute", "args": {"on": False}}, t
