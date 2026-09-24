@@ -10,7 +10,7 @@ from . import providers
 log = logging.getLogger("zade")
 
 SYSTEM = (
-    "You are Zade, a voice assistant on the user's Arch Linux desktop. Your replies are spoken "
+    "You are {name}, a voice assistant on the user's Arch Linux desktop. Your replies are spoken "
     "aloud, so answer in at most three short sentences of plain text with no markdown and no emoji, unless "
     "the user asks for detail. Use the tools to act on the computer. Use shell only when no other tool "
     "fits; the user approves each command, and sudo is never allowed. When the user states a lasting "
@@ -120,7 +120,9 @@ def candidates(cfg, vram=vram_free_gb, resident=resident_on_gpu):
 
 def ask(text, facts, cfg, run_tool, history=(), vram=vram_free_gb, resident=resident_on_gpu):
     now = datetime.datetime.now().astimezone()
-    system = SYSTEM + (f"\nNow: {now:%A %Y-%m-%d %H:%M}, the user's local time "
+    system = SYSTEM.replace("{name}", cfg["persona"]["name"] or "Zade") + (
+        "\nBegin every reply with exactly one emotion tag that fits it: [neutral] [happy] [excited] [sad] "
+        "[confused] [surprised] [annoyed] [curious]. The tag is shown on your face, never spoken.") + (f"\nNow: {now:%A %Y-%m-%d %H:%M}, the user's local time "
                        f"(time zone {now:%Z}, UTC{now:%z}). Use it as is; do not convert it.")
     if cfg["llm"].get("personality"):
         system += "\nThe user's instructions for your personality and style: " + cfg["llm"]["personality"]

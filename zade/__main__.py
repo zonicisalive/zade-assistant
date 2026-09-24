@@ -45,6 +45,7 @@ class Ctx:
     history: list = field(default_factory=list)  # (time, user text, reply) for follow-ups
     turn: list = field(default_factory=list)  # actions done so far in the current request
     app_words: list = field(default_factory=list)  # installed app names, given to Whisper as hotwords
+    show: Callable = lambda **fields: None  # overlay updates (emotion); ui.set in the real app
     route: str = ""  # how the last request was handled (shortcut, pattern, llm, ...), for History
 
 
@@ -52,6 +53,18 @@ def dictation_text(raw):
     """What voice typing types: Whisper's text as is (capitals, punctuation), minus noise phantoms."""
     text = raw.strip()
     return text + " " if router.normalize(text) else ""
+
+
+EMOTIONS = {"neutral", "happy", "excited", "sad", "confused", "surprised", "annoyed", "curious"}
+
+
+def split_emotion(reply):
+    """"[happy] Sure!" -> ("happy", "Sure!"). The tag drives the face and is never spoken."""
+    m = re.match(r"\s*\[(\w+)\]\s*", reply or "")
+    if not m:
+        return "neutral", (reply or "").strip()
+    emotion = m[1].lower()
+    return (emotion if emotion in EMOTIONS else "neutral"), reply[m.end():].strip()
 
 
 def fact_words(facts):
@@ -91,7 +104,7 @@ def is_quiet(cfg, now=None):
     return start <= minutes < end if start <= end else minutes >= start or minutes < end
 
 
-LIVE_SECTIONS = ("ui", "sound", "quiet", "safety")  # settings that apply without a restart
+LIVE_SECTIONS = ("ui", "sound", "quiet", "safety", "persona")  # settings that apply without a restart
 
 
 def apply_live(cfg, new):
@@ -256,6 +269,7 @@ def handle(ctx, raw):
         ok = all(k for _, k in results)
         ctx.turn = [a for a, (_, k) in zip(r.actions, results) if k and a["name"] not in MEMORY_TOOLS]
         reply = " ".join(t for t, _ in results if t) or "Done."
+        ctx.show(emotion="happy" if ok else "sad")
         ctx.say(reply)
         if r.phrase:
             memory.use_shortcut(ctx.conn, r.phrase)
@@ -273,7 +287,8 @@ def handle(ctx, raw):
                 ctx.turn.append({"name": name, "args": args})
             return out or "done"
 
-        reply = ctx.ask(text, memory.facts(ctx.conn), ctx.cfg, run_tool, recent(ctx))
+        emotion, reply = split_emotion(ctx.ask(text, memory.facts(ctx.conn), ctx.cfg, run_tool, recent(ctx)))
+        ctx.show(emotion=emotion)
         ctx.say(reply)
         if executed:
             memory.log(ctx.conn, text, executed, "llm", True)
@@ -369,7 +384,7 @@ def main():
 
     def hear(timeout=None, released=None, cancelled=None, keep_reply=False):
         # keep_reply: while answering a question, keep it (e.g. a command to approve) on screen
-        ui.show("listening", heard="", **({} if keep_reply else {"reply": ""}))
+        ui.show("listening", heard="", emotion="neutral", **({} if keep_reply else {"reply": ""}))
         a = audio.record(stream, cfg, timeout, released, cancelled, on_level=ui.level)
         if a is None:
             ui.show("idle")
@@ -413,6 +428,7 @@ def main():
         return actions.is_yes(hear(5.0, keep_reply=True) or "")
 
     ctx = Ctx(cfg, conn, say, confirm, predict=laya_predictor(cfg))
+    ctx.show = ui.set
     ctx.app_words = actions.app_names()  # your installed apps and games, so Whisper expects their names
     overlay = ui.start(cfg)
     if overlay:

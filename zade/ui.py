@@ -24,12 +24,14 @@ def configure(cfg):
     _style.clear()
     _style.update({k: cfg["ui"][k] for k in STYLE_KEYS})
     _state["style"] = dict(_style)
+    _state["persona"] = dict(cfg["persona"])
     _write()
 
 
 def reset():
+    persona = _state.get("persona", {})
     _state.clear()
-    _state.update(state="idle", heard="", reply="", level=0.0, style=dict(_style))
+    _state.update(state="idle", heard="", reply="", level=0.0, emotion="neutral", style=dict(_style), persona=persona)
 
 
 def _write():
@@ -44,6 +46,12 @@ def show(state, **fields):
     _state.update(state=state, **fields)
     if state != "listening":
         _state["level"] = 0.0
+    _write()
+
+
+def set(**fields):
+    """Update fields (e.g. emotion) without changing the state."""
+    _state.update(fields)
     _write()
 
 
