@@ -92,3 +92,39 @@ def test_wake_check_follows_the_chosen_wake_word(monkeypatch):
     c = copy.deepcopy(config.DEFAULTS)
     c["wake"]["model"] = "hey_jarvis"
     assert stt.wake_check(np.zeros(32000, np.int16), c) is True
+
+
+def test_gpu_server_and_fallback(monkeypatch):
+    import json as _json
+
+    import zade.stt as S
+
+    c = copy.deepcopy(config.DEFAULTS)
+    c["stt"]["provider"] = "gpu"
+    sent = {}
+
+    class Resp:
+        def __enter__(self): return self
+        def __exit__(self, *a): pass
+
+    def urlopen(req, timeout):
+        sent["body"] = req.data
+        r = Resp()
+        r.read = lambda *a: _json.dumps({"segments": [{"text": " Open Firefox", "avg_logprob": -0.2},
+                                                       {"text": " .", "avg_logprob": -0.7}]}).encode()
+        return r
+
+    monkeypatch.setattr("urllib.request.urlopen", urlopen)
+    assert S.transcribe(np.zeros(16000, np.int16), c, hotwords=("Discord",)) == "Open Firefox"
+    assert b"Zade" in sent["body"] and b"Discord" in sent["body"]
+
+    def down(req, timeout):
+        raise OSError("connection refused")
+
+    class Fake:
+        def transcribe(self, audio, **kw):
+            return [NS(text=" from cpu", no_speech_prob=0.1, avg_logprob=-0.3)], None
+
+    monkeypatch.setattr("urllib.request.urlopen", down)
+    monkeypatch.setattr(S, "_whisper", lambda m, d: Fake())
+    assert S.transcribe(np.zeros(16000, np.int16), c) == "from cpu"

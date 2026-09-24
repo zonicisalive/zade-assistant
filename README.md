@@ -45,6 +45,21 @@ Shell commands are read back and run only after a spoken "yes". Anything contain
    ```
 Without keys, Zade opens Spotify's search instead.
 
+## GPU speech recognition (optional, ~0.9 GB VRAM)
+
+Whisper large-v3-turbo through whisper.cpp's Vulkan backend (works on AMD). It knows far more names than the
+CPU model; Zade falls back to the CPU model whenever the server isn't running.
+
+```bash
+sudo pacman -S --needed vulkan-headers spirv-headers shaderc
+cd ~/.local/share/zade && git clone --depth 1 https://github.com/ggml-org/whisper.cpp && cd whisper.cpp
+cmake -B build -DGGML_VULKAN=1 -DGGML_CCACHE=OFF -DCMAKE_BUILD_TYPE=Release && cmake --build build -j --target whisper-server
+curl -L -o models/ggml-large-v3-turbo-q5_0.bin https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo-q5_0.bin
+cp ~/Zade/systemd/zade-whisper.service ~/.config/systemd/user/ && systemctl --user enable --now zade-whisper
+```
+
+Then pick **Settings → Listening → Speech recognition → Large (GPU)** and restart Zade.
+
 ## Overlay inside your desktop shell (optional, saves ~225 MB)
 
 If you run a Quickshell-based shell (e.g. inir), add this line inside its `ShellRoot { ... }` in `shell.qml`:

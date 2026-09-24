@@ -13,7 +13,10 @@ DEFAULTS = {
               # people talking in the background don't keep the recording open. Lower = more patient.
               "end_ratio": 0.25},
     "stt": {
+        # provider: whisper (faster-whisper on the CPU) | gpu (whisper.cpp server, large-v3-turbo on the GPU;
+        # falls back to the CPU model) | openai
         "provider": "whisper", "model": "small.en", "device": "cpu", "beam_size": 5,
+        "server_url": "http://127.0.0.1:8178",
         # Words to expect: big accuracy gain for accents and made-up names (shortcut phrases are added too).
         "hotwords": ["Zade", "workspace", "timer", "remind me", "minutes", "volume", "weather", "screenshot",
                      "Firefox", "Discord", "Steam", "YouTube", "clipboard", "brightness", "play", "Spotify"],

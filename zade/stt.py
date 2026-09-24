@@ -32,8 +32,34 @@ def to_wav(audio, rate=16000):
     return buf.getvalue()
 
 
+def _server(audio, cfg, prompt):
+    """whisper.cpp's whisper-server (large-v3-turbo on the GPU through Vulkan, kept loaded)."""
+    import json
+    import urllib.request
+    import uuid
+
+    b = uuid.uuid4().hex
+    fields = {"response_format": "verbose_json", "temperature": "0", "language": "en", "prompt": prompt}
+    body = b"".join(f"--{b}\r\nContent-Disposition: form-data; name=\"{k}\"\r\n\r\n{v}\r\n".encode()
+                    for k, v in fields.items())
+    body += (f"--{b}\r\nContent-Disposition: form-data; name=\"file\"; filename=\"speech.wav\"\r\n"
+             f"Content-Type: audio/wav\r\n\r\n").encode() + to_wav(audio) + f"\r\n--{b}--\r\n".encode()
+    req = urllib.request.Request(cfg["stt"]["server_url"].rstrip("/") + "/inference", data=body,
+                                 headers={"Content-Type": f"multipart/form-data; boundary={b}"})
+    with urllib.request.urlopen(req, timeout=15) as r:
+        segments = json.load(r).get("segments", [])
+    return " ".join(seg["text"].strip() for seg in segments
+                    if re.search(r"\w", seg["text"]) and seg.get("avg_logprob", 0) >= -1.0).strip()
+
+
 def transcribe(audio, cfg, prompt="", hotwords=()):
     s = cfg["stt"]
+    if s["provider"] == "gpu":
+        words = ", ".join(dict.fromkeys([*s["hotwords"], *hotwords]))
+        try:
+            return _server(audio, cfg, " ".join(x for x in (words, prompt) if x))
+        except Exception as e:  # server not running or busy: the CPU model still works
+            log.warning("GPU speech server failed, using %s on the CPU: %s", s["model"], e)
     if s["provider"] == "openai":
         pc = cfg["providers"]["openai"]
         try:
