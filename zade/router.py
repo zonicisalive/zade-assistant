@@ -129,11 +129,13 @@ def parse_pattern(text, find_app):
         return {"name": "media", "args": {"cmd": "next"}}
     if re.fullmatch(r"(?:previous|last|go back(?: to the)?(?: previous| last)?)(?: song| track| one)?", text):
         return {"name": "media", "args": {"cmd": "previous"}}
-    # "play" is often heard as "place" ("Place Scars by Juice WRLD").
-    if m := re.fullmatch(r"(?:play|place) (?!music$|pause$|next$|previous$)(.+?)"
+    # "play" is often heard as "place" ("Place Scars by Juice WRLD"), so "place" counts too, but only
+    # when it clearly names a song ("... by artist" or "... on youtube"), not "place an order".
+    if m := re.fullmatch(r"(play|place) (?!music$|pause$|next$|previous$)(.+?)"
                          r"(?: (?:on|in|from) (spotify|youtube music|youtube|yt music|yt))?", text):
-        provider = {"yt": "youtube", "yt music": "youtube music"}.get(m[2], m[2])
-        return {"name": "play_music", "args": {"query": m[1], **({"provider": provider} if provider else {})}}
+        verb, query, provider = m[1], m[2], {"yt": "youtube", "yt music": "youtube music"}.get(m[3], m[3])
+        if verb == "play" or provider or " by " in query:
+            return {"name": "play_music", "args": {"query": query, **({"provider": provider} if provider else {})}}
     if re.fullmatch(r"mute(?: the)?(?: sound| volume| audio| it| speakers?)?", text):
         return {"name": "mute", "args": {"on": True}}
     if re.fullmatch(r"unmute(?: the)?(?: sound| volume| audio| it| speakers?)?|(?:turn )?(?:the )?sound (?:back )?on", text):

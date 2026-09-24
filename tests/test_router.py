@@ -159,6 +159,8 @@ def test_play_music_pattern_keeps_media_controls():
     assert P("play scars on youtube music", find)["args"] == {"query": "scars", "provider": "youtube music"}
     assert P("play scars from yt", find)["args"] == {"query": "scars", "provider": "youtube"}
     assert P("place jusu world scars on youtube", find)["args"] == {"query": "jusu world scars", "provider": "youtube"}
+    assert P("place cards by juice wrld", find)["args"] == {"query": "cards by juice wrld"}
+    assert P("place an order for pizza", find) is None and P("place a call to mom", find) is None
     assert P("play", find) == {"name": "media", "args": {"cmd": "play"}}  # plain "play" resumes playback
 
 
