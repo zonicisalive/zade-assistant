@@ -115,7 +115,7 @@ ShellRoot {
 
     function setSetting(key, value) {
         ctl(["set", key, String(value)], r => {
-            const live = ["ui.", "sound.", "quiet.", "safety.", "persona.", "history.", "web.", "llm.personality", "llm.keep_alive"].some(p => key.startsWith(p) && key !== "ui.enabled")
+            const live = ["ui.", "sound.", "quiet.", "safety.", "persona.", "history.", "web.", "music.", "llm.personality", "llm.keep_alive"].some(p => key.startsWith(p) && key !== "ui.enabled")
             if (r && r.ok) { if (!live) needsRestart = status.running; ctl(["settings"], s => { if (s) settings = s }) }
             else flash(r && r.error ? r.error : "Couldn't save that setting.")
         })
@@ -863,6 +863,23 @@ ShellRoot {
                             Divider {}
                             Row_ { label: "Client secret"
                                 KeyField { name: "SPOTIFY_CLIENT_SECRET" } }
+                            Divider {}
+                            Row_ { label: "Play songs"; hint: "Spotify Connect plays on a device already running Spotify (this PC, your phone, a speaker) without bringing the app up. Needs Premium."
+                                RowLayout { spacing: 8
+                                    Repeater { model: [["app", "In the app"], ["connect", "Spotify Connect"]]
+                                        Chip { required property var modelData; text: modelData[1]
+                                               selected: root.settings && root.settings.music.mode === modelData[0]
+                                               onClicked: root.setSetting("music.mode", modelData[0]) } } } }
+                            Divider { visible: root.settings && root.settings.music.mode === "connect" }
+                            Row_ { visible: root.settings && root.settings.music.mode === "connect"
+                                label: root.keys.SPOTIFY_REFRESH_TOKEN ? "Spotify account: connected" : "Spotify account"
+                                hint: "First add http://127.0.0.1:8888/callback as a Redirect URI in your Spotify app\u2019s settings. Without a login, songs play in the app."
+                                Button { text: root.keys.SPOTIFY_REFRESH_TOKEN ? "Log in again" : "Log in"; accent: !root.keys.SPOTIFY_REFRESH_TOKEN
+                                         onClicked: { root.flash("Finish the login in your browser\u2026")
+                                                      root.ctl(["spotify-login"], r => {
+                                                          if (r && r.ok) { root.flash("Spotify connected.")
+                                                                           root.ctl(["keys"], k => { if (k) root.keys = k }) }
+                                                          else root.flash(r && r.error ? r.error : "Spotify login failed.") }) } } }
                         }
 
                         Muted { text: "Claude"; Layout.topMargin: 8 }

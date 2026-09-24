@@ -64,7 +64,8 @@ DEFAULTS = {
     "safety": {"confirm": "commands"},  # commands | risky | everything
     "vision": {"model": "qwen2.5vl:3b"},
     "learning": {"promote_after": 3},
-    "history": {"keep": 1000},  # requests kept for the app's History page
+    "history": {"keep": 1000},
+    "music": {"mode": "app"},  # app: play in the Spotify app | connect: Spotify Connect (Premium, needs login)  # requests kept for the app's History page
     "paths": {"data": "~/.local/share/zade"},
 }
 

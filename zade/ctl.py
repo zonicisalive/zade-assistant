@@ -16,7 +16,7 @@ from . import config, memory
 
 CONFIG = pathlib.Path("~/.config/zade/config.toml").expanduser()
 ENV = pathlib.Path("~/.config/zade/env").expanduser()   # API keys, readable only by you
-KEYS = ["SPOTIFY_CLIENT_ID", "SPOTIFY_CLIENT_SECRET", "ANTHROPIC_API_KEY", "OPENAI_API_KEY"]
+KEYS = ["SPOTIFY_CLIENT_ID", "SPOTIFY_CLIENT_SECRET", "SPOTIFY_REFRESH_TOKEN", "ANTHROPIC_API_KEY", "OPENAI_API_KEY"]
 DATA = pathlib.Path(config.DEFAULTS["paths"]["data"]).expanduser()
 DB = DATA / "zade.db"
 LOCK = DATA / "zade.lock"
@@ -188,6 +188,18 @@ def run(argv):
         return keys()
     if cmd == "key-set":
         return set_key(args[0], args[1])
+    if cmd == "spotify-login":  # opens the browser; Spotify sends you back to Zade
+        from . import music
+        from .actions import Failed
+
+        config.load_env(ENV)
+        cid, secret = os.environ.get("SPOTIFY_CLIENT_ID"), os.environ.get("SPOTIFY_CLIENT_SECRET")
+        if not cid or not secret:
+            return {"ok": False, "error": "Save the Spotify Client ID and secret first."}
+        try:
+            return set_key("SPOTIFY_REFRESH_TOKEN", music.login(cid, secret))
+        except (Failed, OSError, ValueError, KeyError) as e:
+            return {"ok": False, "error": f"Spotify login failed: {e}"}
     if cmd == "voices":
         return KOKORO_VOICES
     if cmd == "preview":

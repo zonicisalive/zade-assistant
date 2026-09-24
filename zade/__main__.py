@@ -112,7 +112,7 @@ def is_quiet(cfg, now=None):
     return start <= minutes < end if start <= end else minutes >= start or minutes < end
 
 
-LIVE_SECTIONS = ("ui", "sound", "quiet", "safety", "persona", "history", "web")  # settings that apply without a restart
+LIVE_SECTIONS = ("ui", "sound", "quiet", "safety", "persona", "history", "web", "music")  # settings that apply without a restart
 
 
 def apply_live(cfg, new):
@@ -188,7 +188,7 @@ def dispatch(ctx, action, from_model=False):
         if name == "play_music":
             from . import music
 
-            return music.play(a["query"]), True
+            return music.play(a["query"], ctx.cfg["music"]["mode"]), True
         if name == "look_at_screen":
             from . import vision
 
