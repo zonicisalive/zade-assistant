@@ -52,12 +52,28 @@ def _server(audio, cfg, prompt):
                     if re.search(r"\w", seg["text"]) and seg.get("avg_logprob", 0) >= -1.0).strip()
 
 
+# What Whisper invents from silence or noise (learned from video subtitles).
+HALLUCINATIONS = re.compile(
+    r"(?:and )?i'?m going to go to the next video|thanks? (?:you )?for watching|please subscribe|"
+    r"see you (?:in the )?next (?:video|time)|subtitles by .*|thank you\.?|you|bye\.?", re.I)
+
+
+def has_speech(audio):
+    """Silero voice activity check (the one faster-whisper uses): False for breath, clicks and room noise."""
+    from faster_whisper.vad import get_speech_timestamps
+
+    return bool(get_speech_timestamps(audio.astype(np.float32) / 32768))
+
+
 def transcribe(audio, cfg, prompt="", hotwords=()):
     s = cfg["stt"]
     if s["provider"] == "gpu":
+        if not has_speech(audio):  # the server has no silence filter: nothing said means nothing heard
+            return ""
         words = ", ".join(dict.fromkeys([*s["hotwords"], *hotwords]))
         try:
-            return _server(audio, cfg, " ".join(x for x in (words, prompt) if x))
+            text = _server(audio, cfg, " ".join(x for x in (words, prompt) if x))
+            return "" if HALLUCINATIONS.fullmatch(text.strip(" .!")) else text
         except Exception as e:  # server not running or busy: the CPU model still works
             log.warning("GPU speech server failed, using %s on the CPU: %s", s["model"], e)
     if s["provider"] == "openai":

@@ -1,3 +1,4 @@
+import pytest
 import copy
 from types import SimpleNamespace as NS
 
@@ -115,6 +116,7 @@ def test_gpu_server_and_fallback(monkeypatch):
         return r
 
     monkeypatch.setattr("urllib.request.urlopen", urlopen)
+    monkeypatch.setattr(S, "has_speech", lambda a: True)
     assert S.transcribe(np.zeros(16000, np.int16), c, hotwords=("Discord",)) == "Open Firefox"
     assert b"Zade" in sent["body"] and b"Discord" in sent["body"]
 
@@ -128,3 +130,18 @@ def test_gpu_server_and_fallback(monkeypatch):
     monkeypatch.setattr("urllib.request.urlopen", down)
     monkeypatch.setattr(S, "_whisper", lambda m, d: Fake())
     assert S.transcribe(np.zeros(16000, np.int16), c) == "from cpu"
+
+
+def test_gpu_path_ignores_silence_and_made_up_phrases(monkeypatch):
+    import zade.stt as S
+
+    c = copy.deepcopy(config.DEFAULTS)
+    c["stt"]["provider"] = "gpu"
+    monkeypatch.setattr(S, "_server", lambda *a: pytest.fail("silence must not reach the server"))
+    assert S.transcribe(np.zeros(32000, np.int16), c) == ""  # real Silero VAD on silence
+    monkeypatch.setattr(S, "has_speech", lambda a: True)
+    for made_up in ["and I'm going to go to the next video.", "Thank you.", "Thanks for watching!"]:
+        monkeypatch.setattr(S, "_server", lambda *a, t=made_up: t)
+        assert S.transcribe(np.zeros(32000, np.int16), c) == "", made_up
+    monkeypatch.setattr(S, "_server", lambda *a: "thank you zade, open firefox")
+    assert S.transcribe(np.zeros(32000, np.int16), c) == "thank you zade, open firefox"
