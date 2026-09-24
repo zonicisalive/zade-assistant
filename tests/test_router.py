@@ -55,18 +55,18 @@ def fake(label, conf):
 
 
 def test_laya_accept():
-    r = router.route("pause the music", {}, CFG, fake("play or pause media", 0.95))
+    r = router.route("hold the tunes", {}, CFG, fake("play or pause media", 0.95))
     assert (r.kind, r.source) == ("run", "laya")
     assert r.actions == [{"name": "media", "args": {"cmd": "play-pause"}}]
 
 
 def test_laya_confirm_band():
-    r = router.route("pause the music", {}, CFG, fake("play or pause media", 0.7))
+    r = router.route("hold the tunes", {}, CFG, fake("play or pause media", 0.7))
     assert (r.kind, r.label) == ("confirm", "play or pause media")
 
 
 def test_laya_low_or_other_goes_to_llm():
-    assert router.route("pause the music", {}, CFG, fake("play or pause media", 0.4)).kind == "llm"
+    assert router.route("hold the tunes", {}, CFG, fake("play or pause media", 0.4)).kind == "llm"
     assert router.route("what is tcp", {}, CFG, fake(router.OTHER, 0.99)).kind == "llm"
 
 
@@ -79,7 +79,7 @@ def test_laya_error_falls_through():
     def boom(state, questions):
         raise RuntimeError("model missing")
 
-    assert router.route("pause the music", {}, CFG, boom).kind == "llm"
+    assert router.route("hold the tunes", {}, CFG, boom).kind == "llm"
 
 
 def test_more_whisper_hallucinations_are_nothing():
@@ -158,7 +158,7 @@ def test_play_music_pattern_keeps_media_controls():
     assert P("play scars on youtube", find)["args"] == {"query": "scars", "provider": "youtube"}
     assert P("play scars on youtube music", find)["args"] == {"query": "scars", "provider": "youtube music"}
     assert P("play scars from yt", find)["args"] == {"query": "scars", "provider": "youtube"}
-    assert P("play", find) is None and P("play music", find) is None  # plain resume stays a media control
+    assert P("play", find) == {"name": "media", "args": {"cmd": "play"}}  # plain "play" resumes playback
 
 
 def test_open_several_apps_at_once():
@@ -193,3 +193,13 @@ def test_press_key_patterns():
     assert P("press windows 2") == {"name": "press_keys", "args": {"keys": "super+2"}}
     assert P("press control shift t") == {"name": "press_keys", "args": {"keys": "ctrl+shift+t"}}
     assert P("press page down") == {"name": "press_keys", "args": {"keys": "page down"}}
+
+
+def test_media_control_patterns():
+    P, find = router.parse_pattern, lambda q: None
+    for text, cmd in [("stop the song", "pause"), ("pause the music", "pause"), ("pause", "pause"),
+                      ("resume the song", "play"), ("play the music", "play"), ("continue", "play"),
+                      ("next song", "next"), ("skip this song", "next"), ("skip", "next"),
+                      ("previous track", "previous"), ("go back to the last song", "previous")]:
+        assert P(text, find) == {"name": "media", "args": {"cmd": cmd}}, text
+    assert P("play scars", find)["name"] == "play_music"

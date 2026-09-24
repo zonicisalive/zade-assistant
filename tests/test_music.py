@@ -120,3 +120,35 @@ def test_youtube_plays_the_first_result_in_the_browser(monkeypatch):
     assert opened == [["xdg-open", "https://music.youtube.com/watch?v=GZyj2wU0NPU"]]
     monkeypatch.setattr(music, "_youtube_id", lambda q: None)
     assert "search" in music.play("x", provider="youtube")
+
+
+DEVICES = [{"id": "pc", "name": "archlinux", "type": "Computer", "is_active": True},
+           {"id": "echo", "name": "Main Echo Dot (3rd Gen)", "type": "Speaker", "is_active": False}]
+
+
+def connect(monkeypatch, calls, searched):
+    keyed(monkeypatch, calls)
+    monkeypatch.setenv("SPOTIFY_REFRESH_TOKEN", "R")
+    monkeypatch.setattr(music, "_post_token", lambda cid, secret, form: {"access_token": "USER"})
+    monkeypatch.setattr(music, "_search", lambda q, t: searched.append(q) or {"tracks": {"items": [
+        {"uri": "spotify:track:9", "name": "Scars", "artists": [{"name": "Juice WRLD"}]}]}})
+    monkeypatch.setattr(music, "_api", lambda m, path, t, body=None:
+                        {"devices": DEVICES} if path == "/me/player/devices" else calls.append((m, path)))
+
+
+def test_play_on_a_named_speaker(monkeypatch):
+    calls, searched = [], []
+    connect(monkeypatch, calls, searched)
+    assert music.play("scars on echo dot", "app") == "Playing Scars by Juice WRLD on Main Echo Dot (3rd Gen)."
+    assert searched == ["scars"] and calls == [("PUT", "/me/player/play?device_id=echo")]
+    calls.clear()
+    assert music.play("scars", "app", device="the speaker").endswith("on Main Echo Dot (3rd Gen).")
+
+
+def test_on_in_a_song_title_is_not_a_device(monkeypatch):
+    calls, searched = [], []
+    connect(monkeypatch, calls, searched)
+    assert music.play("dancing on my own", "connect") == "Playing Scars by Juice WRLD on archlinux."
+    assert searched == ["dancing on my own"]
+    with pytest.raises(music.Failed, match="can't find kitchen"):
+        music.play("scars", "connect", device="kitchen")

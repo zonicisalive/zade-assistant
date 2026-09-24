@@ -83,7 +83,7 @@ def test_confirm_band_no_goes_to_llm():
     said = []
     predict = lambda s, q: {"answers": {"action": {"choice": "play or pause media", "confidence": 0.7}}}
     ctx = make(said, answers=[False], predict=predict, ask=lambda *a: "llm answer")
-    z.handle(ctx, "pause the music")
+    z.handle(ctx, "hold the tunes")
     assert said == ["Did you mean play or pause media?", "llm answer"]
 
 

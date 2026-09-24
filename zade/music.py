@@ -94,13 +94,39 @@ def _api(method, path, token, body=None):
         return json.loads(raw) if raw else None
 
 
-def _play_connect(uri, cid, secret, refresh):
-    """Play on the active Spotify Connect device (or the first one available); its name, or None."""
-    token = _post_token(cid, secret, {"grant_type": "refresh_token", "refresh_token": refresh})["access_token"]
-    devices = _api("GET", "/me/player/devices", token)["devices"]
+def _user_token(cid, secret, refresh):
+    return _post_token(cid, secret, {"grant_type": "refresh_token", "refresh_token": refresh})["access_token"]
+
+
+def _devices(token):
+    return _api("GET", "/me/player/devices", token)["devices"]
+
+
+def _match_device(devices, name):
+    """The device whose name best matches what was said ("echo dot", "my phone"), or None."""
+    from rapidfuzz import fuzz
+
+    name = re.sub(r"^(?:the|my) ", "", name.lower().strip())
+    kinds = {"phone": "smartphone", "speaker": "speaker", "computer": "computer", "pc": "computer", "tv": "tv"}
+    scored = [(max(fuzz.partial_ratio(name, d["name"].lower()), 100 if kinds.get(name) == d["type"].lower() else 0), d)
+              for d in devices]
+    score, device = max(scored, key=lambda x: x[0], default=(0, None))
+    return device if score >= 80 else None
+
+
+def split_device(query, devices):
+    """"scars on echo dot" -> ("scars", device) when the words after the last "on" name a device."""
+    if m := re.fullmatch(r"(.+) (?:on|in) (.+)", query):
+        if device := _match_device(devices, m[2]):
+            return m[1], device
+    return query, None
+
+
+def _play_connect(uri, token, devices, device=None):
+    """Play on the chosen device, else the active one (or the first available); its name, or None."""
     if not devices:
         return None
-    device = next((d for d in devices if d["is_active"]), devices[0])
+    device = device or next((d for d in devices if d["is_active"]), devices[0])
     _api("PUT", "/me/player/play?device_id=" + device["id"], token, {"uris": [uri]})
     return device["name"]
 
@@ -167,7 +193,7 @@ def play_youtube(query, provider="youtube"):
     return f"I opened {name} search for {query}."
 
 
-def play(query, mode="app", provider="spotify"):
+def play(query, mode="app", provider="spotify", device=""):
     if provider in YOUTUBE:
         return play_youtube(query, provider)
     config.load_env()  # keys saved in the app since Zade started
@@ -178,6 +204,22 @@ def play(query, mode="app", provider="spotify"):
             return f"Playing {found[1]}."
         _open("spotify:search:" + urllib.parse.quote(query))
         return f"I couldn't find {query}, so I opened Spotify's search. Pick the song there."
+    refresh = os.environ.get("SPOTIFY_REFRESH_TOKEN")
+    user = devices = chosen = None
+    if refresh and (mode == "connect" or device or " on " in query):
+        try:
+            user = _user_token(cid, secret, refresh)
+            devices = _devices(user)
+        except (OSError, ValueError, KeyError) as e:
+            log.warning("Spotify Connect unavailable: %s", e)
+    if devices is not None:
+        if device:
+            chosen = _match_device(devices, device)
+            if not chosen:
+                names = ", ".join(d["name"] for d in devices) or "nothing"
+                raise Failed(f"I can't find {device} in Spotify. It sees {names}.")
+        else:
+            query, chosen = split_device(query, devices)
     try:
         items = _search(query, _token(cid, secret))["tracks"]["items"]
     except (OSError, ValueError, KeyError) as e:
@@ -186,11 +228,10 @@ def play(query, mode="app", provider="spotify"):
         raise Failed(f"I couldn't find {query} on Spotify.")
     track = items[0]
     name = f"{track['name']} by {track['artists'][0]['name']}"
-    refresh = os.environ.get("SPOTIFY_REFRESH_TOKEN")
-    if mode == "connect" and refresh:
+    if user and (mode == "connect" or chosen):  # a named speaker always plays there
         try:
-            if device := _play_connect(track["uri"], cid, secret, refresh):
-                return f"Playing {name} on {device}."
+            if where := _play_connect(track["uri"], user, devices, chosen):
+                return f"Playing {name} on {where}."
         except (OSError, ValueError, KeyError) as e:  # 403 without Premium, expired login, network
             log.warning("Spotify Connect failed, using the app: %s", e)
     _open(track["uri"])
