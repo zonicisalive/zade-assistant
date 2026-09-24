@@ -205,6 +205,10 @@ def run(argv):
     if cmd == "calibrate":  # "quiet" (measure the room), then "voice" (measure you, get a recommendation)
         from . import calibrate
 
+        if args[0] == "play":  # calibrate play before|after [noise_factor]
+            return calibrate.play(DATA, args[1], float(args[2]) if len(args) > 2 else None)
+        if args[0] == "stats":  # calibrate stats <noise_factor>
+            return {"ok": True, **calibrate.stats(DATA, float(args[1]))}
         return calibrate.run(args[0], DATA)
     if cmd == "voices":
         return KOKORO_VOICES

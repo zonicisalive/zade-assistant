@@ -26,3 +26,23 @@ def test_room_louder_than_voice_is_flagged():
 
 def test_voice_step_needs_the_quiet_step(tmp_path):
     assert calibrate.run("voice", tmp_path)["ok"] is False
+
+
+def test_gate_keeps_speech_and_mutes_the_room():
+    from zade import audio
+    rng = np.random.default_rng(3)
+    room = rng.normal(0, 300, audio.RATE).astype(np.int16)
+    voice = rng.normal(0, 5000, audio.RATE).astype(np.int16)
+    out = calibrate.gate(np.concatenate([room, voice]), thr=1500)
+    assert not out[:audio.RATE - audio.FRAME * 3].any()          # room muted
+    assert np.array_equal(out[audio.RATE + audio.FRAME:], np.concatenate([room, voice])[audio.RATE + audio.FRAME:])
+
+
+def test_stats_for_another_setting(tmp_path, monkeypatch):
+    from zade import audio
+    rng = np.random.default_rng(4)
+    np.save(tmp_path / "calibration_room.npy", rng.normal(0, 800, 5 * audio.RATE).astype(np.int16))
+    np.save(tmp_path / "calibration_voice.npy", rng.normal(0, 6000, 6 * audio.RATE).astype(np.int16))
+    monkeypatch.setattr(calibrate, "speech_levels", lambda clip: calibrate.levels(clip))  # no VAD model needed
+    low, high = calibrate.stats(tmp_path, 2.0), calibrate.stats(tmp_path, 5.0)
+    assert low["threshold"] < high["threshold"] and low["noise_factor"] == 2.0

@@ -5,7 +5,6 @@ people) counts as talking; too high and quiet words are missed. Used by the app 
 calibrate quiet|voice).
 """
 
-import json
 import pathlib
 
 import numpy as np
@@ -53,6 +52,19 @@ def recommend(noise, voice, floor=500, max_noise=0.03):
             "too_noisy": bool((noise > thr).mean() > max_noise)}
 
 
+def gate(clip, thr, hold_frames=3):
+    """The clip with everything Zade treats as silence muted: what counts as talking at this threshold.
+    A short hold keeps word endings from sounding choppy."""
+    out = np.zeros_like(clip)
+    keep = 0
+    for i in range(0, len(clip) - audio.FRAME + 1, audio.FRAME):
+        frame = clip[i:i + audio.FRAME]
+        keep = hold_frames if audio.rms(frame) > thr else keep - 1
+        if keep > 0:
+            out[i:i + audio.FRAME] = frame
+    return out
+
+
 def _record(seconds):
     import sounddevice as sd
 
@@ -61,16 +73,48 @@ def _record(seconds):
     return clip[:, 0]
 
 
+def _paths(data_dir):
+    d = pathlib.Path(data_dir)
+    return d / "calibration_room.npy", d / "calibration_voice.npy"
+
+
+def stats(data_dir, factor=None):
+    """Numbers for the saved recordings: the recommendation, or the result of a given noise_factor."""
+    room_path, voice_path = _paths(data_dir)
+    room, voice = np.load(room_path), np.load(voice_path)
+    r = recommend(levels(room), speech_levels(voice))
+    if factor is not None:
+        noise, speech = levels(room), speech_levels(voice)
+        thr = max(500, float(np.percentile(noise, 20)) * factor)
+        r.update(noise_factor=factor, threshold=round(thr), noise_pct=round(100 * float((noise > thr).mean())),
+                 voice_pct=round(100 * float((speech > thr).mean())))
+    return r
+
+
+def play(data_dir, which, factor=None):
+    """Play the room + voice recording as heard ("before") or as Zade separates it ("after")."""
+    import sounddevice as sd
+
+    room_path, voice_path = _paths(data_dir)
+    clip = np.concatenate([np.load(room_path), np.load(voice_path)])
+    if which == "after":
+        clip = gate(clip, stats(data_dir, factor)["threshold"])
+    sd.play(clip, audio.RATE)
+    sd.wait()
+    return {"ok": True}
+
+
 def run(step, data_dir):
     """step "quiet": measure the room; step "voice": measure the voice and recommend a setting."""
-    saved = pathlib.Path(data_dir) / "calibration_noise.json"
+    room_path, voice_path = _paths(data_dir)
     if step == "quiet":
-        noise = levels(_record(NOISE_SECONDS))
-        saved.write_text(json.dumps(noise.tolist()))
-        return {"ok": True, "room": round(float(np.median(noise)))}
-    if not saved.exists():
+        room = _record(NOISE_SECONDS)
+        np.save(room_path, room)
+        return {"ok": True, "room": round(float(np.median(levels(room))))}
+    if not room_path.exists():
         return {"ok": False, "error": "Measure the quiet room first."}
-    voice = speech_levels(_record(VOICE_SECONDS))
-    if len(voice) < 5:
+    voice = _record(VOICE_SECONDS)
+    if len(speech_levels(voice)) < 5:
         return {"ok": False, "error": "I didn't hear you speak. Try again, a bit louder."}
-    return {"ok": True, **recommend(np.array(json.loads(saved.read_text())), voice)}
+    np.save(voice_path, voice)
+    return {"ok": True, **stats(data_dir)}
