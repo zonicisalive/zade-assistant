@@ -32,6 +32,49 @@ Item {
     readonly property color irisColor: robot ? glow : Qt.darker(body, 2.6)
     readonly property color mouthFill: robot ? Qt.alpha(glow, 0.35) : Qt.darker(body, 4.2)
     readonly property real hs: size * (hasEars ? 0.8 : 1.0)                          // head size (ears need room)
+    // Level of detail: in the 36-48 px overlay, bold lines, big dark eyes and one main effect read best.
+    readonly property bool small: hs < 64
+    readonly property real sw: Math.max(small ? 2 : 1.5, hs * (small ? 0.06 : 0.042))   // one stroke weight for all lines
+
+    // Drawn effect icons (instead of font glyphs, so they match the face's line work)
+    component Heart: Shape {
+        id: heartShape
+        property color fill: "#ff4d6d"
+        property real d: 10
+        width: d; height: d
+        preferredRendererType: Shape.CurveRenderer
+        ShapePath {
+            fillColor: heartShape.fill; strokeColor: "transparent"
+            startX: heartShape.d * 0.5; startY: heartShape.d * 0.27
+            PathCubic { x: heartShape.d * 0.05; y: heartShape.d * 0.36; control1X: heartShape.d * 0.42; control1Y: heartShape.d * 0.02; control2X: heartShape.d * 0.05; control2Y: heartShape.d * 0.05 }
+            PathCubic { x: heartShape.d * 0.5; y: heartShape.d * 0.95; control1X: heartShape.d * 0.05; control1Y: heartShape.d * 0.66; control2X: heartShape.d * 0.42; control2Y: heartShape.d * 0.8 }
+            PathCubic { x: heartShape.d * 0.95; y: heartShape.d * 0.36; control1X: heartShape.d * 0.58; control1Y: heartShape.d * 0.8; control2X: heartShape.d * 0.95; control2Y: heartShape.d * 0.66 }
+            PathCubic { x: heartShape.d * 0.5; y: heartShape.d * 0.27; control1X: heartShape.d * 0.95; control1Y: heartShape.d * 0.05; control2X: heartShape.d * 0.58; control2Y: heartShape.d * 0.02 }
+        }
+    }
+    component Star: Shape {   // points: 5 = star, 4 = sparkle
+        id: starShape
+        property color fill: "#ffd23f"
+        property real d: 10
+        property int points: 5
+        property real inner: 0.42
+        width: d; height: d
+        preferredRendererType: Shape.CurveRenderer
+        ShapePath {
+            fillColor: starShape.fill; strokeColor: "transparent"
+            PathPolyline {
+                path: {
+                    const pts = [], n = starShape.points * 2, r = starShape.d / 2
+                    for (let i = 0; i <= n; i++) {
+                        const a = -Math.PI / 2 + i * Math.PI / starShape.points
+                        const k = i % 2 === 0 ? 1 : starShape.inner
+                        pts.push(Qt.point(r + Math.cos(a) * r * k, r + Math.sin(a) * r * k))
+                    }
+                    return pts
+                }
+            }
+        }
+    }
 
     // ── Expression rig ─────────────────────────────────────────────────────
     readonly property var base: ({ eye: "open", lidTop: 0.05, lidTilt: 0, lidBottom: 0, pupil: 1, lookX: 0, lookY: 0,
@@ -283,13 +326,13 @@ Item {
                     Rectangle {  // iris
                         id: iris
                         visible: !face.robot
-                        width: Math.min(eye.ew, eye.eh) * 0.78 * face.pupil; height: width; radius: width / 2
+                        width: Math.min(eye.ew, eye.eh) * (face.small ? 1.15 : 0.86) * face.pupil; height: width; radius: width / 2
                         x: (eye.ew - width) / 2 + face.lookX * eye.ew * 0.24
                         y: (eye.eh - height) / 2 + face.lookY * eye.eh * 0.24
                         color: face.irisColor
                         Rectangle { anchors.centerIn: parent; width: parent.width * 0.52; height: width; radius: width / 2; color: "#0b0b0c" }
                         Rectangle { x: parent.width * 0.55; y: parent.height * 0.12; width: parent.width * 0.34; height: width; radius: width / 2; color: "white" }
-                        Rectangle { x: parent.width * 0.2; y: parent.height * 0.62; width: parent.width * 0.16; height: width; radius: width / 2; color: "white"; opacity: 0.8 }
+                        Rectangle { visible: !face.small; x: parent.width * 0.2; y: parent.height * 0.62; width: parent.width * 0.16; height: width; radius: width / 2; color: "white"; opacity: 0.8 }
                     }
                     Rectangle {  // upper lid (also blinks)
                         width: eye.ew * 1.6; height: eye.eh * 1.2
@@ -334,26 +377,30 @@ Item {
                     Behavior on opacity { NumberAnimation { duration: 140 } }
                     preferredRendererType: Shape.CurveRenderer
                     ShapePath {
-                        strokeColor: face.lineColor; strokeWidth: Math.max(1.5, face.hs * 0.04)
+                        strokeColor: face.lineColor; strokeWidth: face.sw
                         fillColor: "transparent"; capStyle: ShapePath.RoundCap
                         startX: eye.ew * 0.05; startY: eye.eh * 0.55
                         PathQuad { x: eye.ew * 0.95; y: eye.eh * 0.55; controlX: eye.ew * 0.5
                                    controlY: eye.em === "calm" ? eye.eh * 0.95 : eye.eh * 0.05 }
                     }
                 }
-                Text {  // heart / star eyes
+                Heart {  // heart eyes
+                    visible: eye.em === "heart"
+                    d: eye.ew * 1.25
                     anchors.centerIn: parent
-                    text: eye.em === "heart" ? "♥" : "★"
-                    visible: eye.em === "heart" || eye.em === "star"
-                    color: eye.em === "heart" ? "#ff4d6d" : "#ffd23f"
-                    font.pixelSize: eye.ew * 1.45
                     scale: 1 + 0.08 * Math.sin(face.t * 8)
+                }
+                Star {  // star eyes
+                    visible: eye.em === "star"
+                    d: eye.ew * 1.3
+                    anchors.centerIn: parent
+                    rotation: Math.sin(face.t * 3) * 8
                 }
 
                 // Brow
                 Rectangle {
                     visible: !face.robot || face.browShow > 0.9
-                    width: eye.ew * 1.05; height: Math.max(1.5, face.hs * 0.04); radius: height / 2
+                    width: eye.ew * 1.05; height: face.sw * 1.15; radius: height / 2
                     x: (eye.ew - width) / 2 + eye.side * face.browAsym * 0
                     y: -face.hs * 0.07 + face.browY * face.hs * 0.045 + face.browAsym * (eye.index === 0 ? -1 : 1) * face.hs * 0.035
                     rotation: face.browTilt * 20 * eye.side + face.browAsym * (eye.index === 0 ? -8 : 8)
@@ -443,7 +490,7 @@ Item {
                 preferredRendererType: Shape.CurveRenderer
                 ShapePath {
                     strokeColor: face.lineColor
-                    strokeWidth: Math.max(1.5, face.hs * 0.035)
+                    strokeWidth: face.sw
                     fillColor: "transparent"
                     capStyle: ShapePath.RoundCap; joinStyle: ShapePath.RoundJoin
                     startX: 0; startY: 0
@@ -469,7 +516,7 @@ Item {
                 preferredRendererType: Shape.CurveRenderer
                 ShapePath {
                     fillColor: "#ee6b85"
-                    strokeColor: face.lineColor; strokeWidth: Math.max(1, face.hs * 0.018)
+                    strokeColor: face.lineColor; strokeWidth: face.sw * 0.6
                     joinStyle: ShapePath.RoundJoin
                     startX: 0; startY: 0
                     PathLine { x: 0; y: tongueOut.th - tongueOut.tw / 2 }
@@ -491,14 +538,14 @@ Item {
                 width: face.hs * (0.09 + 0.07 * o); height: face.hs * (0.08 + 0.11 * o); radius: width / 2
                 x: (mouth.w - width) / 2; y: -height * 0.3
                 color: face.mouthFill
-                border.width: Math.max(1.5, face.hs * 0.03); border.color: face.lineColor
+                border.width: face.sw; border.color: face.lineColor
             }
             // wavy (confused / nervous / embarrassed)
             Shape {
                 visible: mouth.mk === "wavy"
                 preferredRendererType: Shape.CurveRenderer
                 ShapePath {
-                    strokeColor: face.lineColor; strokeWidth: Math.max(1.5, face.hs * 0.035)
+                    strokeColor: face.lineColor; strokeWidth: face.sw
                     fillColor: "transparent"; capStyle: ShapePath.RoundCap
                     startX: 0; startY: 0
                     PathQuad { x: mouth.w / 3; y: 0; controlX: mouth.w / 6; controlY: -face.hs * 0.05 - face.talk * face.hs * 0.04 }
@@ -541,21 +588,45 @@ Item {
             color: "#8fd3ff"; opacity: 0.9
             Rectangle { x: parent.width * 0.25; y: parent.height * 0.2; width: parent.width * 0.3; height: width; radius: width / 2; color: "white"; opacity: 0.7 }
         }
-        // Anger mark
-        Text {
+        // Anger mark: four curved corners around a gap (the comic "vein"), pulsing
+        Shape {
             visible: face.rig.fx === "anger"
-            text: "✶"   // six-pointed black star, reads as a pulsing anger mark
-            color: "#ff4d4d"
-            font.pixelSize: face.hs * 0.26; font.bold: true
-            x: face.hs * 0.74; y: -face.hs * 0.04
+            readonly property real d: face.hs * 0.24
+            x: face.hs * 0.76; y: -face.hs * 0.02
+            width: d; height: d
             scale: 0.85 + 0.2 * Math.abs(Math.sin(face.t * 6))
+            preferredRendererType: Shape.CurveRenderer
+            ShapePath {
+                strokeColor: "#ff4d4d"; strokeWidth: face.sw; fillColor: "transparent"; capStyle: ShapePath.RoundCap
+                startX: face.hs * 0.12 * (1 + -1 * 0.25); startY: face.hs * 0.12 * (1 + -1 * 0.95)
+                PathQuad { x: face.hs * 0.12 * (1 + -1 * 0.95); y: face.hs * 0.12 * (1 + -1 * 0.25)
+                           controlX: face.hs * 0.12 * (1 + -1 * 0.3); controlY: face.hs * 0.12 * (1 + -1 * 0.3) }
+            }
+            ShapePath {
+                strokeColor: "#ff4d4d"; strokeWidth: face.sw; fillColor: "transparent"; capStyle: ShapePath.RoundCap
+                startX: face.hs * 0.12 * (1 + 1 * 0.25); startY: face.hs * 0.12 * (1 + -1 * 0.95)
+                PathQuad { x: face.hs * 0.12 * (1 + 1 * 0.95); y: face.hs * 0.12 * (1 + -1 * 0.25)
+                           controlX: face.hs * 0.12 * (1 + 1 * 0.3); controlY: face.hs * 0.12 * (1 + -1 * 0.3) }
+            }
+            ShapePath {
+                strokeColor: "#ff4d4d"; strokeWidth: face.sw; fillColor: "transparent"; capStyle: ShapePath.RoundCap
+                startX: face.hs * 0.12 * (1 + -1 * 0.25); startY: face.hs * 0.12 * (1 + 1 * 0.95)
+                PathQuad { x: face.hs * 0.12 * (1 + -1 * 0.95); y: face.hs * 0.12 * (1 + 1 * 0.25)
+                           controlX: face.hs * 0.12 * (1 + -1 * 0.3); controlY: face.hs * 0.12 * (1 + 1 * 0.3) }
+            }
+            ShapePath {
+                strokeColor: "#ff4d4d"; strokeWidth: face.sw; fillColor: "transparent"; capStyle: ShapePath.RoundCap
+                startX: face.hs * 0.12 * (1 + 1 * 0.25); startY: face.hs * 0.12 * (1 + 1 * 0.95)
+                PathQuad { x: face.hs * 0.12 * (1 + 1 * 0.95); y: face.hs * 0.12 * (1 + 1 * 0.25)
+                           controlX: face.hs * 0.12 * (1 + 1 * 0.3); controlY: face.hs * 0.12 * (1 + 1 * 0.3) }
+            }
         }
         // Question mark
         Text {
             visible: face.rig.fx === "question"
             text: "?"
             color: face.robot ? face.glow : Qt.darker(face.body, 2.2)
-            font.pixelSize: face.hs * 0.34; font.bold: true
+            font.family: "Readex Pro"; font.pixelSize: face.hs * (face.small ? 0.5 : 0.34); font.weight: Font.Bold
             x: face.hs * 0.82; y: -face.hs * 0.12 + Math.sin(face.t * 3) * face.hs * 0.03
             rotation: 15
         }
@@ -586,31 +657,28 @@ Item {
                 opacity: 1 - p
             }
         }
-        // Hearts floating up
+        // Hearts floating up (one at small sizes)
         Repeater {
-            model: face.rig.fx === "hearts" ? 3 : 0
-            Text {
+            model: face.rig.fx === "hearts" ? (face.small ? 1 : 3) : 0
+            Heart {
                 required property int index
                 readonly property real p: ((face.t * 0.45) + index / 3) % 1
-                text: "♥"
-                color: "#ff4d6d"
-                font.pixelSize: face.hs * 0.16
-                x: face.hs * (index === 1 ? 0.02 : 0.86) + Math.sin(face.t * 3 + index) * face.hs * 0.04
-                y: face.hs * (0.3 - p * 0.45)
+                d: face.hs * (face.small ? 0.3 : 0.18)
+                x: face.hs * (index === 1 ? 0.0 : 0.84) + Math.sin(face.t * 3 + index) * face.hs * 0.04
+                y: face.hs * (0.25 - p * 0.45)
                 opacity: 1 - p
             }
         }
-        // Sparkles
+        // Sparkles (one at small sizes)
         Repeater {
-            model: face.rig.fx === "sparkle" ? [[0.02, 0.06], [0.9, 0.0], [0.94, 0.5]] : []
-            Text {
+            model: face.rig.fx === "sparkle" ? (face.small ? [[0.84, -0.04]] : [[0.02, 0.06], [0.88, -0.02], [0.92, 0.5]]) : []
+            Star {
                 required property var modelData
                 required property int index
-                text: "✦"
-                color: "#ffd23f"
-                font.pixelSize: face.hs * 0.14
+                points: 4; inner: 0.32
+                d: face.hs * (face.small ? 0.3 : 0.18)
                 x: face.hs * modelData[0]; y: face.hs * modelData[1]
-                scale: 0.5 + 0.6 * Math.abs(Math.sin(face.t * 4 + index * 1.3))
+                scale: 0.55 + 0.55 * Math.abs(Math.sin(face.t * 4 + index * 1.3))
             }
         }
     }
