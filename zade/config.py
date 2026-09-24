@@ -8,7 +8,10 @@ DEFAULTS = {
              # 3-stage wake check: the wake model fires, Silero VAD confirms speech, then a tiny Whisper
              # model re-listens to the last 2 s and must hear "hey zade" (or a close variant).
              "vad_threshold": 0.5, "verify": True, "verify_model": "tiny.en"},
-    "audio": {"rms_threshold": 500, "noise_factor": 2.5, "silence_s": 0.8, "max_s": 10.0, "start_timeout_s": 4.0},
+    "audio": {"rms_threshold": 500, "noise_factor": 2.5, "silence_s": 0.8, "max_s": 10.0, "start_timeout_s": 4.0,
+              # You're done talking when the sound falls below this share of your own voice level, so
+              # people talking in the background don't keep the recording open. Lower = more patient.
+              "end_ratio": 0.25},
     "stt": {
         "provider": "whisper", "model": "small.en", "device": "cpu", "beam_size": 5,
         # Words to expect: big accuracy gain for accents and made-up names (shortcut phrases are added too).

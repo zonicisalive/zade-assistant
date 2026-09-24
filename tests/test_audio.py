@@ -178,3 +178,11 @@ def test_wake_needs_the_second_opinion(monkeypatch):
 
     assert audio.wait_for_wake(object(), Model(), 0.5, verify=verify) == "wake"
     assert len(heard) == 2 and heard[0] > 0  # the recent audio was handed to the checker
+
+
+def test_background_talk_does_not_keep_the_recording_open():
+    # you at 6000, then your mother across the room at 900 (above the 500 room threshold)
+    assert audio.decide(lv((0, 0.3), (6000, 1.5), (900, 0.5)), **A) == "wait"
+    assert audio.decide(lv((0, 0.3), (6000, 1.5), (900, 0.9)), **A) == "stop"
+    # a quiet speaker isn't cut off: 900 is their own voice level, so it still counts as talking
+    assert audio.decide(lv((0, 0.3), (900, 1.5), (900, 0.9)), **A) == "wait"

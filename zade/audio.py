@@ -15,7 +15,7 @@ def rms(frame):
     return float(np.sqrt(np.mean(frame.astype(np.float32) ** 2)))
 
 
-def decide(levels, thr, silence_s, max_s, start_timeout_s):
+def decide(levels, thr, silence_s, max_s, start_timeout_s, end_ratio=0.25):
     # ponytail: energy endpointing; swap for Silero VAD if noise keeps recordings open.
     n = len(levels)
     loud = [i for i, level in enumerate(levels) if level > thr]
@@ -23,7 +23,13 @@ def decide(levels, thr, silence_s, max_s, start_timeout_s):
         return "abort" if n >= round(start_timeout_s / FRAME_S) else "wait"
     if n >= round(max_s / FRAME_S):
         return "stop"
-    return "stop" if n - 1 - loud[-1] >= round(silence_s / FRAME_S) else "wait"
+    # Someone talking in the background stays above the room-noise threshold and kept recordings open.
+    # The user, close to the mic, is much louder: they have finished once the sound falls well below
+    # their own voice level, whatever the room is doing.
+    voice = float(np.median([levels[i] for i in loud]))
+    end_thr = max(thr, end_ratio * voice)
+    last = max(i for i, level in enumerate(levels) if level > end_thr)
+    return "stop" if n - 1 - last >= round(silence_s / FRAME_S) else "wait"
 
 
 def open_stream():
@@ -115,7 +121,8 @@ def record(stream, cfg, start_timeout_s=None, released=None, cancelled=None, on_
             if released() or len(frames) >= round(a["max_s"] / FRAME_S):
                 return np.concatenate(frames)
             continue
-        d = decide(levels, thr, a["silence_s"], a["max_s"], start_timeout_s or a["start_timeout_s"])
+        d = decide(levels, thr, a["silence_s"], a["max_s"], start_timeout_s or a["start_timeout_s"],
+                   a.get("end_ratio", 0.25))
         if d == "abort":
             return None
         if d == "stop":
