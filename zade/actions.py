@@ -162,6 +162,63 @@ POWER = {
 }
 
 
+# Key presses (wtype). Spoken or written names -> Wayland keysyms.
+KEY_MODS = {"ctrl": "ctrl", "control": "ctrl", "shift": "shift", "alt": "alt", "altgr": "altgr", "super": "logo",
+            "win": "logo", "windows": "logo", "meta": "logo", "logo": "logo", "cmd": "logo", "command": "logo"}
+KEY_NAMES = {"enter": "Return", "return": "Return", "tab": "Tab", "escape": "Escape", "esc": "Escape",
+             "space": "space", "spacebar": "space", "backspace": "BackSpace", "delete": "Delete", "del": "Delete",
+             "insert": "Insert", "home": "Home", "end": "End", "page up": "Prior", "pageup": "Prior",
+             "page down": "Next", "pagedown": "Next", "up": "Up", "down": "Down", "left": "Left", "right": "Right",
+             "print": "Print", "print screen": "Print", "caps lock": "Caps_Lock", "menu": "Menu",
+             "volume up": "XF86AudioRaiseVolume", "volume down": "XF86AudioLowerVolume", "mute": "XF86AudioMute",
+             "play": "XF86AudioPlay", "pause": "XF86AudioPlay", "next": "XF86AudioNext", "previous": "XF86AudioPrev",
+             "minus": "minus", "plus": "plus", "equals": "equal", "comma": "comma", "period": "period",
+             "dot": "period", "slash": "slash"}
+CLOSING_COMBOS = {("alt", "F4"), ("ctrl", "q"), ("ctrl", "w"), ("logo", "q")}
+
+
+def _key_parts(combo):
+    parts = [p.strip().lower() for p in combo.split("+") if p.strip()]
+    mods, key = [], None
+    for p in parts:
+        if p in KEY_MODS:
+            mods.append(KEY_MODS[p])
+        elif key is None:
+            if p in KEY_NAMES:
+                key = KEY_NAMES[p]
+            elif m := re.fullmatch(r"f(\d{1,2})", p):
+                key = f"F{m[1]}"
+            elif len(p) == 1:
+                key = p
+            else:
+                raise Failed(f"I don't know the key {p}.")
+        else:
+            raise Failed(f"I can only press one key at a time in {combo}.")
+    if key is None:
+        raise Failed(f"Which key should I press with {combo}?")
+    return mods, key
+
+
+def wtype_args(combo):
+    mods, key = _key_parts(combo)
+    return [a for m in mods for a in ("-M", m)] + ["-k", key] + [a for m in reversed(mods) for a in ("-m", m)]
+
+
+def _blocked(mods, key):
+    # Super+Shift+E quits niri (ends the session); Ctrl+Alt+Delete/Backspace can reboot or kill the session.
+    return ({"logo", "shift"} <= set(mods) and key.lower() == "e") or \
+           ({"ctrl", "alt"} <= set(mods) and key in ("Delete", "BackSpace"))
+
+
+def is_closing(keys):
+    """True if any combo in `keys` usually closes a window or app (Alt+F4, Ctrl+Q/W, Super+Q)."""
+    try:
+        return any((m, k) in CLOSING_COMBOS for c in re.split(r",\s*|\s+then\s+", keys)
+                   for mods, k in [_key_parts(c)] for m in mods)
+    except Failed:
+        return False
+
+
 def site_url(site):
     s = site.lower().strip().removeprefix("the ").removesuffix(" website")
     if s.replace(" ", "") in SITES:
@@ -266,6 +323,15 @@ def run(action, confirm):
         else:
             d = int(a.get("delta", 10))
             _call(["ddcutil", "setvcp", "10", "+" if d >= 0 else "-", str(abs(d))])
+        return ""
+    if name == "press_keys":
+        combos = [c for c in re.split(r",\s*|\s+then\s+", a["keys"]) if c.strip()]
+        parsed = [_key_parts(c) for c in combos]  # validate every combo before pressing any
+        for c, (mods, key) in zip(combos, parsed):
+            if _blocked(mods, key):
+                raise Failed(f"I won't press {c}, it could end your session.")
+        for c in combos:
+            _call(["wtype", *wtype_args(c)])
         return ""
     if name == "screenshot":
         _call(["niri", "msg", "action", "screenshot-screen"])

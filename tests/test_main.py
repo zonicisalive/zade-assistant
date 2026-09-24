@@ -285,3 +285,15 @@ def test_user_saying_close_still_works_without_asking():
     ctx.confirm = lambda q: (_ for _ in ()).throw(AssertionError("should not ask"))
     z.handle(ctx, "close this window")
     assert ran == [{"name": "window", "args": {"action": "close"}}]
+
+
+def test_model_pressing_a_closing_combo_asks_first():
+    asked, ran = [], []
+
+    def ask(text, facts, cfg, run_tool, history=()):
+        return run_tool("press_keys", {"keys": "alt+f4"})
+
+    ctx = make([], ask=ask, run_action=lambda a, c: ran.append(a) or "")
+    ctx.confirm = lambda q: asked.append(q) or False
+    z.handle(ctx, "tidy up")
+    assert asked == ["Press keys alt+f4?"] and ran == []

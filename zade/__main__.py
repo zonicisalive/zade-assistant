@@ -122,7 +122,7 @@ def apply_live(cfg, new):
 
 
 # Actions that need a spoken yes at each safety level (shell and power always ask, in actions.py).
-RISKY = {"close_app", "type_text", "clipboard_copy"}
+RISKY = {"close_app", "type_text", "clipboard_copy", "press_keys"}
 READ_ONLY = {"dnd", "time", "date", "weather", "web_answer", "notes_read", "list_facts", "list_reminders",
              "system_status", "look_at_screen", "clipboard_read", "remember", "forget", "note_add",
              "set_timer", "set_reminder", "cancel_reminder", "make_shortcut", "sync_apps", "sleep",
@@ -161,7 +161,8 @@ def dispatch(ctx, action, from_model=False):
     name, a = action["name"], action.get("args", {})
     try:
         # Closing things on the model's own initiative always needs a yes; the user naming it doesn't.
-        model_close = from_model and (name == "close_app" or (name == "window" and a.get("action") == "close"))
+        model_close = from_model and (name == "close_app" or (name == "window" and a.get("action") == "close")
+                                      or (name == "press_keys" and actions.is_closing(a.get("keys", ""))))
         if model_close or needs_confirm(name, ctx.cfg["safety"]["confirm"], a):
             detail = next((str(v) for v in a.values() if isinstance(v, (str, int))), "")
             if not ctx.confirm(f"{name.replace('_', ' ').capitalize()}{' ' + detail if detail else ''}?"):

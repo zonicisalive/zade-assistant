@@ -62,6 +62,8 @@ TOOLS = [
                                                       "focus_right", "overview", "workspace",
                                                       "move_to_workspace"]}, workspace=S),
     _t("open_website", "Open a website by name (youtube, github, ...) or domain.", ["site"], site=S),
+    _t("press_keys", "Press keys or shortcuts in the focused window, e.g. \"ctrl+c\", \"alt+tab\", \"super+2\", "
+       "\"enter\", \"f5\"; several separated by commas.", ["keys"], keys=S),
     _t("clipboard_read", "Read the text on the clipboard."),
     _t("clipboard_copy", "Copy text to the clipboard.", ["text"], text=S),
     _t("type_text", "Type text into the focused window as if typed on the keyboard.", ["text"], text=S),

@@ -178,3 +178,14 @@ def test_mute_and_unmute_patterns():
         assert P(router.normalize(t), find) == {"name": "mute", "args": {"on": True}}, t
     for t in ["unmute", "unmute the sound", "turn the sound back on", "turn sound on", "sound on"]:
         assert P(router.normalize(t), find) == {"name": "mute", "args": {"on": False}}, t
+
+
+def test_press_key_patterns():
+    P = lambda t: router.parse_pattern(router.normalize(t), find)
+    assert P("press enter") == {"name": "press_keys", "args": {"keys": "enter"}}
+    assert P("Press control C.") == {"name": "press_keys", "args": {"keys": "ctrl+c"}}
+    assert P("hit escape") == {"name": "press_keys", "args": {"keys": "escape"}}
+    assert P("press alt tab") == {"name": "press_keys", "args": {"keys": "alt+tab"}}
+    assert P("press windows 2") == {"name": "press_keys", "args": {"keys": "super+2"}}
+    assert P("press control shift t") == {"name": "press_keys", "args": {"keys": "ctrl+shift+t"}}
+    assert P("press page down") == {"name": "press_keys", "args": {"keys": "page down"}}

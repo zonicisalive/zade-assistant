@@ -44,6 +44,10 @@ def parse_teach(text):
     return None
 
 
+_SPOKEN_MODS = {"control": "ctrl", "ctrl": "ctrl", "shift": "shift", "alt": "alt", "super": "super",
+                "windows": "super", "win": "super", "meta": "super"}
+
+
 UNITS = {"second": 1, "minute": 60, "min": 60, "hour": 3600}
 
 
@@ -122,6 +126,12 @@ def parse_pattern(text, find_app):
         return {"name": "mute", "args": {"on": True}}
     if re.fullmatch(r"unmute(?: the)?(?: sound| volume| audio| it| speakers?)?|(?:turn )?(?:the )?sound (?:back )?on", text):
         return {"name": "mute", "args": {"on": False}}
+    if m := re.fullmatch(r"(?:press|hit|push|tap)(?: the)? (.+?)(?: key| keys| button)?", text):
+        words = m[1].replace("+", " ").split()
+        mods = [w for w in words if w in _SPOKEN_MODS]
+        key = " ".join(w for w in words if w not in _SPOKEN_MODS)
+        if key:
+            return {"name": "press_keys", "args": {"keys": "+".join([_SPOKEN_MODS[w] for w in mods] + [key])}}
     if m := re.fullmatch(r"type (.+)", text):
         return {"name": "type_text", "args": {"text": m[1]}}
     # Local time and date come from the clock, never from the model. "in india" = local time here.

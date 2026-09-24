@@ -245,3 +245,30 @@ def test_mute_sets_state_instead_of_toggling(monkeypatch):
     assert calls == [["wpctl", "set-mute", "@DEFAULT_AUDIO_SINK@", "1"],
                      ["wpctl", "set-mute", "@DEFAULT_AUDIO_SINK@", "0"],
                      ["wpctl", "set-mute", "@DEFAULT_AUDIO_SINK@", "1"]]
+
+
+def test_key_combos_become_wtype_arguments():
+    K = actions.wtype_args
+    assert K("ctrl+c") == ["-M", "ctrl", "-k", "c", "-m", "ctrl"]
+    assert K("super+2") == ["-M", "logo", "-k", "2", "-m", "logo"]
+    assert K("ctrl+shift+t") == ["-M", "ctrl", "-M", "shift", "-k", "t", "-m", "shift", "-m", "ctrl"]
+    assert K("enter") == ["-k", "Return"]
+    assert K("alt+f4") == ["-M", "alt", "-k", "F4", "-m", "alt"]
+    assert K("page down") == ["-k", "Next"]
+    assert K("volume up") == ["-k", "XF86AudioRaiseVolume"]
+    with pytest.raises(actions.Failed):
+        K("ctrl+banana")
+
+
+def test_dangerous_combos_are_blocked(monkeypatch):
+    calls = _calls(monkeypatch)
+    for combo in ["super+shift+e", "ctrl+alt+delete", "ctrl+alt+backspace", "win+shift+e"]:
+        with pytest.raises(actions.Failed, match="won't press"):
+            actions.run({"name": "press_keys", "args": {"keys": combo}}, lambda q: True)
+    assert calls == []
+
+
+def test_press_a_sequence(monkeypatch):
+    calls = _calls(monkeypatch)
+    actions.run({"name": "press_keys", "args": {"keys": "ctrl+a, ctrl+c"}}, lambda q: True)
+    assert calls == [["wtype", "-M", "ctrl", "-k", "a", "-m", "ctrl"], ["wtype", "-M", "ctrl", "-k", "c", "-m", "ctrl"]]
