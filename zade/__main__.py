@@ -68,6 +68,13 @@ def split_emotion(reply):
     return (emotion if emotion in EMOTIONS else "neutral"), reply[m.end():].strip()
 
 
+def choose_emotion(emotion, reply):
+    """The model's tag, except that a question back to the user shows interest instead of a blank face."""
+    if emotion == "neutral" and reply.rstrip().endswith("?"):
+        return "curious"
+    return emotion
+
+
 def fact_words(facts):
     """Names you told Zade ("my name is zonic") as hotwords, so Whisper stops hearing "Sonic"."""
     out = []
@@ -290,7 +297,7 @@ def handle(ctx, raw):
             return out or "done"
 
         emotion, reply = split_emotion(ctx.ask(text, memory.facts(ctx.conn), ctx.cfg, run_tool, recent(ctx)))
-        ctx.show(emotion=emotion)
+        ctx.show(emotion=choose_emotion(emotion, reply))
         ctx.say(reply)
         if executed:
             memory.log(ctx.conn, text, executed, "llm", True)

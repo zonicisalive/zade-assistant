@@ -414,7 +414,7 @@ Item {
         Item {
             id: mouth
             readonly property string mk: face.rig.mouth === "smile" && face.look.mouth === "cat" ? "cat" : face.rig.mouth
-            readonly property real w: face.hs * (face.look.mouth === "small" ? 0.2 : 0.32) * face.mwidth
+            readonly property real w: Math.min(face.hs * 0.42, face.hs * (face.look.mouth === "small" ? 0.2 : 0.32) * face.mwidth)
             readonly property real bend: face.curve * face.hs * 0.1
             readonly property real gap: (face.mopen + face.talk) * face.hs * 0.13
             readonly property real tip: face.smirk * face.hs * 0.05   // smirk lifts the right corner
@@ -423,7 +423,8 @@ Item {
             width: w; height: face.hs * 0.3
 
             readonly property bool isOpen: mouth.mk !== "o" && mouth.mk !== "wavy" && mouth.mk !== "cat" && mouth.gap > face.hs * 0.012
-            readonly property real depth: mouth.bend + mouth.gap * 2.4          // lower-lip control depth
+            // Lower-lip depth, capped so the open mouth always stays above the chin (the curve reaches ~0.75x).
+            readonly property real depth: Math.min(mouth.bend + mouth.gap * 2.4, face.hs * (face.small ? 0.26 : 0.3))
             readonly property real teethH: mouth.mk === "grin" ? Math.min(mouth.gap * 0.55, face.hs * 0.055) : 0
 
             // Open mouth: dark inside, teeth along the upper lip, tongue at the bottom, all clipped to the mouth.

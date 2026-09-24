@@ -72,3 +72,17 @@ def test_all_emotions_are_offered_to_the_model(monkeypatch):
 
 def test_character_type_setting():
     assert config.DEFAULTS["persona"]["type"] == "blob"
+
+
+def test_questions_back_look_curious_not_blank():
+    assert z.choose_emotion("neutral", "How can I help you today?") == "curious"
+    assert z.choose_emotion("neutral", "TCP is a protocol.") == "neutral"
+    assert z.choose_emotion("happy", "Want me to open it?") == "happy"  # the model's own pick wins
+
+
+def test_prompt_guides_emotion_choice(monkeypatch):
+    got = {}
+    monkeypatch.setattr(providers, "chat", lambda name, system, *rest: got.update(system=system) or "ok")
+    brain.ask("hi", [], cfg(), None, vram=lambda: 8.0)
+    s = got["system"]
+    assert "greeting" in s and "[sleepy]" in s and "dry facts" in s

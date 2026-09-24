@@ -124,7 +124,11 @@ def ask(text, facts, cfg, run_tool, history=(), vram=vram_free_gb, resident=resi
         "\nBegin every reply with exactly one emotion tag that fits it: "
         "[neutral] [happy] [excited] [laughing] [love] [sad] [crying] [confused] [surprised] [amazed] [annoyed] "
         "[angry] [curious] [smug] [sleepy] [embarrassed] [nervous] [wink] [playful]. "
-        "The tag is shown on your face, never spoken.") + (f"\nNow: {now:%A %Y-%m-%d %H:%M}, the user's local time "
+        "The tag is shown on your face, never spoken. Be expressive: a greeting or friendly chat is [happy]; "
+        "a joke is [laughing] or [playful]; good news is [excited]; bad news is [sad]; compliments or affection "
+        "are [love] or [embarrassed]; being tired or saying good night is [sleepy]; an action that failed is "
+        "[embarrassed]; a question back to the user is [curious]; an insult is [sad] or [annoyed]. "
+        "Use [neutral] only for dry facts.") + (f"\nNow: {now:%A %Y-%m-%d %H:%M}, the user's local time "
                        f"(time zone {now:%Z}, UTC{now:%z}). Use it as is; do not convert it.")
     if cfg["llm"].get("personality"):
         system += "\nThe user's instructions for your personality and style: " + cfg["llm"]["personality"]
