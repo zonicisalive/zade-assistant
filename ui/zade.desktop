@@ -1,7 +1,7 @@
 [Desktop Entry]
 Name=Zade
 Comment=Control your voice assistant: status, voice, settings, memory and history
-Exec=sh -c "pkill -f '^(/usr/bin/)?qs -p /home/zonic/Zade/ui/app.qml'; exec qs -p /home/zonic/Zade/ui/app.qml"
+Exec=/home/zonic/Zade/ui/open-app.sh
 Icon=audio-input-microphone
 Terminal=false
 Type=Application
