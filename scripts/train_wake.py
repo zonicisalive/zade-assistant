@@ -6,7 +6,8 @@ generates synthetic "hey Zade" clips, mixes in your own recordings from `python 
 and trains. The result is hey_zade.onnx: copy it to ~/.local/share/zade/zade.onnx.
 
 Kaggle (free GPU):
-  1. Datasets -> New Dataset: upload this file and wake_samples.zip. Name it zade-wake.
+  1. Datasets -> New Dataset: upload this file, wake_samples.zip and any friends' voice_<name>.zip
+     (from scripts/record_voice.py). Keep it private. Name it zade-wake.
   2. Code -> New Notebook. Settings: Accelerator "GPU T4 x2", Internet on.
      Add Input -> your zade-wake dataset.
   3. One cell:  !python /kaggle/input/zade-wake/train_wake.py
@@ -185,29 +186,30 @@ def get_features(work, acav_gb):
 
 
 def find_recordings(given):
-    if given:
-        return pathlib.Path(given)
-    found = glob.glob("/kaggle/input/**/wake_samples.zip", recursive=True)
-    return pathlib.Path(found[0]) if found else None
+    """Every recordings zip: yours (wake_samples.zip) and friends' (voice_<name>.zip)."""
+    found = given.split(",") if given else glob.glob("/kaggle/input/**/*.zip", recursive=True)
+    return [pathlib.Path(p) for p in found if p]
 
 
-def add_recordings(zip_path, clips_dir, n_samples):
-    """Mix your own clips into the generated ones: repeated so they make up ~5% of the positives
+def add_recordings(zips, clips_dir, n_samples):
+    """Mix real voices into the generated ones: repeated so they make up ~5% of the positives
     (augmentation adds different noise and echo to every copy), and near-misses as negatives."""
-    if not zip_path:
-        print("No wake_samples.zip found: training on synthetic voices only.", flush=True)
+    pos, neg = [], []
+    for zp in zips:
+        with zipfile.ZipFile(zp) as z:
+            for name in z.namelist():
+                if name.endswith(".wav") and name.split("/")[0] in ("positive", "negative"):
+                    (pos if name.startswith("positive/") else neg).append(z.read(name))
+        print(f"recordings from {zp.name}", flush=True)
+    if not pos and not neg:
+        print("No recordings found: training on synthetic voices only.", flush=True)
         return
-    with zipfile.ZipFile(zip_path) as z:
-        names = [n for n in z.namelist() if n.endswith(".wav")]
-        pos = [n for n in names if n.startswith("positive/")]
-        neg = [n for n in names if n.startswith("negative/")]
-        for kind, members, copies in [("positive_train", pos, max(1, n_samples // 20 // max(1, len(pos)))),
-                                      ("negative_train", neg, 10)]:
-            for i, name in enumerate(members):
-                data = z.read(name)
-                for c in range(copies):
-                    (clips_dir / kind / f"yours_{i:04d}_{c:03d}.wav").write_bytes(data)
-            print(f"added {len(members)} of your clips x{copies} to {kind}", flush=True)
+    for kind, clips, copies in [("positive_train", pos, max(1, n_samples // 20 // max(1, len(pos)))),
+                                ("negative_train", neg, 10)]:
+        for i, data in enumerate(clips):
+            for c in range(copies):
+                (clips_dir / kind / f"real_{i:05d}_{c:03d}.wav").write_bytes(data)
+        print(f"added {len(clips)} real clips x{copies} to {kind}", flush=True)
 
 
 def inner(args):
@@ -262,7 +264,7 @@ def main():
     p.add_argument("--audioset-parts", type=int, default=3, help="AudioSet background files, ~700 MB each")
     p.add_argument("--max-background", type=int, default=100000, help="cap on background clips")
     p.add_argument("--acav-gb", type=float, default=17.3, help="GB of pre-computed negative features (17.3 = all)")
-    p.add_argument("--recordings", default="", help="wake_samples.zip (found automatically on Kaggle)")
+    p.add_argument("--recordings", default="", help="recording zips, comma-separated (found automatically on Kaggle)")
     argv = sys.argv[1:]
     args = p.parse_args(argv)
     if args.inner:
