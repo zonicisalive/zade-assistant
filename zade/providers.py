@@ -1,14 +1,25 @@
 import json
 import os
 
-import anthropic
 import httpx
 import ollama
-import openai
 
 MAX_ROUNDS = 4
 TOO_MANY = "That took too many steps, so I stopped."
-ERRORS = (anthropic.AnthropicError, openai.OpenAIError, ollama.ResponseError, httpx.HTTPError, ConnectionError)
+# Cloud SDKs are imported only when a cloud provider is used: they cost ~0.5 s of startup otherwise.
+
+
+def _errors(name):
+    base = (ollama.ResponseError, httpx.HTTPError, ConnectionError)
+    if name == "anthropic":
+        import anthropic
+
+        return base + (anthropic.AnthropicError,)
+    if name == "openai":
+        import openai
+
+        return base + (openai.OpenAIError,)
+    return base
 
 
 class ProviderError(Exception):
@@ -23,7 +34,11 @@ def _client(name, cfg):
     if not key:
         raise ProviderError(f"{pc['api_key_env']} is not set")
     if name == "anthropic":
+        import anthropic
+
         return anthropic.Anthropic(api_key=key, timeout=10, max_retries=1)
+    import openai
+
     return openai.OpenAI(base_url=pc["base_url"], api_key=key, timeout=10, max_retries=1)
 
 
@@ -109,5 +124,5 @@ def chat(name, system, text, tools, run_tool, cfg, extra, history=()):
         raise ProviderError(f"unknown provider {name}")
     try:
         return fn(system, text, tools, run_tool, cfg, extra, history)
-    except ERRORS as e:
+    except _errors(name) as e:
         raise ProviderError(f"{name}: {e}") from e

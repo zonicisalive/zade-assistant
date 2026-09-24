@@ -4,7 +4,6 @@ import logging
 import wave
 
 import numpy as np
-import openai
 
 from . import providers
 
@@ -37,7 +36,7 @@ def transcribe(audio, cfg, prompt="", hotwords=()):
             r = providers._client("openai", cfg).audio.transcriptions.create(
                 model=pc["stt_model"], file=("speech.wav", to_wav(audio)), **kw)
             return r.text.strip()
-        except (providers.ProviderError, openai.OpenAIError) as e:
+        except Exception as e:  # any cloud failure (network, key, API): fall back to the local engine
             log.warning("cloud STT failed, using local whisper: %s", e)
     words = ", ".join(dict.fromkeys([*s["hotwords"], *hotwords]))
     segments, _ = _whisper(s["model"], s["device"]).transcribe(

@@ -6,7 +6,6 @@ import time
 import unicodedata
 
 import numpy as np
-import openai
 import sounddevice as sd
 
 from . import providers
@@ -104,7 +103,7 @@ def speak(text, cfg, interrupt=None):
             pcm = providers._client("openai", cfg).audio.speech.create(
                 model=pc["tts_model"], voice=pc["tts_voice"], input=text, response_format="pcm").read()
             return _play(np.frombuffer(pcm, np.int16), 24000, interrupt)
-        except (providers.ProviderError, openai.OpenAIError) as e:
+        except Exception as e:  # any cloud failure (network, key, API): fall back to the local engine
             log.warning("cloud TTS failed, using piper: %s", e)
     if t["provider"] == "kokoro":
         try:

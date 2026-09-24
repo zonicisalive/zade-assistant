@@ -121,3 +121,12 @@ def test_history_is_sent_before_the_new_message(monkeypatch):
         {"role": "user", "content": "weather"}, {"role": "assistant", "content": "Which city?"},
         {"role": "user", "content": "Mumbai"},
     ]
+
+
+def test_cloud_sdks_are_not_imported_at_startup():
+    import subprocess
+    import sys
+
+    code = "import sys, zade.__main__; print('anthropic' in sys.modules, 'openai' in sys.modules)"
+    out = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True).stdout.strip()
+    assert out == "False False"
