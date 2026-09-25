@@ -214,7 +214,7 @@ def dispatch(ctx, action, from_model=False):
             ctx.app_words[:] = actions.app_names()
             return f"Synced {actions.all_app_count()} apps.", True
         if name == "weather":
-            return info.weather(a.get("place", ""), a.get("day", 0)), True
+            return info.weather(a.get("place") or ctx.cfg["weather"]["place"], a.get("day", 0)), True
         if name == "web_search":
             a = {**a, "engine": ctx.cfg["web"].get("engine", "google")}
             return ctx.run_action({"name": name, "args": a}, ctx.confirm), True

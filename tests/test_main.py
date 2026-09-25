@@ -315,3 +315,14 @@ def test_show_an_expression_sets_the_face():
     assert shown[-1] == "playful" and said == ["This is my playful face."]
     z.handle(ctx, "show me your banana face")
     assert said[-1].startswith("I can make these faces:")
+
+
+def test_weather_uses_the_default_place(monkeypatch):
+    from zade import info
+    asked = []
+    monkeypatch.setattr(info, "weather", lambda place, day: asked.append(place) or "Sunny.")
+    ctx = make([])
+    ctx.cfg["weather"]["place"] = "Mumbai"
+    z.dispatch(ctx, {"name": "weather", "args": {}})
+    z.dispatch(ctx, {"name": "weather", "args": {"place": "Delhi"}})
+    assert asked == ["Mumbai", "Delhi"]

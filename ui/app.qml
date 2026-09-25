@@ -921,6 +921,13 @@ ShellRoot {
                         Muted { text: "Keys are stored only in ~/.config/zade/env, readable by you alone. Zade reads them when it starts."
                                 Layout.fillWidth: true }
 
+                        Muted { text: "Weather"; Layout.topMargin: 8 }
+                        Group {
+                            Row_ { label: "Default location"; hint: "Used when you don\u2019t name a place (\u201cwhat\u2019s the weather\u201d). Empty guesses it from your internet connection."
+                                Field { Layout.preferredWidth: 260; placeholder: "e.g. Mumbai"; text: root.settings ? root.settings.weather.place : ""
+                                        onEdited: root.setSetting("weather.place", text) } }
+                        }
+
                         Muted { text: "Music"; Layout.topMargin: 8 }
                         Group {
                             Row_ { label: "Play songs with"; hint: "Say \u201cplay \u2026 on YouTube\u201d (or Spotify, YouTube Music) to pick one for a single song. YouTube needs no key."
