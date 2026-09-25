@@ -18,6 +18,7 @@ Options: --samples 50000 --steps 50000 --penalty 1500 --audioset-parts 3 --acav-
 """
 
 import argparse
+import http.client
 import ast
 import glob
 import io
@@ -55,14 +56,39 @@ def sh(*cmd, **kw):
     subprocess.run([str(c) for c in cmd], check=True, **kw)
 
 
-def download(url, path, headers=None):
+def fetch(url, dest, start=0, end=None, tries=30):
+    """Stream url's bytes [start, end] into dest (appending), resuming after dropped connections: big
+    Hugging Face downloads often break partway on hosted notebooks."""
+    import time
+
+    dest = pathlib.Path(dest)
+    done = dest.stat().st_size if dest.exists() else 0
+    want = None if end is None else end - start + 1
+    for attempt in range(tries):
+        if want is not None and done >= want:
+            return
+        rng = f"bytes={start + done}-" + ("" if end is None else str(end))
+        req = urllib.request.Request(url, headers={"Range": rng} if (start or done or end is not None) else {})
+        try:
+            with urllib.request.urlopen(req, timeout=120) as r, open(dest, "ab") as f:
+                while chunk := r.read(1 << 20):
+                    f.write(chunk)
+                    done += len(chunk)
+            if want is None or done >= want:
+                return
+        except (OSError, http.client.HTTPException) as e:  # IncompleteRead, timeouts, resets
+            print(f"  download interrupted at {done / 1e9:.2f} GB ({e}); resuming", flush=True)
+            time.sleep(min(30, 2 ** attempt))
+    raise RuntimeError(f"could not download {url}")
+
+
+def download(url, path):
     path = pathlib.Path(path)
     if path.exists() and path.stat().st_size > 0:
         return path
     print("GET:", url, flush=True)
     tmp = path.with_suffix(path.suffix + ".part")
-    with urllib.request.urlopen(urllib.request.Request(url, headers=headers or {}), timeout=120) as r, open(tmp, "wb") as f:
-        shutil.copyfileobj(r, f, 1 << 20)
+    fetch(url, tmp)
     tmp.rename(path)
     return path
 
@@ -79,7 +105,7 @@ def bootstrap(args, argv):
             sh(sys.executable, "-m", "pip", "install", "-q", "uv")
             uv = [sys.executable, "-m", "uv"]
         sh(*uv, "venv", "--python", "3.11", work / "venv")
-        sh(*uv, "pip", "install", "--python", py, *PINS)
+        sh(*uv, "pip", "install", "-q", "--python", py, *PINS)  # -q: progress bars flood the Kaggle log
         if not (work / "piper-sample-generator").exists():
             sh("git", "clone", "--depth", "1", "--branch", PIPER_TAG,
                "https://github.com/rhasspy/piper-sample-generator", work / "piper-sample-generator")
@@ -173,16 +199,16 @@ def get_features(work, acav_gb):
         rows_total, *frame = meta["shape"]
         row_bytes = int(np.prod(frame)) * np.dtype(meta["descr"]).itemsize
         rows = min(rows_total, int(acav_gb * 1e9 // row_bytes))
-        part = out.with_suffix(".part")
-        with open(part, "wb") as f:
+        header, body = out.with_suffix(".head"), out.with_suffix(".part")
+        with open(header, "wb") as f:
             np.lib.format.write_array_header_1_0(f, {"descr": meta["descr"], "fortran_order": False,
                                                      "shape": (rows, *frame)})
-            req = urllib.request.Request(url + "openwakeword_features_ACAV100M_2000_hrs_16bit.npy",
-                                         headers={"Range": f"bytes={offset}-{offset + rows * row_bytes - 1}"})
-            print(f"GET: ACAV100M features, {rows}/{rows_total} rows ({rows * row_bytes / 1e9:.1f} GB)", flush=True)
-            with urllib.request.urlopen(req, timeout=120) as r:
-                shutil.copyfileobj(r, f, 1 << 20)
-        part.rename(out)
+        print(f"GET: ACAV100M features, {rows}/{rows_total} rows ({rows * row_bytes / 1e9:.1f} GB)", flush=True)
+        fetch(url + "openwakeword_features_ACAV100M_2000_hrs_16bit.npy", body, offset, offset + rows * row_bytes - 1)
+        with open(header, "ab") as f, open(body, "rb") as b:  # header + data = a valid .npy
+            shutil.copyfileobj(b, f, 1 << 24)
+        body.unlink()
+        header.rename(out)
     return out, val
 
 
