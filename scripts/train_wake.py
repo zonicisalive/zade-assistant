@@ -267,13 +267,46 @@ def add_recordings(sources, clips_dir, n_samples):
         print(f"added {len(clips)} real clips x{copies} to {kind}", flush=True)
 
 
+GEN_CHILD = """
+import json, os, sys, uuid
+a = json.loads(sys.argv[1])
+sys.path.insert(0, a["piper"])
+from generate_samples import generate_samples
+os.makedirs(a["out"], exist_ok=True)
+generate_samples(text=a["text"], max_samples=a["n"], batch_size=a["batch"], noise_scales=[0.98],
+                 noise_scale_ws=[0.98], length_scales=[0.75, 1.0, 1.25], output_dir=a["out"],
+                 auto_reduce_batch_size=True, file_names=[uuid.uuid4().hex + ".wav" for _ in range(a["n"])])
+"""
+
+
+def generate_on_all_gpus(work, config, gpus):
+    """Make the two big training sets with every GPU at once (Kaggle's T4 x2): one process per GPU,
+    each writing its share. openWakeWord's own --generate_clips step then sees them done (it resumes
+    from what exists) and only makes the small test sets. A failed share is simply made by that step."""
+    clips = work / "model" / MODEL_NAME
+    jobs = [(clips / "positive_train", config["target_phrase"], config["tts_batch_size"]),
+            (clips / "negative_train", config["custom_negative_phrases"], max(1, config["tts_batch_size"] // 7))]
+    for out, text, batch in jobs:
+        n = config["n_samples"]
+        shares = [n // gpus + (1 if i < n % gpus else 0) for i in range(gpus)]
+        print(f"generating {n} clips into {out.name} on {gpus} GPUs", flush=True)
+        procs = [subprocess.Popen([sys.executable, "-c", GEN_CHILD, json.dumps(
+                     {"piper": str(work / "piper-sample-generator"), "out": str(out), "text": text,
+                      "n": share, "batch": batch})], env={**os.environ, "CUDA_VISIBLE_DEVICES": str(i)})
+                 for i, share in enumerate(shares)]
+        codes = [p.wait() for p in procs]
+        made = len(list(out.glob("*.wav"))) if out.exists() else 0
+        print(f"  {out.name}: {made} clips (exit codes {codes})", flush=True)
+
+
 def inner(args):
     import torch
     import yaml
 
     work = pathlib.Path(args.work)
     os.chdir(work)
-    print("GPU:", torch.cuda.get_device_name(0) if torch.cuda.is_available() else "none (CPU, slower)", flush=True)
+    print("GPU:", f"{torch.cuda.device_count()} x {torch.cuda.get_device_name(0)}" if torch.cuda.is_available()
+          else "none (CPU, slower)", flush=True)
     free_gb = shutil.disk_usage(work).free / 1e9
     acav_gb = min(args.acav_gb, max(1.0, free_gb - 25))  # leave room for clips and features
     print(f"disk free: {free_gb:.0f} GB, using {acav_gb:.1f} GB of ACAV100M features", flush=True)
@@ -298,6 +331,8 @@ def inner(args):
     (work / "zade.yaml").write_text(yaml.safe_dump(config))
 
     train = [sys.executable, work / "openwakeword" / "openwakeword" / "train.py", "--training_config", work / "zade.yaml"]
+    if torch.cuda.device_count() > 1:
+        generate_on_all_gpus(work, config, torch.cuda.device_count())
     sh(*train, "--generate_clips")
     add_recordings(find_recordings(args.recordings), work / "model" / MODEL_NAME, args.samples)
     sh(*train, "--augment_clips")
