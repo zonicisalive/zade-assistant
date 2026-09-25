@@ -62,3 +62,21 @@ def test_emoji_and_markdown_are_not_spoken():
     assert tts.clean("**Done.** Brightness set to `20%` ✅") == "Done. Brightness set to 20%"
     assert tts.clean("- first\n- second") == "first second"
     assert tts.clean("😊") == ""
+
+
+def test_online_indian_voice_falls_back_to_a_local_indian_voice(monkeypatch):
+    import copy
+
+    from zade import config, tts
+
+    c = copy.deepcopy(config.DEFAULTS)
+    c["tts"]["voice"] = "en-IN-NeerjaNeural"
+    used = []
+
+    def offline(*a, **k):
+        raise OSError("no internet")
+
+    monkeypatch.setattr(tts, "_edge_audio", offline)
+    monkeypatch.setattr(tts, "_speak_kokoro", lambda text, cfg, interrupt=None: used.append(cfg["tts"]["voice"]) or False)
+    tts.speak("Hello there.", c)
+    assert used == ["hf_alpha"]

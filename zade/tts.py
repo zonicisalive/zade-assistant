@@ -85,6 +85,43 @@ def _speak_kokoro(text, cfg, interrupt=None):
     return bool(pending) and _wait(interrupt)
 
 
+OFFLINE_INDIAN = "hf_alpha"  # Kokoro's Indian voice, used when an online Edge voice can't be reached
+
+
+def _edge_audio(sentence, voice, speed):
+    """One sentence from Microsoft Edge's online neural voices (e.g. en-IN-NeerjaNeural) as 24 kHz PCM."""
+    import asyncio
+    import subprocess
+
+    import edge_tts
+
+    async def fetch():
+        mp3 = b""
+        async for chunk in edge_tts.Communicate(sentence, voice, rate=f"{round((speed - 1) * 100):+d}%").stream():
+            if chunk["type"] == "audio":
+                mp3 += chunk["data"]
+        return mp3
+
+    mp3 = asyncio.run(asyncio.wait_for(fetch(), timeout=8))
+    pcm = subprocess.run(["ffmpeg", "-loglevel", "error", "-i", "-", "-ac", "1", "-ar", "24000", "-f", "s16le", "-"],
+                         input=mp3, capture_output=True, check=True).stdout
+    if not pcm:
+        raise RuntimeError("no audio from Edge TTS")
+    return np.frombuffer(pcm, np.int16).astype(np.float32) / 32768, 24000
+
+
+def _speak_edge(text, cfg, interrupt=None):
+    t = cfg["tts"]
+    pending = None
+    for s in sentences(text):
+        audio = _edge_audio(s, t["voice"], t["speed"])
+        if pending and _wait(interrupt):
+            return True
+        _play_async(*audio)
+        pending = audio
+    return bool(pending) and _wait(interrupt)
+
+
 def _speak_piper(text, cfg, interrupt=None):
     voice = _piper(cfg["tts"]["piper_voice"], cfg["paths"]["data"])
     chunks = list(voice.synthesize(text))
@@ -105,6 +142,12 @@ def speak(text, cfg, interrupt=None):
             return _play(np.frombuffer(pcm, np.int16), 24000, interrupt)
         except Exception as e:  # any cloud failure (network, key, API): fall back to the local engine
             log.warning("cloud TTS failed, using piper: %s", e)
+    if t["provider"] == "kokoro" and t["voice"].endswith("Neural"):  # an online Indian voice (Edge)
+        try:
+            return _speak_edge(text, cfg, interrupt)
+        except Exception as e:  # offline or the service changed: an Indian voice that runs locally
+            log.warning("Edge TTS failed, using Kokoro %s: %s", OFFLINE_INDIAN, e)
+            cfg = {**cfg, "tts": {**t, "voice": OFFLINE_INDIAN}}
     if t["provider"] == "kokoro":
         try:
             return _speak_kokoro(text, cfg, interrupt)

@@ -661,7 +661,7 @@ ShellRoot {
                         spacing: 16
                         Label { text: "Voice"; font.pixelSize: 26; font.weight: Font.Medium }
                         Group {
-                            Row_ { label: "Voice"; hint: "a = American, b = British; f = female, m = male." }
+                            Row_ { label: "Voice"; hint: "a = American, b = British, h = Indian; f = female, m = male. en-IN voices are Indian English from Microsoft (online; offline they fall back to hf_alpha)." }
                             Flow {
                                 Layout.fillWidth: true; Layout.bottomMargin: 12
                                 spacing: 8

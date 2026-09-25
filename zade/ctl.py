@@ -25,7 +25,9 @@ INBOX = pathlib.Path(os.environ.get("XDG_RUNTIME_DIR", "/tmp")) / "zade" / "inbo
 REPO = pathlib.Path(__file__).resolve().parent.parent
 SERVICE = pathlib.Path("~/.config/systemd/user/zade.service").expanduser()
 KOKORO_VOICES = ["af_heart", "af_bella", "af_nicole", "af_sky", "am_michael", "am_adam", "am_puck",
-                 "bf_emma", "bf_isabella", "bm_george", "bm_lewis"]
+                 "bf_emma", "bf_isabella", "bm_george", "bm_lewis",
+                 "hf_alpha", "hf_beta", "hm_omega", "hm_psi",  # Indian voices (Kokoro, offline)
+                 "en-IN-NeerjaNeural", "en-IN-PrabhatNeural", "en-IN-NeerjaExpressiveNeural"]  # Indian English, online
 
 
 def _user_settings():
