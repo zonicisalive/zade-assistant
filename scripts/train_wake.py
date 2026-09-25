@@ -135,6 +135,12 @@ def get_models(work):
         download(OWW_MODELS + name, res / name)
     # DeepPhonemizer's model link is dead; it only invents extra look-alike phrases, so skip it
     # (NEGATIVE_PHRASES lists them by hand).
+    # Zade only needs the .onnx model: the TFLite conversion at the end of training needs onnx_tf and
+    # TensorFlow, and crashed right after the model was saved.
+    train_py = work / "openwakeword" / "openwakeword" / "train.py"
+    src = train_py.read_text()
+    if "convert_onnx_to_tflite(os.path.join(" in src:
+        train_py.write_text(src.replace("convert_onnx_to_tflite(os.path.join(", "(lambda *a: None)(os.path.join("))
     data_py = work / "openwakeword" / "openwakeword" / "data.py"
     src = data_py.read_text()
     if "_orig_generate_adversarial_texts" not in src:
@@ -344,9 +350,13 @@ def inner(args):
     sh(*train, "--generate_clips")
     add_recordings(find_recordings(args.recordings), work / "model" / MODEL_NAME, args.samples)
     sh(*train, "--augment_clips")
-    sh(*train, "--train_model")
-
     onnx = work / "model" / f"{MODEL_NAME}.onnx"
+    try:
+        sh(*train, "--train_model")
+    except subprocess.CalledProcessError:
+        if not onnx.exists():  # a failure after the model was saved (an export step) still leaves a model
+            raise
+        print("training step ended with an error after saving the model; keeping the model", flush=True)
     dest = pathlib.Path("/kaggle/working") if pathlib.Path("/kaggle/working").exists() else work
     shutil.copy(onnx, dest / onnx.name)
     print(f"\nDONE: {dest / onnx.name}\nCopy it to ~/.local/share/zade/zade.onnx and restart Zade.", flush=True)
