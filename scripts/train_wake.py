@@ -256,7 +256,7 @@ def _clips(source):
                 yield name.split("/")[0], z.read(name)
 
 
-def add_recordings(sources, clips_dir, n_samples):
+def add_recordings(sources, clips_dir, n_samples, synthetic_ok=True):
     """Mix real voices into the generated ones: repeated so they make up ~5% of the positives
     (augmentation adds different noise and echo to every copy), and near-misses as negatives."""
     got = {kind: [] for kind in KINDS}
@@ -265,7 +265,7 @@ def add_recordings(sources, clips_dir, n_samples):
         for kind, data in _clips(src):
             got[kind].append(data)
         print(f"recordings from {src.name}: {sum(map(len, got.values())) - before} clips", flush=True)
-    pos, neg, synthetic = got["positive"], got["negative"], got["synthetic"]
+    pos, neg, synthetic = got["positive"], got["negative"], got["synthetic"] if synthetic_ok else []
     for i, data in enumerate(synthetic):  # extra accented voices, once each: they must not outweigh real ones
         (clips_dir / "positive_train" / f"synth_{i:05d}.wav").write_bytes(data)
     if synthetic:
@@ -348,7 +348,8 @@ def inner(args):
     if torch.cuda.device_count() > 1:
         generate_on_all_gpus(work, config, torch.cuda.device_count())
     sh(*train, "--generate_clips")
-    add_recordings(find_recordings(args.recordings), work / "model" / MODEL_NAME, args.samples)
+    add_recordings(find_recordings(args.recordings), work / "model" / MODEL_NAME, args.samples,
+                   synthetic_ok=not args.no_synthetic)
     sh(*train, "--augment_clips")
     onnx = work / "model" / f"{MODEL_NAME}.onnx"
     try:
@@ -372,6 +373,7 @@ def main():
     p.add_argument("--audioset-parts", type=int, default=3, help="AudioSet background files, ~700 MB each")
     p.add_argument("--max-background", type=int, default=100000, help="cap on background clips")
     p.add_argument("--acav-gb", type=float, default=17.3, help="GB of pre-computed negative features (17.3 = all)")
+    p.add_argument("--no-synthetic", action="store_true", help="leave out the Indian-accent synthetic clips")
     p.add_argument("--recordings", default="", help="recording zips, comma-separated (found automatically on Kaggle)")
     argv = sys.argv[1:]
     args = p.parse_args(argv)
