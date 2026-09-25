@@ -37,7 +37,8 @@ PINS = ["numpy==1.26.4", "scipy==1.11.4", "torch==2.5.1", "torchaudio==2.5.1", "
         "webrtcvad-wheels==2.0.14", "mutagen==1.47.0", "torchinfo==1.8.0", "torchmetrics==1.2.0",
         "speechbrain==0.5.16", "audiomentations==0.33.0", "torch-audiomentations==0.11.0",
         "acoustics==0.2.6", "pronouncing==0.2.0", "onnxruntime==1.18.1", "onnx==1.16.2",
-        "scikit-learn==1.5.2", "soundfile==0.12.1", "pyarrow==17.0.0", "pyyaml", "tqdm", "requests"]
+        "scikit-learn==1.5.2", "soundfile==0.12.1", "pyarrow==17.0.0", "pyyaml", "tqdm", "requests",
+        "setuptools==70.3.0"]  # pronouncing imports pkg_resources, which setuptools 81+ no longer ships
 PIPER_TAG = "v2.0.0"  # newer releases changed layout, and openWakeWord's train.py imports the old one
 HF = "https://huggingface.co"
 OWW_MODELS = "https://github.com/dscripka/openWakeWord/releases/download/v0.5.1/"
@@ -112,6 +113,14 @@ def bootstrap(args, argv):
         if not (work / "openwakeword").exists():
             sh("git", "clone", "--depth", "1", "https://github.com/dscripka/openwakeword", work / "openwakeword")
         sh(*uv, "pip", "install", "--python", py, "--no-deps", "-e", work / "openwakeword")
+        # Import everything training uses now, so a broken package fails in a minute, not after the
+        # ~10 minutes of downloads.
+        sh(py, "-c", "import sys; sys.path.insert(0, sys.argv[1]); "
+                     "import torch, torchaudio, torchmetrics, torchinfo, speechbrain, audiomentations, "
+                     "torch_audiomentations, acoustics, pronouncing, mutagen, webrtcvad, piper_phonemize, "
+                     "onnxruntime, yaml, pyarrow, soundfile, openwakeword.data, openwakeword.utils; "
+                     "from generate_samples import generate_samples; print('imports OK')",
+           work / "piper-sample-generator")  # main() already set MPLBACKEND=Agg
         (work / "venv" / ".ready").touch()
     os.execv(str(py), [str(py), __file__, "--inner", *argv])
 
