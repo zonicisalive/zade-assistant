@@ -1,7 +1,8 @@
-"""Information tools: weather (wttr.in), web answers (local SearXNG), notes (a text file)."""
+"""Information tools: weather (Open-Meteo), web answers (local SearXNG), notes (a text file)."""
 
 import datetime
 import json
+import math
 import pathlib
 import urllib.parse
 import urllib.request
@@ -17,28 +18,60 @@ def _get_json(url, timeout):
         return json.load(r)
 
 
-def _desc(entry):
-    return entry["weatherDesc"][0]["value"].strip().lower()
+# WMO weather codes (Open-Meteo) as spoken words.
+WMO = {0: "clear sky", 1: "mostly clear", 2: "partly cloudy", 3: "overcast", 45: "foggy", 48: "foggy",
+       51: "light drizzle", 53: "drizzle", 55: "heavy drizzle", 56: "freezing drizzle", 57: "freezing drizzle",
+       61: "light rain", 63: "rain", 65: "heavy rain", 66: "freezing rain", 67: "freezing rain",
+       71: "light snow", 73: "snow", 75: "heavy snow", 77: "snow grains", 80: "light showers", 81: "showers",
+       82: "heavy showers", 85: "snow showers", 86: "heavy snow showers", 95: "thunderstorms",
+       96: "thunderstorms with hail", 99: "thunderstorms with hail"}
 
 
-def format_weather(data, day):
-    place = data["nearest_area"][0]["areaName"][0]["value"]
-    w = data["weather"][day]
-    noon = w["hourly"][4]
-    forecast = f"{w['mintempC']} to {w['maxtempC']}°C, {_desc(noon)}, {noon['chanceofrain']}% chance of rain."
+def _r(t):
+    return math.floor(t + 0.5)  # 26.5 -> 27 (round() would give 26)
+
+
+def _deg(t):
+    return f"{_r(t)} degrees Celsius"
+
+
+def format_weather(place, data, day):
+    d = data["daily"]
+    forecast = (f"{_r(d['temperature_2m_min'][day])} to {_deg(d['temperature_2m_max'][day])}, "
+                f"{WMO.get(d['weather_code'][day], 'mixed weather')}, "
+                f"{d['precipitation_probability_max'][day] or 0}% chance of rain.")
     if day:
         return f"{place} {DAYS[day]}: {forecast}"
-    c = data["current_condition"][0]
-    return (f"{place} now: {c['temp_C']}°C, {_desc(c)}, feels like {c['FeelsLikeC']}°C, "
-            f"humidity {c['humidity']}%. Today {forecast}")
+    c = data["current"]
+    return (f"{place} now: {_deg(c['temperature_2m'])}, {WMO.get(c['weather_code'], 'mixed weather')}, "
+            f"feels like {_r(c['apparent_temperature'])}, humidity {c['relative_humidity_2m']}%. Today {forecast}")
+
+
+def _locate(place):
+    """(name, latitude, longitude) for a place name, or for this connection when no place is given."""
+    if place:
+        found = _get_json("https://geocoding-api.open-meteo.com/v1/search?"
+                          + urllib.parse.urlencode({"name": place, "count": 1}), timeout=8).get("results")
+        if not found:
+            raise Failed(f"I couldn't find a place called {place}.")
+        r = found[0]
+        return r["name"], r["latitude"], r["longitude"]
+    r = _get_json("http://ip-api.com/json/?fields=status,city,lat,lon", timeout=8)
+    if r.get("status") != "success":
+        raise Failed("I don't know where you are. Set a default weather location in the app.")
+    return r["city"], r["lat"], r["lon"]
 
 
 def weather(place="", day=0):
     try:
-        data = _get_json(f"https://wttr.in/{urllib.parse.quote(place)}?format=j1", timeout=8)
-    except (OSError, ValueError) as e:
+        name, lat, lon = _locate(place)
+        data = _get_json("https://api.open-meteo.com/v1/forecast?" + urllib.parse.urlencode({
+            "latitude": lat, "longitude": lon, "timezone": "auto", "forecast_days": 3,
+            "current": "temperature_2m,apparent_temperature,relative_humidity_2m,weather_code",
+            "daily": "temperature_2m_max,temperature_2m_min,precipitation_probability_max,weather_code"}), timeout=8)
+    except (OSError, ValueError, KeyError) as e:
         raise Failed("I couldn't get the weather right now.") from e
-    return format_weather(data, max(0, min(int(day), len(data["weather"]) - 1)))
+    return format_weather(name, data, max(0, min(int(day), 2)))
 
 
 def format_results(data, limit=5):

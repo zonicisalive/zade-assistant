@@ -4,17 +4,10 @@ import pytest
 
 from zade import actions, config, info
 
-WTTR = {
-    "nearest_area": [{"areaName": [{"value": "Ballard Estate"}]}],
-    "current_condition": [{"temp_C": "29", "FeelsLikeC": "34", "humidity": "79", "weatherDesc": [{"value": "Clear "}]}],
-    "weather": [
-        {"date": "2026-09-23", "maxtempC": "31", "mintempC": "27",
-         "hourly": [{"weatherDesc": [{"value": "x"}], "chanceofrain": "0"}] * 4
-         + [{"weatherDesc": [{"value": "Sunny"}], "chanceofrain": "5"}]},
-        {"date": "2026-09-24", "maxtempC": "29", "mintempC": "28",
-         "hourly": [{"weatherDesc": [{"value": "x"}], "chanceofrain": "0"}] * 4
-         + [{"weatherDesc": [{"value": "Patchy rain nearby"}], "chanceofrain": "23"}]},
-    ],
+METEO = {
+    "current": {"temperature_2m": 26.5, "apparent_temperature": 31.6, "relative_humidity_2m": 91, "weather_code": 2},
+    "daily": {"temperature_2m_max": [31.2, 30.1, 29.0], "temperature_2m_min": [25.4, 25.6, 25.0],
+              "precipitation_probability_max": [25, 14, None], "weather_code": [51, 61, 0]},
 }
 
 
@@ -25,12 +18,32 @@ def cfg(tmp_path):
 
 
 def test_weather_now():
-    assert info.format_weather(WTTR, 0) == (
-        "Ballard Estate now: 29°C, clear, feels like 34°C, humidity 79%. Today 27 to 31°C, sunny, 5% chance of rain.")
+    assert info.format_weather("Silvassa", METEO, 0) == (
+        "Silvassa now: 27 degrees Celsius, partly cloudy, feels like 32, humidity 91%. "
+        "Today 25 to 31 degrees Celsius, light drizzle, 25% chance of rain.")
 
 
 def test_weather_tomorrow_only_forecast():
-    assert info.format_weather(WTTR, 1) == "Ballard Estate tomorrow: 28 to 29°C, patchy rain nearby, 23% chance of rain."
+    assert info.format_weather("Silvassa", METEO, 1) == \
+        "Silvassa tomorrow: 26 to 30 degrees Celsius, light rain, 14% chance of rain."
+    assert "0% chance" in info.format_weather("Silvassa", METEO, 2)
+
+
+def test_weather_finds_the_place(monkeypatch):
+    urls = []
+
+    def get(url, timeout):
+        urls.append(url)
+        if "geocoding" in url:
+            return {"results": [{"name": "Silvassa", "latitude": 20.27, "longitude": 72.99}]}
+        return METEO
+
+    monkeypatch.setattr(info, "_get_json", get)
+    assert info.weather("silvassa").startswith("Silvassa now: 27 degrees Celsius")
+    assert "latitude=20.27" in urls[1]
+    monkeypatch.setattr(info, "_get_json", lambda url, timeout: {"results": []})
+    with pytest.raises(actions.Failed, match="couldn't find a place"):
+        info.weather("atlantisville")
 
 
 def test_web_results_formatting():
