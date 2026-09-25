@@ -313,6 +313,12 @@ def main():
     p.add_argument("--recordings", default="", help="recording zips, comma-separated (found automatically on Kaggle)")
     argv = sys.argv[1:]
     args = p.parse_args(argv)
+    # Notebook settings leak into our own Python: Kaggle's Jupyter backend breaks matplotlib (imported by
+    # torchmetrics), and a PYTHONPATH could mix in the notebook's Python 3.12 packages.
+    os.environ["MPLBACKEND"] = "Agg"
+    for var in ("PYTHONPATH", "PYTHONHOME"):
+        os.environ.pop(var, None)
+    os.environ.setdefault("TQDM_MININTERVAL", "30")  # progress bars every 30 s, not thousands of log lines
     if args.inner:
         inner(args)
     else:
