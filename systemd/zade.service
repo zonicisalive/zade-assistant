@@ -1,6 +1,9 @@
 [Unit]
 Description=Zade voice assistant
-After=pipewire.service wireplumber.service
+# Start with the desktop session: before login there is no audio session, so the microphone is missing.
+PartOf=graphical-session.target
+After=graphical-session.target pipewire.service wireplumber.service pipewire-pulse.service
+Wants=pipewire.service wireplumber.service
 
 [Service]
 ExecStart=%h/Zade/.venv/bin/zade
@@ -9,4 +12,4 @@ RestartSec=5
 EnvironmentFile=-%h/.config/zade/env
 
 [Install]
-WantedBy=default.target
+WantedBy=graphical-session.target

@@ -1,6 +1,7 @@
 import collections
 import logging
 import pathlib
+import time
 
 import numpy as np
 import sounddevice as sd
@@ -32,10 +33,24 @@ def decide(levels, thr, silence_s, max_s, start_timeout_s, end_ratio=0.25):
     return "stop" if n - 1 - last >= round(silence_s / FRAME_S) else "wait"
 
 
-def open_stream():
-    stream = sd.InputStream(samplerate=RATE, channels=1, dtype="int16", blocksize=FRAME)
-    stream.start()
-    return stream
+def open_stream(wait_s=120, retry_s=1.0):
+    """The microphone stream. Right after login the audio session may not be up yet: wait for it here
+    instead of crashing (a restart reloads every model)."""
+    waited = 0.0
+    while True:
+        try:
+            stream = sd.InputStream(samplerate=RATE, channels=1, dtype="int16", blocksize=FRAME)
+            stream.start()
+            return stream
+        except sd.PortAudioError as e:
+            if waited >= wait_s:
+                raise
+            if waited == 0:
+                log.warning("microphone not available yet, waiting: %s", e)
+            time.sleep(retry_s)
+            waited += retry_s
+            sd._terminate()  # PortAudio lists devices once: re-initialise to see the new one
+            sd._initialize()
 
 
 def read(stream):

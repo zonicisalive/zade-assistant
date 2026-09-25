@@ -186,3 +186,22 @@ def test_background_talk_does_not_keep_the_recording_open():
     assert audio.decide(lv((0, 0.3), (6000, 1.5), (900, 0.9)), **A) == "stop"
     # a quiet speaker isn't cut off: 900 is their own voice level, so it still counts as talking
     assert audio.decide(lv((0, 0.3), (900, 1.5), (900, 0.9)), **A) == "wait"
+
+
+def test_open_stream_waits_for_the_microphone(monkeypatch):
+    tries = []
+
+    class Stream:
+        def __init__(self, **kw):
+            tries.append(1)
+            if len(tries) < 3:
+                raise audio.sd.PortAudioError("No such file or directory")
+
+        def start(self):
+            pass
+
+    monkeypatch.setattr(audio.sd, "InputStream", Stream)
+    monkeypatch.setattr(audio.sd, "_terminate", lambda: None)
+    monkeypatch.setattr(audio.sd, "_initialize", lambda: None)
+    monkeypatch.setattr(audio.time, "sleep", lambda s: None)
+    assert isinstance(audio.open_stream(), Stream) and len(tries) == 3
