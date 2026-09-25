@@ -230,32 +230,40 @@ def find_recordings(given):
     if not root.exists():
         return []
     zips = sorted(root.rglob("*.zip"))
-    folders = sorted({d.parent for d in root.rglob("*") if d.is_dir() and d.name in ("positive", "negative")})
+    folders = sorted({d.parent for d in root.rglob("*") if d.is_dir() and d.name in KINDS})
     return zips + folders
+
+
+KINDS = ("positive", "negative", "synthetic")  # real wake words, real near-misses, Indian-accent TTS
 
 
 def _clips(source):
     """(kind, wav bytes) from a zip or an unpacked folder."""
     if source.is_dir():
-        for kind in ("positive", "negative"):
+        for kind in KINDS:
             for f in sorted((source / kind).glob("*.wav")):
                 yield kind, f.read_bytes()
         return
     with zipfile.ZipFile(source) as z:
         for name in z.namelist():
-            if name.endswith(".wav") and name.split("/")[0] in ("positive", "negative"):
+            if name.endswith(".wav") and name.split("/")[0] in KINDS:
                 yield name.split("/")[0], z.read(name)
 
 
 def add_recordings(sources, clips_dir, n_samples):
     """Mix real voices into the generated ones: repeated so they make up ~5% of the positives
     (augmentation adds different noise and echo to every copy), and near-misses as negatives."""
-    pos, neg = [], []
+    got = {kind: [] for kind in KINDS}
     for src in sources:
-        before = len(pos) + len(neg)
+        before = sum(map(len, got.values()))
         for kind, data in _clips(src):
-            (pos if kind == "positive" else neg).append(data)
-        print(f"recordings from {src.name}: {len(pos) + len(neg) - before} clips", flush=True)
+            got[kind].append(data)
+        print(f"recordings from {src.name}: {sum(map(len, got.values())) - before} clips", flush=True)
+    pos, neg, synthetic = got["positive"], got["negative"], got["synthetic"]
+    for i, data in enumerate(synthetic):  # extra accented voices, once each: they must not outweigh real ones
+        (clips_dir / "positive_train" / f"synth_{i:05d}.wav").write_bytes(data)
+    if synthetic:
+        print(f"added {len(synthetic)} Indian-accent synthetic clips to positive_train", flush=True)
     if not pos and not neg:
         print("No recordings found: training on synthetic voices only.", flush=True)
         return
