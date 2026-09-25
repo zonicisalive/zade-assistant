@@ -10,7 +10,7 @@ Kaggle (free GPU):
      (from scripts/record_voice.py). Keep it private. Name it zade-wake.
   2. Code -> New Notebook. Settings: Accelerator "GPU T4 x2", Internet on.
      Add Input -> your zade-wake dataset.
-  3. One cell:  !python /kaggle/input/zade-wake/train_wake.py
+  3. One cell:  !python $(find /kaggle/input -name train_wake.py | head -1)
   4. Save Version -> "Save & Run All (Commit)". It keeps running with the tab closed (up to 12 h).
      When it finishes, the version's Output tab has hey_zade.onnx.
 
@@ -187,21 +187,40 @@ def get_features(work, acav_gb):
 
 
 def find_recordings(given):
-    """Every recordings zip: yours (wake_samples.zip) and friends' (voice_<name>.zip)."""
-    found = given.split(",") if given else glob.glob("/kaggle/input/**/*.zip", recursive=True)
-    return [pathlib.Path(p) for p in found if p]
+    """Every set of recordings: zips (wake_samples.zip, voice_<name>.zip) or the folders Kaggle unpacks
+    them into (anything holding positive/ or negative/ WAVs)."""
+    if given:
+        return [pathlib.Path(p) for p in given.split(",") if p]
+    root = pathlib.Path("/kaggle/input")
+    if not root.exists():
+        return []
+    zips = sorted(root.rglob("*.zip"))
+    folders = sorted({d.parent for d in root.rglob("*") if d.is_dir() and d.name in ("positive", "negative")})
+    return zips + folders
 
 
-def add_recordings(zips, clips_dir, n_samples):
+def _clips(source):
+    """(kind, wav bytes) from a zip or an unpacked folder."""
+    if source.is_dir():
+        for kind in ("positive", "negative"):
+            for f in sorted((source / kind).glob("*.wav")):
+                yield kind, f.read_bytes()
+        return
+    with zipfile.ZipFile(source) as z:
+        for name in z.namelist():
+            if name.endswith(".wav") and name.split("/")[0] in ("positive", "negative"):
+                yield name.split("/")[0], z.read(name)
+
+
+def add_recordings(sources, clips_dir, n_samples):
     """Mix real voices into the generated ones: repeated so they make up ~5% of the positives
     (augmentation adds different noise and echo to every copy), and near-misses as negatives."""
     pos, neg = [], []
-    for zp in zips:
-        with zipfile.ZipFile(zp) as z:
-            for name in z.namelist():
-                if name.endswith(".wav") and name.split("/")[0] in ("positive", "negative"):
-                    (pos if name.startswith("positive/") else neg).append(z.read(name))
-        print(f"recordings from {zp.name}", flush=True)
+    for src in sources:
+        before = len(pos) + len(neg)
+        for kind, data in _clips(src):
+            (pos if kind == "positive" else neg).append(data)
+        print(f"recordings from {src.name}: {len(pos) + len(neg) - before} clips", flush=True)
     if not pos and not neg:
         print("No recordings found: training on synthetic voices only.", flush=True)
         return
