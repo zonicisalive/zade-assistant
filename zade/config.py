@@ -11,7 +11,10 @@ DEFAULTS = {
     "audio": {"rms_threshold": 500, "noise_factor": 2.5, "silence_s": 0.8, "max_s": 10.0, "start_timeout_s": 4.0,
               # You're done talking when the sound falls below this share of your own voice level, so
               # people talking in the background don't keep the recording open. Lower = more patient.
-              "end_ratio": 0.25},
+              "end_ratio": 0.25,
+              # Voice focus: keep only the voice of whoever started talking (others are cut before
+              # transcription). focus_threshold: higher cuts more, but may cut your own quieter words.
+              "voice_focus": True, "focus_threshold": 0.25},
     "stt": {
         # provider: whisper (faster-whisper on the CPU) | gpu (whisper.cpp server, large-v3-turbo on the GPU;
         # falls back to the CPU model) | openai

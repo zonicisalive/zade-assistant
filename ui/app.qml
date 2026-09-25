@@ -774,6 +774,14 @@ ShellRoot {
                                 }
                             }
                             Divider {}
+                            Row_ { label: "Voice focus"; hint: "Only the voice of whoever started talking reaches Zade; others (TV, people nearby) are cut. Two people talking at the same moment can't be separated."
+                                RowLayout { spacing: 8
+                                    Button { text: "Learn my voice"
+                                             onClicked: root.ctl(["voice-enroll"], r => root.flash(r && r.ok ? "Learned your voice from " + r.clips + " recordings."
+                                                                                                           : (r && r.error ? r.error : "Couldn't learn your voice."))) }
+                                    Switch { checked: root.settings ? !!root.settings.audio.voice_focus : false
+                                             onToggled: v => root.setSetting("audio.voice_focus", v) } } }
+                            Divider {}
                             Row_ { label: "Hold Win to talk"; hint: "Hold the key alone, speak, release."
                                 Switch { checked: root.settings ? root.settings.hotkey.enabled : false; onToggled: v => root.setSetting("hotkey.enabled", v) } }
                             Divider {}

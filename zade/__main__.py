@@ -377,7 +377,7 @@ def laya_predictor(cfg):
 
 
 def main():
-    from . import audio, stt, tts, ui
+    from . import audio, stt, tts, ui, voice_focus
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     cfg = config.load()
@@ -416,6 +416,11 @@ def main():
             ui.show("idle")
             return None
         ui.show("thinking")
+        if cfg["audio"].get("voice_focus"):
+            try:
+                a = voice_focus.focus(a, cfg)
+            except Exception as e:  # never lose the request over it
+                log.warning("voice focus failed: %s", e)
         words = [*memory.shortcuts(conn), *fact_words(memory.facts(conn)), *ctx.app_words]
         text = stt.transcribe(a, cfg, hotwords=words)
         ui.show("thinking", heard=text.strip())

@@ -212,6 +212,20 @@ def run(argv):
         if args[0] == "stats":  # calibrate stats <noise_factor>
             return {"ok": True, **calibrate.stats(DATA, float(args[1]))}
         return calibrate.run(args[0], DATA)
+    if cmd == "voice-enroll":  # learn the owner's voice from their recorded clips (python -m zade.record_wake)
+        import wave
+
+        import numpy as np
+
+        from . import voice_focus
+
+        clips = []
+        for f in sorted((DATA / "wake_samples").glob("*/*.wav")):
+            with wave.open(str(f)) as w:
+                clips.append(np.frombuffer(w.readframes(w.getnframes()), np.int16))
+        if not clips:
+            return {"ok": False, "error": "Record your voice first: python -m zade.record_wake"}
+        return {"ok": True, "clips": voice_focus.enroll(clips, DATA)}
     if cmd == "voices":
         return KOKORO_VOICES
     if cmd == "preview":
