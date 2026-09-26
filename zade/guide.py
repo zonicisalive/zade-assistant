@@ -11,6 +11,7 @@ pointed at yet.
 import functools
 import json
 import logging
+import math
 import os
 import pathlib
 import re
@@ -103,14 +104,47 @@ def _point(text, img):
     return round(x * img.shape[1] / 1000), round(y * img.shape[0] / 1000)
 
 
-POINTER_SERVICE = "zade-gui"  # UI-Venus-2-9B: a model trained only to find things on screenshots
+POINTER_SERVICE = "zade-gui"  # UI-Venus-2-9B: a model trained to find things on screenshots and act on them
 VENUS = ("Output the center point of the position corresponding to the instruction: {}. The output should just be "
          "the coordinates of a point, in the format [x,y].")
+# UI-Venus's own computer-agent prompt (github.com/inclusionAI/UI-Venus, models/computer), cut to what a guide
+# can show the user. It then plans the next step itself, without anything leaving the computer.
+AGENT = """**You are a GUI Agent.**
+Your role is to analyze the user's task and guide them through it one action at a time on a desktop operating system.
+
+### Available Actions
+You may execute one of the following functions. Coordinates range from the top-left corner (0, 0) to the bottom-right corner (999, 999).
+- Click(box=(x1, y1))
+- DoubleClick(box=(x1, y1))
+- RightClick(box=(x1, y1))
+- Hover(box=(x1, y1))
+> Move the cursor to the coordinate WITHOUT clicking (to reveal a submenu).
+- Swipe(amount=-5, axis='vertical')
+> Scroll: vertical positive scrolls up and negative scrolls down.
+- Type(content='')
+> Type the provided text into the focused field. Each `\n` presses Enter.
+- Hotkey(keys=['ctrl', 'c'])
+- Wait()
+- CallUser(content='')
+> Report failure when the task cannot be completed or additional information is required.
+- Finished(content='')
+> Mark the task as completed successfully.
+
+### Instructions
+- Make sure you understand the task goal to avoid wrong actions.
+- One atomic action per turn.
+- Make sure you carefully examine the current screenshot. The steps done so far might not be reliable.
+- Use `Finished` only after successful completion.
+
+### Output Format
+<action> the next action </action>
+
+### User Task
+{task}"""
 
 
-def _point_local(what, img, cfg, wait_s=30):
-    """Where `what` is on screen, from the local pointer model (0-1000 coordinates). It was tested pointing within
-    5 px at icons that cloud models missed by hundreds. Waits while the service is still loading."""
+def _pointer_ask(text, img, cfg, system=None, max_tokens=30, prefill=None, wait_s=30):
+    """Ask the local pointer model about the screenshot (sent at 1920 px wide). Waits while it is still loading."""
     import base64
     import io
     import urllib.error
@@ -120,22 +154,60 @@ def _point_local(what, img, cfg, wait_s=30):
 
     buf = io.BytesIO()
     Image.fromarray(img).resize((1920, round(img.shape[0] * 1920 / img.shape[1]))).save(buf, "PNG")
-    body = json.dumps({"temperature": 0, "max_tokens": 30, "chat_template_kwargs": {"enable_thinking": False},
-                       "messages": [{"role": "user", "content": [
-                           {"type": "image_url", "image_url": {"url": "data:image/png;base64,"
-                                                                      + base64.b64encode(buf.getvalue()).decode()}},
-                           {"type": "text", "text": VENUS.format(what)}]}]}).encode()
+    image = {"type": "image_url", "image_url": {"url": "data:image/png;base64," + base64.b64encode(buf.getvalue()).decode()}}
+    messages = ([{"role": "system", "content": system}] if system else []) + [
+        {"role": "user", "content": [{"type": "text", "text": text}, image] if system else [image, {"type": "text", "text": text}]}] + (
+        [{"role": "assistant", "content": prefill}] if prefill else [])  # answer starts here: no rambling first
+    body = json.dumps({"temperature": 0, "max_tokens": max_tokens, "chat_template_kwargs": {"enable_thinking": False},
+                       "messages": messages}).encode()
     url = cfg["guide"].get("pointer_url", "http://127.0.0.1:8191").rstrip("/") + "/v1/chat/completions"
     deadline = time.monotonic() + wait_s
     while True:
         try:
             req = urllib.request.Request(url, body, {"Content-Type": "application/json"})
             with urllib.request.urlopen(req, timeout=60) as r:
-                return _point(json.load(r)["choices"][0]["message"]["content"], img)
+                return json.load(r)["choices"][0]["message"]["content"]
         except (urllib.error.URLError, ConnectionError) as e:  # still loading (refused, or 503 while it loads)
             if time.monotonic() > deadline:
                 raise RuntimeError(f"the screen pointer isn't answering: {e}") from e
             time.sleep(1)
+
+
+def _point_local(what, img, cfg):
+    """Where `what` is on screen, from the local pointer model. It was tested pointing within 5 px at icons
+    that cloud models missed by hundreds."""
+    return _point(_pointer_ask(VENUS.format(what), img, cfg), img)
+
+
+def _agent_step(goal, labels, done_steps, img, cfg):
+    """The next step from the local agent model, as plan() returns it. What it says is built from its action
+    and the text nearest the spot ("Click Integrations")."""
+    task = goal + (f"\nSteps done so far: {'; '.join(done_steps)}" if done_steps else "")
+    reply = _pointer_ask("Current Screenshot:\n", img, cfg, system=AGENT.format(task=task), max_tokens=80,
+                         prefill="<action>")
+    action = reply.split("</action>")[0].replace("<action>", "").strip()
+    name = (re.match(r"(\w+)", action) or [""])[0]
+    content = (re.search(r"content=(['\"])(.*?)\1\s*\)", action, re.S) or [None, None, ""])[2].strip()
+    if name in ("Finished", "CallUser"):
+        return {"done": True, "label": None, "point": None, "say": content or "That's done."}
+    point = _point(box[1], img) if (box := re.search(r"box=\(([^)]*)\)", action)) else None
+    if point:
+        near = min(labels, key=lambda l: math.dist((l["x"], l["y"]), point), default=None)
+        readable = near and re.search(r"[A-Za-z0-9]{2}", near["text"])  # not OCR noise like "口"
+        what = near["text"] if readable and math.dist((near["x"], near["y"]), point) < 60 else "here"
+        verb = {"DoubleClick": "Double-click", "RightClick": "Right-click", "Hover": "Point at"}.get(name, "Click")
+        return {"done": False, "label": None, "point": point, "say": f"{verb} {what}"}
+    if name == "Type":
+        enter = content.endswith("\\n") or content.endswith("\n")
+        text = content.replace("\\n", "").replace("\n", "")
+        return {"done": False, "label": None, "point": None, "say": f"Type {text}" + (" and press Enter" if enter else "")}
+    if name == "Hotkey":
+        keys = re.findall(r"['\"]([^'\"]+)['\"]", action)
+        return {"done": False, "label": None, "point": None, "say": "Press " + " plus ".join(keys)}
+    if name == "Swipe":
+        down = re.search(r"amount=\s*-", action)
+        return {"done": False, "label": None, "point": None, "say": "Scroll down" if down else "Scroll up"}
+    return {"done": False, "label": None, "point": None, "say": "Wait a moment."}
 
 
 def _cloud(system, msg, img, cfg):
@@ -192,7 +264,13 @@ def plan(goal, labels, done_steps, cfg, img=None):
     listing = "\n".join(f"{l['x']},{l['y']}: {l['text']}" for l in labels[:220])
     msg = f"Goal: {goal}\nDone so far: {'; '.join(done_steps) or 'nothing'}\nOn screen:\n{listing}"
     out, point = {}, None
-    if cfg.get("guide", {}).get("provider", "local") != "local" and img is not None:
+    g = cfg.get("guide", {})
+    if g.get("provider", "local") == "local" and g.get("pointer", "local") == "local" and img is not None:
+        try:  # the local agent model sees the screen: nothing leaves the computer
+            return _agent_step(goal, labels, done_steps, img, cfg)
+        except Exception as e:
+            log.warning("local screen agent failed, using the text-only model: %s", e)
+    if g.get("provider", "local") != "local" and img is not None:
         try:
             out = _parse(_cloud(PLAN + _GUIDE_POINT, msg, img, cfg))
             icon = out.get("icon") or out.get("label")  # models also put the icon's description in label
@@ -252,7 +330,7 @@ class Session:
         self.stopped = threading.Event()
         self.wake = threading.Event()
         self._clicker = None
-        self._pointer = cfg["guide"].get("pointer", "local") == "local" and cfg["guide"].get("provider") != "local"
+        self._pointer = cfg["guide"].get("pointer", "local") == "local"
         if self._pointer:  # loads while the first step is planned; stopped with the guide, so VRAM is freed
             subprocess.run(["systemctl", "--user", "start", "--no-block", POINTER_SERVICE], capture_output=True)
         show_pointer(None)  # the overlay starts hidden
@@ -265,6 +343,8 @@ class Session:
 
     def step(self):
         """Look at the screen and point at the next thing. Returns what was said."""
+        show_pointer(None)  # else the ring and its instruction are in the screenshot and get read back
+        time.sleep(0.15)
         img = screenshot()
         labels = read_screen(img)
         p = plan(self.goal, labels, self.done_steps, self.cfg, img=img)

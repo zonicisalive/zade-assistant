@@ -79,3 +79,22 @@ def test_icons_are_found_by_the_local_pointer_first(monkeypatch):
     monkeypatch.setattr(guide, "_point_local", down)
     monkeypatch.setattr(guide, "_cloud", lambda system, msg, img, cfg: '{"point_2d": [19, 87]}')
     assert guide.find("the Discord home icon", img, cfg) == (49, 125)  # fell back to the cloud model
+
+
+def test_local_agent_actions_become_spoken_steps(monkeypatch):
+    import numpy as np
+
+    img = np.zeros((1440, 2560, 3), np.uint8)
+    cfg = {"guide": {"provider": "local", "pointer": "local"}}
+    labels = [{"text": "Integrations", "x": 256, "y": 144}]
+    replies = iter(["<action>Click(box=(100, 100))</action>", "<action>RightClick(box=(900, 900))</action>",
+                    "<action>Type(content='hello\\n')</action>", "<action>Hotkey(keys=['ctrl', 'k'])</action>",
+                    "<action>Swipe(amount=-5, axis='vertical')</action>", "<action>Finished(content='')</action>"])
+    monkeypatch.setattr(guide, "_pointer_ask", lambda *a, **k: next(replies))
+    step = lambda: guide.plan("x", labels, [], cfg, img=img)
+    assert step() == {"done": False, "label": None, "point": (256, 144), "say": "Click Integrations"}
+    assert step()["say"] == "Right-click here"            # nothing readable near that spot
+    assert step()["say"] == "Type hello and press Enter"
+    assert step()["say"] == "Press ctrl plus k"
+    assert step()["say"] == "Scroll down"
+    assert step() == {"done": True, "label": None, "point": None, "say": "That's done."}
