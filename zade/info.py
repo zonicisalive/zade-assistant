@@ -102,7 +102,7 @@ def note_add(text, cfg):
     p = _notes(cfg)
     p.parent.mkdir(parents=True, exist_ok=True)
     with p.open("a") as f:
-        f.write(f"- {datetime.datetime.now():%Y-%m-%d %H:%M} {text.strip()}\n")
+        f.write(f"- {datetime.datetime.now():%Y-%m-%d %H:%M} {' '.join(text.split())}\n")  # one line per note
     return "Noted."
 
 

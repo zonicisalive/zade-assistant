@@ -82,3 +82,9 @@ def test_without_searxng_web_answers_open_a_browser_search(monkeypatch, tmp_path
     assert "do not make up an answer" in info.web_answer("tcp vs udp", c)
     assert opened == [["xdg-open", "https://search.brave.com/search?q=tcp+vs+udp"]]
     assert actions.search_url("x y", "nope") == "https://www.google.com/search?q=x+y"
+
+
+def test_a_note_with_line_breaks_stays_one_note(tmp_path):
+    cfg = {"paths": {"data": str(tmp_path)}, "notes": {"file": str(tmp_path / "notes.md")}}
+    info.note_add("buy milk\nand eggs", cfg)
+    assert info.notes_read(cfg) == "Your notes, newest first: buy milk and eggs."
