@@ -340,3 +340,16 @@ def test_send_message_never_types_outside_discord(monkeypatch):
     with pytest.raises(actions.Failed):
         actions.send_message("dexorto", "rm -rf ~")
     assert typed == []
+
+
+def test_close_app_closes_its_windows_and_reports_a_miss(monkeypatch):
+    calls = []
+    monkeypatch.setattr(actions, "_call", lambda cmd: calls.append(cmd))
+    monkeypatch.setattr(actions, "_output", lambda cmd: json.dumps(
+        [{"id": 7, "app_id": "google-chrome"}, {"id": 9, "app_id": "kitty"}, {"id": 11, "app_id": "google-chrome"}]))
+    actions._close_app(("google-chrome", "google-chrome-stable"), "chrome")
+    assert calls == [["niri", "msg", "action", "close-window", "--id", "7"],
+                     ["niri", "msg", "action", "close-window", "--id", "11"]]
+    monkeypatch.setattr(actions, "_output", lambda cmd: "[]")
+    with pytest.raises(actions.Failed):   # no window, and the name is too long for pkill: not open
+        actions._close_app(("google-chrome", "google-chrome-stable"), "chrome")

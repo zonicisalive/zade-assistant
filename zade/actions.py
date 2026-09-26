@@ -154,19 +154,37 @@ def _output(cmd):
     return subprocess.run(cmd, capture_output=True, text=True, timeout=5).stdout
 
 
-def _focus_open_window(app):
-    """Focus the app's window if it's already open (niri). Relaunching a running Electron app like
-    Discord takes seconds: it starts, finds the running copy, hands over and quits."""
+def _app_windows(app):
+    """The app's open windows (niri), matched by window app id against its desktop id and executable."""
     desktop_id, exe = app
     names = {desktop_id.lower(), desktop_id.lower().rsplit(".", 1)[-1], exe.lower()}
     try:
         windows = json.loads(_output(["niri", "msg", "-j", "windows"]) or "[]")
     except (OSError, ValueError, subprocess.SubprocessError):
-        return False
-    w = next((w for w in windows if (w.get("app_id") or "").lower() in names), None)
+        return []
+    return [w for w in windows if (w.get("app_id") or "").lower() in names]
+
+
+def _focus_open_window(app):
+    """Focus the app's window if it's already open (niri). Relaunching a running Electron app like
+    Discord takes seconds: it starts, finds the running copy, hands over and quits."""
+    w = next(iter(_app_windows(app)), None)
     if w:
         _call(["niri", "msg", "action", "focus-window", "--id", str(w["id"])])
     return bool(w)
+
+
+def _close_app(app, name):
+    """Close the app's windows (as its close button would); without a window, end its process by name.
+    pkill matches at most 15 characters of a name and misses wrapper scripts (google-chrome-stable is a
+    script for "chrome"), so a closed window is the reliable way, and a miss is reported, not claimed."""
+    windows = _app_windows(app)
+    for w in windows:
+        _call(["niri", "msg", "action", "close-window", "--id", str(w["id"])])
+    if windows:
+        return
+    if len(app[1]) > 15 or subprocess.run(["pkill", "-x", app[1]], capture_output=True).returncode != 0:
+        raise Failed(f"{name} doesn't seem to be open.")
 
 
 SITES = {
@@ -390,7 +408,7 @@ def run(action, confirm):
         elif app[1] in WRAPPERS:  # e.g. Spotify starts via "sh": pkill would kill every shell
             raise Failed(f"I can't close {a['name']} safely by name. Focus it and say close this window.")
         else:
-            _call(["pkill", "-x", app[1]])
+            _close_app(app, a["name"])
         return ""
     if name == "volume":
         current = round(float(_output(["wpctl", "get-volume", "@DEFAULT_AUDIO_SINK@"]).split()[1]) * 100)
