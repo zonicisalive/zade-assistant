@@ -98,3 +98,12 @@ def test_request_history_keeps_only_the_newest(tmp_path):
     for i in range(5):
         memory.log_request(conn, f"say {i}", "ok", "pattern", 1, keep=3)
     assert [r["heard"] for r in memory.requests(conn)] == ["say 4", "say 3", "say 2"]
+
+
+def test_forgetting_removes_only_the_best_match():
+    c = memory.connect(":memory:")
+    for f in ["my name is zonic", "i like tea", "my city is silvassa"]:
+        memory.add_fact(c, f)
+    assert memory.forget_fact(c, "i") == 1 and len(memory.facts(c)) == 2   # not all three
+    assert memory.forget_fact(c, "_") == 0 and memory.forget_fact(c, "%") == 0  # wildcards are literal
+    assert memory.forget_fact(c, "my city") == 1 and "my city is silvassa" not in memory.facts(c)

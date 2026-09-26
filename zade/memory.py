@@ -114,12 +114,26 @@ def add_fact(conn, fact):
     conn.commit()
 
 
-def forget_fact(conn, query):
-    if not query.strip():
+def _delete_best(conn, table, column, query):
+    """Delete the one row whose text best matches the query (not every row containing it: "forget i" would
+    wipe all facts). % and _ are taken literally."""
+    from rapidfuzz import fuzz
+
+    q = query.strip()
+    if not q:
         return 0
-    cur = conn.execute("DELETE FROM facts WHERE fact LIKE ?", (f"%{query.strip()}%",))
+    like = "%" + q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
+    rows = conn.execute(f"SELECT id, {column} FROM {table} WHERE {column} LIKE ? ESCAPE '\\'", (like,)).fetchall()
+    if not rows:
+        return 0
+    best = max(rows, key=lambda r: fuzz.ratio(q.lower(), r[1].lower()))
+    conn.execute(f"DELETE FROM {table} WHERE id = ?", (best[0],))
     conn.commit()
-    return cur.rowcount
+    return 1
+
+
+def forget_fact(conn, query):
+    return _delete_best(conn, "facts", "fact", query)
 
 
 def facts(conn, limit=50):
@@ -151,11 +165,7 @@ def reminders(conn):
 
 
 def cancel_reminder(conn, query):
-    if not query.strip():
-        return 0
-    cur = conn.execute("DELETE FROM reminders WHERE message LIKE ?", (f"%{query.strip()}%",))
-    conn.commit()
-    return cur.rowcount
+    return _delete_best(conn, "reminders", "message", query)
 
 
 def log_request(conn, heard, reply, route, ms, keep=1000):
