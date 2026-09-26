@@ -139,10 +139,17 @@ FILLER_SENTENCE = re.compile(
     r"(?: today| now| further| next| else)?"
     r"|what (?:would|else would|do|else do|can|else can) (?:you|i) (?:like|want|need|do)(?: me)?(?: to do| to)?"
     r"(?: for you)?(?: next| today| now| else)?"
-    r"|(?:let me know|feel free|just let me know|don't hesitate|do not hesitate|is there anything|is there something"
-    r"|anything else|if you need|if there'?s anything|whenever you need|i'?ll be (?:here|around)|i'?m (?:always )?here"
-    r"|i am (?:always )?here|i'?m (?:happy|glad|ready) to help|happy to help|glad to help|hope (?:this|that) helps"
-    r"|just say the word|ask me anything|you can ask me)\b.*"
+    # offers only: "If you need a visa, apply..." and "Let me know the city and I'll check" say something
+    r"|(?:just )?let me know (?:if|how|what|when|whenever|anytime)\b.*"
+    r"|feel free to (?:ask|reach out|let me know|come back|call)\b.*|(?:don'?t|do not) hesitate to\b.*"
+    r"|is there (?:anything|something) (?:else )?(?:i can|you'?d like|you would like|you want|you need)\b.*"
+    r"|anything else(?: i can (?:do|help (?:you )?with)(?: for you)?)?"
+    r"|if you need (?:anything|any help|help|more help|something|me)(?: else)?\b.*"
+    r"|if there'?s anything (?:else )?(?:i can|you need|you want)\b.*|whenever you need (?:me|anything|help)\b.*"
+    r"|i'?ll be (?:here|around)(?: if| whenever| when| for)?\b.*"
+    r"|(?:i'?m|i am) (?:always )?here(?: for you| if you need| to help| whenever| when you need)\b.*"
+    r"|(?:i'?m|i am) (?:happy|glad|ready) to help\b.*|happy to help|glad to help|hope (?:this|that) helps"
+    r"|just say the word|ask me anything|you can (?:always )?ask me (?:anything|more)\b.*"
     r"|(?:would you like|do you want|do you need|shall i|should i) (?:me )?(?:to )?(?:help|assist)(?: you)?"
     r"(?: with)? (?:something|anything).*"
     r"|(?:can|could) you tell me (?:more )?(?:about )?what you (?:need|want|would like)\b.*"
@@ -151,10 +158,13 @@ FILLER_SENTENCE = re.compile(
     r")(?:,? \w+)?[.!?]*$",  # "..., Zonic?"
     re.I)
 # ...and claim they did things no tool did ("Instagram is now open!", "the message has been sent" after only
-# opening Discord). Each kind of claim needs one of its tools to have run.
+# opening Discord). Each kind of claim needs one of its tools to have run. After a lookup (web, weather, the
+# screen...) the reply reports facts ("the metro line is now open"), not actions, so it isn't checked.
+INFO_TOOLS = {"web_answer", "web_search", "look_at_screen", "weather", "time", "date", "notes_read", "list_facts",
+              "list_reminders", "system_status", "clipboard_read"}
 CLAIMS = [
-    (re.compile(r"\b(?:(?:message|text)s? (?:has |have )?(?:been |was |were )?sent|sent (?:the |your |a |it |them )?"
-                r"(?:message|text)?|i(?:'ve| have)? messaged|(?:has|have) been (?:typed|written))\b", re.I),
+    (re.compile(r"\b(?:(?:the |your )?(?:message|text)s? (?:has |have )?(?:been |was |were )?sent"
+                r"|i(?:'ve| have)? (?:sent|messaged|typed))\b", re.I),
      {"send_message", "type_text", "press_keys"}),
     (re.compile(r"\b(?:is now open|is open now|now open|i(?:'ve| have)? (?:opened|launched|started))\b"
                 r"|^(?:sure|okay|ok)?,? ?opening\b", re.I), {"open_app", "open_website", "window", "web_search"}),
@@ -179,6 +189,8 @@ def tidy(reply, called=()):
     kept = [x if not FILLER_SENTENCE.match(x) else (g[1] + "!" if (g := greet.match(x)) else "") for x in sentences]
     kept = [x for x in kept if x]
     reply = " ".join(kept)  # only filler ("I'm here to help if you need anything."): better to say nothing
+    if set(called) & INFO_TOOLS:
+        return reply
     for claim, tools in CLAIMS:
         if any(claim.search(x) for x in kept) and not (set(called) & tools if tools else called):
             return "I couldn't do all of that." if called else "I couldn't do that."

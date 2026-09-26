@@ -473,3 +473,14 @@ def test_saying_type_or_press_yourself_still_needs_no_yes():
     ctx.confirm = lambda q: (_ for _ in ()).throw(AssertionError("should not ask"))
     z.handle(ctx, "press enter")
     assert ran == [{"name": "press_keys", "args": {"keys": "enter"}}]
+
+
+def test_real_content_is_never_taken_for_filler_or_a_claim():
+    for text in ["If you need a visa, apply at the embassy.", "Let me know the city and I'll check the weather.",
+                 "I'm here at the station, it's 5 minutes away."]:
+        assert z.tidy(text) == text, text
+    for text in ["Opening hours are 9 am to 5 pm.", "Dune is now playing in theaters.", "NASA sent a probe to Mars.",
+                 "The new metro line is now open."]:
+        assert z.tidy(text, ["web_answer"]) == text, text
+    assert z.tidy("The book has been written by Tolkien.") == "The book has been written by Tolkien."
+    assert z.tidy("It's 5 pm. Let me know if you need anything else!") == "It's 5 pm."
