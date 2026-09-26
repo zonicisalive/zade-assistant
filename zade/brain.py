@@ -21,7 +21,10 @@ SYSTEM = (
     "may have changed after your training, call web_answer instead of answering from memory. To write text "
     "into the current window, call type_text. If open_app cannot find an app, tell the user and pass on "
     "its suggestion; never open a web search for it instead. When the user teaches a command (\"when I say X, do Y\"), "
-    "do Y with tools first, then call make_shortcut with phrase X."
+    "do Y with tools first, then call make_shortcut with phrase X. "
+    "The user speaks Indian English, where 'X is what?' means 'what is X?': 'my name is what?' asks the user's "
+    "name (answer 'Your name is ...'), 'your name is what?' asks your name, 'this is what?' means "
+    "'what is this?', and 'do one thing' introduces a request."
 )
 S = {"type": "string"}
 
