@@ -12,8 +12,8 @@ def test_override_keeps_siblings(tmp_path):
     p.write_text('[llm]\nmodel = "qwen2.5:3b"\n')
     cfg = config.load(p)
     assert cfg["llm"]["model"] == "qwen2.5:3b"
-    assert cfg["llm"]["keep_alive"] == "60s"
-    assert config.DEFAULTS["llm"]["model"] == "qwen3:4b-instruct"  # defaults not mutated
+    assert cfg["llm"]["keep_alive"] == "30s"
+    assert config.DEFAULTS["llm"]["model"] == "qwen2.5:7b-instruct"  # defaults not mutated
 
 
 def test_load_env_override_replaces_changed_keys(tmp_path, monkeypatch):

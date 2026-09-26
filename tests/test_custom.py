@@ -45,7 +45,7 @@ def test_live_reload_updates_only_live_sections():
     new["llm"]["model"] = "something-else"  # needs a restart: must not change live
     z.apply_live(c, new)
     assert c["quiet"]["dnd"] is True and c["ui"]["position"] == "bottom"
-    assert c["llm"]["model"] == "qwen3:4b-instruct"
+    assert c["llm"]["model"] == "qwen2.5:7b-instruct"
 
 
 # Overlay style -------------------------------------------------------------

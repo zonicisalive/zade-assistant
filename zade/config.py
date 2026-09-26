@@ -32,14 +32,14 @@ DEFAULTS = {
     "router": {"shortcut_min_score": 90, "laya_accept": 0.90, "laya_confirm": 0.60, "laya_enabled": False},
     "llm": {
         "provider": "ollama",
-        "model": "qwen3:4b-instruct",
+        "model": "qwen2.5:7b-instruct",
         "host": "http://127.0.0.1:11434",
         "num_ctx": 4096,
         # Longest reply the local model may write. Spoken answers are short; without a cap a model that
         # starts looping keeps generating until its context is full and Zade hangs.
         "max_tokens": 400,
-        "keep_alive": "60s",
-        "vram_min_free_gb": 4.0,
+        "keep_alive": "30s",
+        "vram_min_free_gb": 5.0,
         "fallback": "cpu",
         "personality": "",  # your own instructions for how Zade talks, added to its system prompt
     },

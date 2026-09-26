@@ -11,8 +11,8 @@ noise_factor = 2.5          # speech must be this many times louder than the roo
 
 [llm]
 provider = "ollama"         # ollama | anthropic | openai
-model = "qwen3:4b-instruct"   # non-thinking; plain qwen3:4b is thinking-only and slow
-keep_alive = "60s"          # "0" unloads right after each answer
+model = "qwen2.5:7b-instruct" # any Ollama model with tool calling; this one needs ~4.7 GB VRAM
+keep_alive = "30s"          # "0" unloads right after each answer
 fallback = "cpu"            # cpu | none | anthropic | openai
 
 [stt]
