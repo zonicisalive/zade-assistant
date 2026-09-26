@@ -146,3 +146,18 @@ def test_fix_song_returns_one_clean_line(monkeypatch):
         raise providers.ProviderError("off")
     monkeypatch.setattr(providers, "chat", down)
     assert brain.fix_song("business by amine am", cfg(), vram=lambda: 8.0) == "business by amine am"
+
+
+def test_a_repeated_tool_call_runs_once(monkeypatch):
+    ran = []
+
+    def chat(name, system, text, tools, run_tool, cfg, extra, history=()):
+        for _ in range(4):
+            run_tool("volume", {"delta": 10})
+        return "Louder."
+
+    monkeypatch.setattr(brain.providers, "chat", chat)
+    monkeypatch.setattr(brain, "candidates", lambda cfg, vram, resident: [("ollama", {})])
+    cfg = copy.deepcopy(config.DEFAULTS)
+    brain.ask("louder", [], cfg, lambda n, a: ran.append((n, a)) or "done")
+    assert ran == [("volume", {"delta": 10})]

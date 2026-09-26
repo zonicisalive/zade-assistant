@@ -1,4 +1,5 @@
 import datetime
+import json
 import logging
 import pathlib
 import re
@@ -154,10 +155,15 @@ def ask(text, facts, cfg, run_tool, history=(), vram=vram_free_gb, resident=resi
         system += "\nThe user's instructions for your personality and style: " + cfg["llm"]["personality"]
     if facts:
         system += "\nKnown facts about the user:\n" + "\n".join(f"- {f}" for f in facts)
-    ran = []
+    ran, seen = [], {}
 
     def tracked(name, args):
-        result = run_tool(name, args)
+        # Small models sometimes repeat a call each round: "volume +10" four times is +40. The same call
+        # again in one request gets the first result, without doing it twice.
+        key = (name, json.dumps(args, sort_keys=True, default=str))
+        if key in seen:
+            return seen[key]
+        result = seen[key] = run_tool(name, args)
         ran.append((name, result))
         return result
 
