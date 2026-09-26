@@ -109,7 +109,7 @@ def _cloud(system, msg, img, cfg):
             {"type": "image", "source": {"type": "base64", "media_type": "image/png", "data": b64}},
             {"type": "text", "text": msg}]}])
         return r.content[0].text, factor
-    r = client.chat.completions.create(model=model, temperature=0, messages=[
+    r = client.chat.completions.create(model=model, temperature=0, extra_body=providers._private(client), messages=[
         {"role": "system", "content": system},
         {"role": "user", "content": [{"type": "text", "text": msg},
                                      {"type": "image_url", "image_url": {"url": "data:image/png;base64," + b64}}]}])

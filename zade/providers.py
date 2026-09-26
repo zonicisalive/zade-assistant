@@ -94,13 +94,19 @@ def _anthropic(system, text, tools, run_tool, cfg, extra, history):
     return TOO_MANY
 
 
+def _private(client):
+    """On OpenRouter: route only to providers with zero data retention (they keep nothing and can't train on it)."""
+    return {"provider": {"zdr": True, "data_collection": "deny"}} if "openrouter.ai" in str(client.base_url) else None
+
+
 def _openai(system, text, tools, run_tool, cfg, extra, history):
     pc = cfg["providers"]["openai"]
     client = _client("openai", cfg)
     specs = [{"type": "function", "function": t} for t in tools]
     msgs = [{"role": "system", "content": system}, *_history(history), {"role": "user", "content": text}]
     for _ in range(MAX_ROUNDS):
-        m = client.chat.completions.create(model=pc["model"], messages=msgs, tools=specs).choices[0].message
+        m = client.chat.completions.create(model=pc["model"], messages=msgs, tools=specs, extra_body=_private(client)
+                                           ).choices[0].message
         if not m.tool_calls:
             return (m.content or "").strip()
         msgs.append({"role": "assistant", "content": m.content, "tool_calls": [

@@ -130,3 +130,12 @@ def test_cloud_sdks_are_not_imported_at_startup():
     code = "import sys, zade.__main__; print('anthropic' in sys.modules, 'openai' in sys.modules)"
     out = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True).stdout.strip()
     assert out == "False False"
+
+
+def test_openrouter_requests_zero_data_retention():
+    class C:
+        base_url = "https://openrouter.ai/api/v1/"
+
+    assert providers._private(C) == {"provider": {"zdr": True, "data_collection": "deny"}}
+    C.base_url = "https://api.openai.com/v1/"
+    assert providers._private(C) is None
