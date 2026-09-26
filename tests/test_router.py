@@ -272,3 +272,10 @@ def test_snooze_and_durations():
     for text in ["stop", "stop the song", "stop for pizza", "stop playing for 10 minutes", "pause music for 10 minutes"]:
         assert router.parse_snooze(text) is None, text
 
+
+
+def test_a_partial_phrase_never_runs_a_shortcut_that_does_more():
+    close = lambda n: {"name": "close_app", "args": {"name": n}}
+    table = {"close discord and steam": [close("discord"), close("steam")], "open my work setup now": [close("x")]}
+    assert router.match_shortcut("close discord", table, 90) is None
+    assert router.match_shortcut("open my work setup", table, 90) == "open my work setup now"

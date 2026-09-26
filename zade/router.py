@@ -25,8 +25,9 @@ def match_shortcut(text, table, min_score):
     best, best_score = None, 0.0
     for phrase in table:
         score = fuzz.ratio(text, phrase)
-        # Partial phrase: a word-boundary prefix covering at least half the phrase.
-        if phrase.startswith(text + " ") and len(text) * 2 >= len(phrase):
+        # Partial phrase: a word-boundary prefix covering at least half the phrase, only for a shortcut that
+        # does one thing ("close discord" must not run a saved "close discord and steam").
+        if phrase.startswith(text + " ") and len(text) * 2 >= len(phrase) and len(table[phrase]) == 1:
             score = 100
         if score > best_score:
             best, best_score = phrase, score
