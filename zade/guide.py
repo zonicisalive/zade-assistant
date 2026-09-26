@@ -74,8 +74,10 @@ def locate(label, labels):
     return labels[hit[2]] if hit else None
 
 
-_GUIDE_POINT = (" If you can see the screenshot and the thing to click has no text (an icon), set label null and "
-                "give \"x\" and \"y\" in screenshot pixels.")
+_GUIDE_POINT = (" If you can see the screenshot and the thing to click has no readable text of its own (an icon, "
+                "the X that closes a tab or window, an arrow), don't give the text beside it: set label null and add its centre on the screenshot, from 0 to 1000 across and down (0,0 top "
+                "left, 1000,1000 bottom right): "
+                '{"done": false, "label": null, "x": <number>, "y": <number>, "say": "..."}.')
 
 
 def _parse(text):
@@ -87,9 +89,11 @@ def _parse(text):
         return {}
 
 
+
+
 def _cloud(system, msg, img, cfg):
     """Ask a cloud model that can see: Claude or any OpenAI-compatible one (Gemini, OpenRouter, ...). The
-    screenshot goes at 1280 px wide; returns (reply text, factor from its pixels to the screen's)."""
+    screenshot goes at 1280 px wide; returns (reply text, (x, y) factors from its 0-1000 coordinates to screen pixels)."""
     import base64
     import io
 
@@ -108,12 +112,13 @@ def _cloud(system, msg, img, cfg):
         r = client.messages.create(model=model, max_tokens=500, system=system, messages=[{"role": "user", "content": [
             {"type": "image", "source": {"type": "base64", "media_type": "image/png", "data": b64}},
             {"type": "text", "text": msg}]}])
-        return r.content[0].text, factor
+        return r.content[0].text, (img.shape[1] / 1000, img.shape[0] / 1000)
     r = client.chat.completions.create(model=model, temperature=0, extra_body=providers._private(client), messages=[
         {"role": "system", "content": system},
-        {"role": "user", "content": [{"type": "text", "text": msg},
-                                     {"type": "image_url", "image_url": {"url": "data:image/png;base64," + b64}}]}])
-    return r.choices[0].message.content, factor
+        {"role": "user", "content": [  # the image first: after the long text list, Qwen's y drifts to the top
+            {"type": "image_url", "image_url": {"url": "data:image/png;base64," + b64}},
+            {"type": "text", "text": msg}]}])
+    return r.choices[0].message.content, (img.shape[1] / 1000, img.shape[0] / 1000)
 
 
 def _local(system, msg, cfg):
@@ -132,7 +137,7 @@ def plan(goal, labels, done_steps, cfg, img=None):
     listing = "\n".join(f"{l['x']},{l['y']}: {l['text']}" for l in labels[:220])
     msg = f"Goal: {goal}\nDone so far: {'; '.join(done_steps) or 'nothing'}\nOn screen:\n{listing}"
     system = PLAN + _GUIDE_POINT
-    out, factor = {}, 1.0
+    out, factor = {}, None
     if cfg.get("guide", {}).get("provider", "local") != "local" and img is not None:
         try:
             text, factor = _cloud(system, msg, img, cfg)
@@ -140,13 +145,14 @@ def plan(goal, labels, done_steps, cfg, img=None):
         except Exception as e:  # no key, offline, quota: the local model still works
             log.warning("cloud screen model failed, using the local one: %s", e)
     if not out:
-        out, factor = _parse(_local(system, msg, cfg)), 1.0
+        out, factor = _parse(_local(system, msg, cfg)), None  # it can't see: no points from it
     point = None
-    if out.get("x") is not None and out.get("y") is not None:
-        try:
-            point = (round(float(out["x"]) * factor), round(float(out["y"]) * factor))
-        except (TypeError, ValueError):
-            point = None
+    try:
+        x, y = float(out["x"]), float(out["y"])
+        if factor and 0 <= x <= 1000 and 0 <= y <= 1000:  # anything else is a model confused about the scale
+            point = (round(x * factor[0]), round(y * factor[1]))
+    except (KeyError, TypeError, ValueError):
+        pass
     return {"done": bool(out.get("done")), "label": out.get("label") or None, "point": point,
             "say": str(out.get("say") or "I'm not sure what to click next.")}
 

@@ -32,9 +32,12 @@ def test_cloud_model_points_at_icons_and_falls_back(monkeypatch):
     cfg = {"llm": {"host": "http://x", "model": "m", "keep_alive": "30s"},
            "guide": {"provider": "openai", "model": "gemini-2.5-flash"}, "providers": {"openai": {"model": "x"}}}
     monkeypatch.setattr(guide, "_cloud", lambda system, msg, img, cfg: (
-        '```json\n{"done": false, "label": null, "x": 640, "y": 100, "say": "Click the gear icon"}\n```', 2.0))
+        '```json\n{"done": false, "label": null, "x": 640, "y": 100, "say": "Click the gear icon"}\n```', (2.0, 2.0)))
     p = guide.plan("open settings", LABELS, [], cfg, img=img)
-    assert p["point"] == (1280, 200) and p["label"] is None       # 1280-px screenshot -> screen pixels
+    assert p["point"] == (1280, 200) and p["label"] is None       # 0-1000 of the screenshot -> screen pixels
+
+    monkeypatch.setattr(guide, "_cloud", lambda system, msg, img, cfg: ('{"label": null, "x": 2360, "y": 14}', (2.0, 2.0)))
+    assert guide.plan("open settings", LABELS, [], cfg, img=img)["point"] is None  # off the 0-1000 scale
 
     def down(*a):
         raise RuntimeError("no key")
@@ -42,3 +45,4 @@ def test_cloud_model_points_at_icons_and_falls_back(monkeypatch):
     monkeypatch.setattr(guide, "_cloud", down)
     monkeypatch.setattr(guide, "_local", lambda system, msg, cfg: '{"done": true, "say": "Done"}')
     assert guide.plan("open settings", LABELS, [], cfg, img=img)["done"] is True  # fell back to local
+
