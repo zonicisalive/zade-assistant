@@ -108,6 +108,7 @@ class Ctx:
     alerts: list = field(default_factory=list)  # due reminders, spoken by the main loop when idle
     history: list = field(default_factory=list)  # (time, user text, reply) for follow-ups
     turn: list = field(default_factory=list)  # actions done so far in the current request
+    tried: bool = False  # the model tried an action this request (even one that failed)
     app_words: list = field(default_factory=list)  # installed app names, given to Whisper as hotwords
     show: Callable = lambda **fields: None  # overlay updates (emotion); ui.set in the real app
     route: str = ""  # how the last request was handled (shortcut, pattern, llm, ...), for History
@@ -324,7 +325,9 @@ def dispatch(ctx, action, from_model=False):
             f = memory.facts(ctx.conn)
             return ("I know that " + "; ".join(f) + "." if f else "I don't know anything about you yet."), True
         if name == "make_shortcut":
-            last = ctx.turn or memory.last_actions(ctx.conn)  # "when I say X, do Y" saves this turn's Y
+            # "when I say X, do Y" saves this turn's Y; "save that as X" the last request's. If Y was tried and
+            # failed, there's nothing to save (not the older, unrelated request).
+            last = ctx.turn or (None if ctx.tried else memory.last_actions(ctx.conn))
             if not last:
                 return "There's nothing to save yet.", False
             memory.add_shortcut(ctx.conn, router.normalize(a["phrase"]), last)
@@ -425,6 +428,7 @@ def offer(ctx, text, acts):
 
 def handle(ctx, raw):
     """Handle one utterance; return what Zade replied (for follow-up listening)."""
+    ctx.turn, ctx.tried = [], False  # before any early return: a taught "goodnight" must not save older actions
     text = router.normalize(raw)
     snooze = router.parse_snooze(text) is not None  # "stop for 10 minutes" is a command, not a plain stop
     if not snooze and (after := after_stop(raw)) is not None:
@@ -444,7 +448,6 @@ def handle(ctx, raw):
             reply = "That didn't work, so I didn't save it."
         ctx.say(reply)
         return reply
-    ctx.turn = []
     ctx.route = "llm"
     r = router.route(text, memory.shortcuts(ctx.conn), ctx.cfg["router"], ctx.predict, ctx.find_app)
     if r.kind == "none":  # nothing (or only noise) was said after the wake word: stay silent
@@ -471,6 +474,8 @@ def handle(ctx, raw):
         executed, called = [], []
 
         def run_tool(name, args):
+            if name not in MEMORY_TOOLS:
+                ctx.tried = True
             out, ok = dispatch(ctx, {"name": name, "args": args}, from_model=True)
             if ok:  # only what really happened backs a claim ("sent" after a "no" to the confirmation is a lie)
                 called.append(name)

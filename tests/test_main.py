@@ -484,3 +484,21 @@ def test_real_content_is_never_taken_for_filler_or_a_claim():
         assert z.tidy(text, ["web_answer"]) == text, text
     assert z.tidy("The book has been written by Tolkien.") == "The book has been written by Tolkien."
     assert z.tidy("It's 5 pm. Let me know if you need anything else!") == "It's 5 pm."
+
+
+def test_teaching_never_saves_an_older_requests_actions():
+    ran = []
+    ctx = make([], run_action=lambda a, c: ran.append(a) or "")
+    z.handle(ctx, "close discord")                         # an earlier, unrelated request
+    z.handle(ctx, "when i say goodnight go to sleep")      # "go to sleep" is itself a stop word
+    assert "goodnight" not in memory.shortcuts(ctx.conn)
+
+    def ask(text, facts, cfg, run_tool, history=()):
+        run_tool("open_app", {"name": "steam"})              # fails
+        run_tool("make_shortcut", {"phrase": "gaming"})
+        return "Saved."
+
+    ctx.ask = ask
+    ctx.run_action = lambda a, c: (_ for _ in ()).throw(z.actions.Failed("no steam")) if a["name"] == "open_app" else ""
+    z.handle(ctx, "when I say gaming open steam")
+    assert "gaming" not in memory.shortcuts(ctx.conn)
