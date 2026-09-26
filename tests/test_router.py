@@ -239,3 +239,12 @@ def test_search_for_it_goes_to_the_model():
     assert P("search for cheap flights", find) == {"name": "web_search", "args": {"query": "cheap flights"}}
     assert P("open discord and facebook", lambda q: ("discord", "discord") if q == "discord" else None) == [
         {"name": "open_app", "args": {"name": "discord"}}, {"name": "open_website", "args": {"site": "facebook"}}]
+
+
+def test_misheard_provider_and_liked_songs():
+    P, find = router.parse_pattern, lambda q: None
+    assert P("play liked songs from sopity", find)["args"] == {"query": "liked songs", "provider": "spotify"}
+    assert P("play my like songs from spotify", find)["args"] == {"query": "my like songs", "provider": "spotify"}
+    assert P("play dancing on my own", find)["args"] == {"query": "dancing on my own"}  # 'my own' is no provider
+    from zade import music
+    assert music.LIKED.fullmatch("my like songs") and music.LIKED.fullmatch("liked songs")

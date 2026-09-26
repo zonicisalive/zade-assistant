@@ -145,6 +145,11 @@ def parse_pattern(text, find_app):
     if m := re.fullmatch(r"(play|place) (?!music$|pause$|next$|previous$)(.+?)"
                          r"(?: (?:on|in|from) (spotify|youtube music|youtube|yt music|yt))?", text):
         verb, query, provider = m[1], m[2], {"yt": "youtube", "yt music": "youtube music"}.get(m[3], m[3])
+        if not provider and (t := re.fullmatch(r"(.+) (?:on|in|from) (\w+(?: \w+)?)", query)):
+            # a misheard provider ("from sopity"): match it by sound
+            hit = max(((fuzz.ratio(t[2], p), p) for p in ("spotify", "youtube", "youtube music")), default=(0, ""))
+            if hit[0] >= 60:  # "sopity" scores 61; unrelated words ("my own") ~30
+                query, provider = t[1], hit[1]
         if verb == "play" or provider or " by " in query:
             return {"name": "play_music", "args": {"query": query, **({"provider": provider} if provider else {})}}
     if re.fullmatch(r"mute(?: the)?(?: sound| volume| audio| it| speakers?)?", text):

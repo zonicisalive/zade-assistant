@@ -25,7 +25,8 @@ log = logging.getLogger("zade")
 REDIRECT = "http://127.0.0.1:8888/callback"  # add this in your Spotify app's settings
 SCOPES = "user-modify-playback-state user-read-playback-state user-library-read"
 # "my liked songs", "my favourites", "my library": the user's Liked Songs, not a song with that name
-LIKED = re.compile(r"(?:my |the )?(?:liked|saved|favou?rite|favou?rites)(?: songs| tracks| music| playlist)?|my (?:library|music)")
+LIKED = re.compile(r"(?:my |the )?(?:like|liked|likes|saved|favou?rites?)(?: songs?| tracks?| music| playlist)?"
+                   r"|my (?:library|music)")
 
 _cache = {"token": None, "expires": 0.0}
 
