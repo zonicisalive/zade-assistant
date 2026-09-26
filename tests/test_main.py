@@ -339,3 +339,10 @@ def test_name_questions_are_answered_exactly():
     z.handle(ctx, "What's my name?")
     assert said == ["I'm Zade, your voice assistant.", "I don't know your name yet. Tell me: my name is ...",
                     "Your name is Zonic.", "Your name is Zonic."]
+
+
+def test_waving_zade_off_is_silent():
+    for t in ["no", "no it's a nothing nothing", "nah", "no thanks that's all", "leave it", "forget it", "nope sorry"]:
+        assert z.dismissed(t), t
+    for t in ["no music please", "nothing on tv tonight", "open firefox", "is it raining", "no wait open steam"]:
+        assert not z.dismissed(t), t

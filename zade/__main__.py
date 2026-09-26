@@ -20,6 +20,16 @@ from . import actions, brain, config, info, memory, router
 log = logging.getLogger("zade")
 # Tools whose calls are never learned as shortcuts (memory, one-off content, or risky).
 STOP_WORDS = {"stop", "cancel", "never mind", "nevermind", "shut up", "quiet", "be quiet", "nothing"}
+# "No.", "nah", "no, it's nothing", "no thanks, that's all": the user waving Zade off
+DISMISS = {"no", "nope", "nah", "nothing", "never", "mind", "nevermind", "nvm", "leave", "forget", "it", "its", "it's",
+           "a", "just", "thanks", "thank", "you", "that's", "thats", "all", "not", "now", "okay", "ok", "fine", "cancel",
+           "stop", "i", "said", "was", "saying", "sorry"}
+
+
+def dismissed(text):
+    words = re.findall(r"[a-z']+", text)
+    return bool(words) and set(words) <= DISMISS and bool(set(words) & {"no", "nope", "nah", "nothing", "never",
+                                                                        "nevermind", "nvm", "forget", "leave"})
 MEMORY_TOOLS = {"whoami", "express", "dnd", "look_at_screen", "system_status", "set_reminder", "list_reminders", "cancel_reminder", "sync_apps", "remember", "forget", "list_facts", "make_shortcut", "sleep", "set_timer", "note_add",
                 "notes_read", "web_answer", "clipboard_read", "clipboard_copy", "type_text", "power", "shell"}
 
@@ -273,7 +283,7 @@ def offer(ctx, text, acts):
 def handle(ctx, raw):
     """Handle one utterance; return what Zade replied (for follow-up listening)."""
     text = router.normalize(raw)
-    if text in STOP_WORDS:
+    if text in STOP_WORDS or dismissed(text):
         return ""
     if taught := router.parse_teach(text):
         phrase, request = taught
