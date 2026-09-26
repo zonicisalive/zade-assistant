@@ -327,12 +327,29 @@ class Clicker:
         self.ui.close()
 
 
+def is_own(text, own):
+    """Whether screen text is Zade's own words in its bubble ("Click the message bar at the bottom..."), which
+    the planner otherwise picks as the thing to click. Only sentences: a real "User Settings" button stays."""
+    from rapidfuzz import fuzz
+
+    if len(text.split()) < 4:
+        return False
+    t = text.lower()
+    return any(o and fuzz.partial_ratio(t, o.lower()) >= 88 for o in own)
+
+
 # ── A guiding session ─────────────────────────────────────────────────────────────────────────────────
 class Session:
     """Guides toward one goal until it's done, the user says stop, or nothing happens for a while."""
 
-    def __init__(self, goal, cfg, say, idle_s=90):
-        self.goal, self.cfg, self.say, self.idle_s = goal, cfg, say, idle_s
+    def __init__(self, goal, cfg, say, idle_s=90, heard=""):
+        self.goal, self.cfg, self.idle_s = goal, cfg, idle_s
+        self.own = [goal, heard]  # Zade's bubble shows these (and what it says): not things to click
+
+        def say_(text):
+            self.own.append(text)
+            say(text)
+        self.say = say_
         self.done_steps, self.target = [], None
         self.stopped = threading.Event()
         self.wake = threading.Event()
@@ -357,7 +374,7 @@ class Session:
         show_pointer(None)  # else the ring and its instruction are in the screenshot and get read back
         time.sleep(0.15)
         img = screenshot()
-        labels = read_screen(img)
+        labels = [l for l in read_screen(img) if not is_own(l["text"], self.own)]
         p = plan(self.goal, labels, self.done_steps, self.cfg, img=img)
         if p["done"]:
             self.stop()

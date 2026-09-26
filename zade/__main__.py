@@ -96,6 +96,7 @@ class Ctx:
     show: Callable = lambda **fields: None  # overlay updates (emotion); ui.set in the real app
     route: str = ""  # how the last request was handled (shortcut, pattern, llm, ...), for History
     guide: object = None  # the running screen-guide session, if any
+    heard: str = ""  # the words being handled, as transcribed
 
 
 def dictation_text(raw):
@@ -320,7 +321,7 @@ def dispatch(ctx, action, from_model=False):
 
             if ctx.guide:
                 ctx.guide.stop()
-            ctx.guide = guide.Session(a["goal"], ctx.cfg, ctx.say)
+            ctx.guide = guide.Session(a["goal"], ctx.cfg, ctx.say, heard=ctx.heard)
             ctx.guide.start()
             return "", True  # the session speaks its first instruction itself
         if name == "guide_click":
@@ -414,6 +415,7 @@ def offer(ctx, text, acts):
 
 def handle(ctx, raw):
     """Handle one utterance; return what Zade replied (for follow-up listening)."""
+    ctx.heard = raw or ""
     text = router.normalize(raw)
     snooze = router.parse_snooze(text) is not None  # "stop for 10 minutes" is a command, not a plain stop
     if not snooze and any(plain(router.normalize(x)) in STOP_WORDS for x in re.split(r"[.!?,]", raw or "")):

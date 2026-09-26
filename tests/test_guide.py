@@ -98,3 +98,12 @@ def test_local_agent_actions_become_spoken_steps(monkeypatch):
     assert step()["say"] == "Press ctrl plus k"
     assert step()["say"] == "Scroll down"
     assert step() == {"done": True, "label": None, "point": None, "say": "That's done."}
+
+
+def test_zades_own_bubble_is_not_a_thing_to_click():
+    own = ["click the message bar of discord", "Point out message bar of Discord.",
+           "Click the message bar at the bottom of the Discord window."]
+    assert guide.is_own("Click the message bar at the bottom of the Discord window.", own)
+    assert guide.is_own("Point out message bar of Discord.", own)
+    assert not guide.is_own("Message @DEXORTO", own) and not guide.is_own("Direct Messages", own)
+    assert not guide.is_own("User Settings", ["open my user settings"])
