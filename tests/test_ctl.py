@@ -148,3 +148,8 @@ def test_settings_saved_at_the_same_moment_are_all_kept(env):
     c = config.load(env / "config.toml")
     assert (c["stt"]["provider"], c["stt"]["model"], c["sound"]["volume"], c["ui"]["position"]) == \
         ("whisper", "base.en", 0.5, "bottom")
+
+
+def test_control_characters_in_a_setting_keep_the_file_readable(env):
+    assert run("set", "llm.personality", "be nice\x0bplease\tand\x7f calm")["ok"]
+    assert config.load(env / "config.toml")["llm"]["personality"] == "be nice\x0bplease\tand\x7f calm"

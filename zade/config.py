@@ -128,6 +128,9 @@ def load_env(path=None, override=False):
                 os.environ[key.strip()] = value.strip().strip("'\"")
 
 
+_TOML_ESCAPES = {"\\": "\\\\", '"': '\\"', "\n": "\\n", "\t": "\\t", "\r": "\\r", "\b": "\\b", "\f": "\\f"}
+
+
 def _toml_value(v):
     if isinstance(v, bool):
         return "true" if v else "false"
@@ -135,7 +138,9 @@ def _toml_value(v):
         return repr(v)
     if isinstance(v, list):
         return "[" + ", ".join(_toml_value(x) for x in v) + "]"
-    return '"' + str(v).replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n") + '"'
+    # every control character escaped: one stray \x0b made the whole file unreadable
+    return '"' + "".join(_TOML_ESCAPES.get(c) or (f"\\u{ord(c):04x}" if ord(c) < 0x20 or ord(c) == 0x7f else c)
+                         for c in str(v)) + '"'
 
 
 def dumps(data, prefix=""):

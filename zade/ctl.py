@@ -17,7 +17,10 @@ from . import config, memory
 CONFIG = pathlib.Path("~/.config/zade/config.toml").expanduser()
 ENV = pathlib.Path("~/.config/zade/env").expanduser()   # API keys, readable only by you
 KEYS = ["SPOTIFY_CLIENT_ID", "SPOTIFY_CLIENT_SECRET", "SPOTIFY_REFRESH_TOKEN", "ANTHROPIC_API_KEY", "OPENAI_API_KEY"]
-DATA = pathlib.Path(config.load(CONFIG)["paths"]["data"]).expanduser()  # the same folder Zade uses
+try:
+    DATA = pathlib.Path(config.load(CONFIG)["paths"]["data"]).expanduser()  # the same folder Zade uses
+except Exception:  # a broken config must not also break the app that can fix it
+    DATA = pathlib.Path(config.DEFAULTS["paths"]["data"]).expanduser()
 DB = DATA / "zade.db"
 LOCK = DATA / "zade.lock"
 READY = DATA / "zade.ready"   # holds the pid of the Zade that finished starting up
