@@ -243,20 +243,43 @@ def find_recordings(given):
 KINDS = ("positive", "negative", "synthetic")  # real wake words, real near-misses, Indian-accent TTS
 
 
-def _clips(source):
-    """(kind, wav bytes) from a zip or an unpacked folder."""
+def _clips(source, with_names=False):
+    """(kind, wav bytes) or (kind, name, wav bytes) from a zip or an unpacked folder."""
     if source.is_dir():
         for kind in KINDS:
             for f in sorted((source / kind).glob("*.wav")):
-                yield kind, f.read_bytes()
+                yield (kind, f.name, f.read_bytes()) if with_names else (kind, f.read_bytes())
         return
     with zipfile.ZipFile(source) as z:
         for name in z.namelist():
             if name.endswith(".wav") and name.split("/")[0] in KINDS:
-                yield name.split("/")[0], z.read(name)
+                kind = name.split("/")[0]
+                yield (kind, name.split("/")[-1], z.read(name)) if with_names else (kind, z.read(name))
 
 
-def add_recordings(sources, clips_dir, n_samples, synthetic_ok=True, real_share=0.05):
+def held_out(name):
+    """Every ~5th real clip (by a stable hash of its file name) is kept out of --real-only training so the
+    model can be tested on voices clips it never heard."""
+    import hashlib
+
+    return int(hashlib.md5(name.encode()).hexdigest(), 16) % 5 == 0
+
+
+def fill_with_real(sources, clips_dir, n_train, n_test):
+    """--real-only: the wake-word examples are only real recordings (the held-out fifth excluded), each
+    repeated with fresh noise and echo until there are as many as synthetic training would have made."""
+    train = [data for src in sources for kind, name, data in _clips(src, True)
+             if kind == "positive" and not held_out(name)]
+    if not train:
+        raise SystemExit("--real-only needs recordings (positive/ clips)")
+    for folder, n in (("positive_train", n_train), ("positive_test", n_test)):
+        (clips_dir / folder).mkdir(parents=True, exist_ok=True)
+        for i in range(n):
+            (clips_dir / folder / f"real_{i:06d}.wav").write_bytes(train[i % len(train)])
+    print(f"real-only: {len(train)} real clips repeated into {n_train} training and {n_test} test examples", flush=True)
+
+
+def add_recordings(sources, clips_dir, n_samples, synthetic_ok=True, real_share=0.05, negatives_only=False):
     """Mix real voices into the generated ones: repeated so they make up ~5% of the positives
     (augmentation adds different noise and echo to every copy), and near-misses as negatives."""
     got = {kind: [] for kind in KINDS}
@@ -266,6 +289,8 @@ def add_recordings(sources, clips_dir, n_samples, synthetic_ok=True, real_share=
             got[kind].append(data)
         print(f"recordings from {src.name}: {sum(map(len, got.values())) - before} clips", flush=True)
     pos, neg, synthetic = got["positive"], got["negative"], got["synthetic"] if synthetic_ok else []
+    if negatives_only:  # --real-only already filled the wake-word sets
+        pos, synthetic = [], []
     for i, data in enumerate(synthetic):  # extra accented voices, once each: they must not outweigh real ones
         (clips_dir / "positive_train" / f"synth_{i:05d}.wav").write_bytes(data)
     if synthetic:
@@ -296,13 +321,13 @@ generate_samples(text=a["text"], max_samples=a["n"], batch_size=a["batch"], nois
 """
 
 
-def generate_on_all_gpus(work, config, gpus):
+def generate_on_all_gpus(work, config, gpus, positives=True):
     """Make the two big training sets with every GPU at once (Kaggle's T4 x2): one process per GPU,
     each writing its share. openWakeWord's own --generate_clips step then sees them done (it resumes
     from what exists) and only makes the small test sets. A failed share is simply made by that step."""
     clips = work / "model" / MODEL_NAME
-    jobs = [(clips / "positive_train", config["target_phrase"], config["tts_batch_size"]),
-            (clips / "negative_train", config["custom_negative_phrases"], max(1, config["tts_batch_size"] // 7))]
+    jobs = [(clips / "positive_train", config["target_phrase"], config["tts_batch_size"])] if positives else []
+    jobs += [(clips / "negative_train", config["custom_negative_phrases"], max(1, config["tts_batch_size"] // 7))]
     for out, text, batch in jobs:
         n = config["n_samples"]
         shares = [n // gpus + (1 if i < n % gpus else 0) for i in range(gpus)]
@@ -349,10 +374,13 @@ def inner(args):
 
     train = [sys.executable, work / "openwakeword" / "openwakeword" / "train.py", "--training_config", work / "zade.yaml"]
     if torch.cuda.device_count() > 1:
-        generate_on_all_gpus(work, config, torch.cuda.device_count())
+        generate_on_all_gpus(work, config, torch.cuda.device_count(), positives=not args.real_only)
+    if args.real_only:  # openWakeWord's generator then sees the wake-word sets full and skips them
+        fill_with_real(find_recordings(args.recordings), work / "model" / MODEL_NAME,
+                       args.samples, config["n_samples_val"])
     sh(*train, "--generate_clips")
     add_recordings(find_recordings(args.recordings), work / "model" / MODEL_NAME, args.samples,
-                   synthetic_ok=not args.no_synthetic, real_share=args.real_share)
+                   synthetic_ok=not args.no_synthetic, real_share=args.real_share, negatives_only=args.real_only)
     sh(*train, "--augment_clips")
     onnx = work / "model" / f"{MODEL_NAME}.onnx"
     try:
@@ -378,6 +406,8 @@ def main():
     p.add_argument("--acav-gb", type=float, default=17.3, help="GB of pre-computed negative features (17.3 = all)")
     p.add_argument("--real-share", type=float, default=0.05,
                    help="share of wake-word examples that are real recordings (repeated with new noise each time)")
+    p.add_argument("--real-only", action="store_true",
+                   help="wake-word examples only from real recordings (a fifth held out for testing)")
     p.add_argument("--no-synthetic", action="store_true", help="leave out the Indian-accent synthetic clips")
     p.add_argument("--recordings", default="", help="recording zips, comma-separated (found automatically on Kaggle)")
     argv = sys.argv[1:]
