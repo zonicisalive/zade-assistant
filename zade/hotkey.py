@@ -82,7 +82,18 @@ def watch_all(bindings):
         return [None] * len(bindings)
     detectors = [HoldDetector(code, hold_s) for code, (_, hold_s, _) in zip(codes, bindings)]
 
+    def rescan():
+        """Keyboards plugged in (or back) since: USB replug, resume from suspend, a Bluetooth reconnect."""
+        known = {d.path for d in devices}
+        for dev in _keyboards(ecodes, evdev, codes[0]):
+            if dev.path in known:
+                dev.close()
+            else:
+                devices.append(dev)
+                log.info("hotkeys: keyboard added (%s)", dev.name)
+
     def loop():
+        last_scan = time.monotonic()
         while True:
             ready, _, _ = select.select(devices, [], [], 0.05)
             now = time.monotonic()
@@ -92,8 +103,14 @@ def watch_all(bindings):
                         if ev.type == ecodes.EV_KEY:
                             for d in detectors:
                                 d.key(ev.code, ev.value, now)
-                except OSError:  # keyboard unplugged
+                except OSError:  # keyboard unplugged: forget it, and any key it was holding
                     devices.remove(dev)
+                    dev.close()
+                    for d in detectors:
+                        d.since = None
+            if now - last_scan > 3:
+                last_scan = now
+                rescan()
             for d, (key, hold_s, trigger) in zip(detectors, bindings):
                 if d.due(time.monotonic()):
                     log.info("hotkey: %s held %.1fs", key, hold_s)
