@@ -54,7 +54,7 @@ CPU model; Zade falls back to the CPU model whenever the server isn't running.
 sudo pacman -S --needed vulkan-headers spirv-headers shaderc
 cd ~/.local/share/zade && git clone --depth 1 https://github.com/ggml-org/whisper.cpp && cd whisper.cpp
 cmake -B build -DGGML_VULKAN=1 -DGGML_CCACHE=OFF -DCMAKE_BUILD_TYPE=Release && cmake --build build -j --target whisper-server
-curl -L -o models/ggml-large-v3-turbo-q5_0.bin https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo-q5_0.bin
+curl -L -o models/ggml-large-v3-turbo-q8_0.bin https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo-q8_0.bin
 cp ~/Zade/systemd/zade-whisper.service ~/.config/systemd/user/ && systemctl --user daemon-reload
 ```
 
