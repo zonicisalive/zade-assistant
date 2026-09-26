@@ -292,10 +292,14 @@ def dispatch(ctx, action, from_model=False):
         # Closing things on the model's own initiative always needs a yes; the user naming it doesn't.
         model_close = from_model and (name == "close_app" or (name == "window" and a.get("action") == "close")
                                       or (name == "press_keys" and actions.is_closing(a.get("keys", ""))))
+        # Typing, Enter and Super on the model's own initiative too: text from a web page, the screen or the
+        # clipboard could otherwise make it open a terminal, type a command and run it, with no yes.
+        model_keys = from_model and (name == "type_text" or
+                                     (name == "press_keys" and actions.submits_or_launches(a.get("keys", ""))))
         if name == "send_message":  # goes to another person: always read back first, whatever the setting
             if not ctx.confirm(f"Send {a.get('text', '')} to {a.get('to', '')} on {a.get('app') or 'Discord'}?"):
                 return "Cancelled.", False
-        elif model_close or needs_confirm(name, ctx.cfg["safety"]["confirm"], a):
+        elif model_close or model_keys or needs_confirm(name, ctx.cfg["safety"]["confirm"], a):
             detail = next((str(v) for v in a.values() if isinstance(v, (str, int))), "")
             if not ctx.confirm(f"{name.replace('_', ' ').capitalize()}{' ' + detail if detail else ''}?"):
                 return "Cancelled.", False

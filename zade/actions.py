@@ -206,7 +206,7 @@ KEY_NAMES = {"enter": "Return", "return": "Return", "tab": "Tab", "escape": "Esc
              "play": "XF86AudioPlay", "pause": "XF86AudioPlay", "next": "XF86AudioNext", "previous": "XF86AudioPrev",
              "minus": "minus", "plus": "plus", "equals": "equal", "comma": "comma", "period": "period",
              "dot": "period", "slash": "slash"}
-CLOSING_COMBOS = {("alt", "F4"), ("ctrl", "q"), ("ctrl", "w"), ("logo", "q")}
+CLOSING_COMBOS = {("alt", "F4"), ("ctrl", "F4"), ("ctrl", "q"), ("ctrl", "w"), ("logo", "q")}
 
 
 def _key_parts(combo):
@@ -255,6 +255,19 @@ def is_closing(keys):
         except Failed:
             continue  # run() refuses the whole sequence anyway
         if any((m, k) in CLOSING_COMBOS for m in mods):
+            return True
+    return False
+
+
+def submits_or_launches(keys):
+    """True if the keys press Enter (runs whatever was typed) or use Super/Win (opens terminals and apps):
+    together with typing, that's how a model tricked by a web page could run a command unasked."""
+    for c in key_combos(keys):
+        try:
+            mods, k = _key_parts(c)
+        except Failed:
+            return True
+        if k in ("Return", "KP_Enter") or "logo" in mods or {"ctrl", "alt"} <= set(mods):
             return True
     return False
 
