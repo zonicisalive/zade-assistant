@@ -185,3 +185,30 @@ def test_gpu_waits_for_a_starting_server(monkeypatch):
     monkeypatch.setattr(S, "_server", server)
     monkeypatch.setattr(S.time, "sleep", lambda s: None)
     assert S.transcribe(np.zeros(16000, np.int16), c) == "open firefox" and len(tries) == 3
+
+
+def test_qwen_asr_provider(monkeypatch):
+    import json as _json
+
+    import zade.stt as S
+
+    c = copy.deepcopy(config.DEFAULTS)
+    c["stt"]["provider"] = "qwen"
+    sent = {}
+
+    class Resp:
+        def __enter__(self): return self
+        def __exit__(self, *a): pass
+        def read(self, *a):
+            return _json.dumps({"choices": [{"message": {"content": "language English<asr_text>Open Firefox."}}]}).encode()
+
+    def urlopen(req, timeout):
+        sent.update(url=req.full_url, body=_json.loads(req.data))
+        return Resp()
+
+    monkeypatch.setattr("urllib.request.urlopen", urlopen)
+    monkeypatch.setattr(S, "has_speech", lambda a: True)
+    assert S.transcribe(np.zeros(16000, np.int16), c, hotwords=("Discord",)) == "Open Firefox."
+    msgs = sent["body"]["messages"]
+    assert sent["url"].endswith(":8182/v1/chat/completions")
+    assert "Discord" in msgs[0]["content"] and msgs[-1] == {"role": "assistant", "content": "language English<asr_text>"}

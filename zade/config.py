@@ -16,10 +16,11 @@ DEFAULTS = {
               # transcription). focus_threshold: higher cuts more, but may cut your own quieter words.
               "voice_focus": True, "focus_threshold": 0.25},
     "stt": {
-        # provider: whisper (faster-whisper on the CPU) | gpu (whisper.cpp server, large-v3-turbo on the GPU;
-        # falls back to the CPU model) | openai
+        # provider: whisper (faster-whisper on the CPU) | gpu (whisper.cpp server, large-v3-turbo on the GPU)
+        # | qwen (Qwen3-ASR-0.6B on the GPU, most accurate with Indian accents) | openai. GPU ones fall back to the CPU.
         "provider": "whisper", "model": "small.en", "device": "cpu", "beam_size": 5,
         "server_url": "http://127.0.0.1:8178",
+        "qwen_url": "http://127.0.0.1:8182",  # provider qwen: Qwen3-ASR via llama.cpp (zade-qwen-asr service)
         "keep_alive_s": 30,  # the GPU model leaves VRAM after this long without a request
         # Words to expect: big accuracy gain for accents and made-up names (shortcut phrases are added too).
         "hotwords": ["Zade", "workspace", "timer", "remind me", "minutes", "volume", "weather", "screenshot",

@@ -36,22 +36,42 @@ def to_wav(audio, rate=16000):
 
 # The GPU model only holds VRAM while it's in use: Zade starts its service on wake (it loads in ~0.2 s,
 # while the user is still talking) and stops it after stt.keep_alive_s without a request.
-GPU_SERVICE = "zade-whisper"
+SERVICES = {"gpu": "zade-whisper", "qwen": "zade-qwen-asr"}  # speech provider -> its on-demand GPU service
 _gpu = {"used": 0.0}
 
 
 def gpu_start(cfg):
-    if cfg["stt"]["provider"] == "gpu":
+    if service := SERVICES.get(cfg["stt"]["provider"]):
         _gpu["used"] = time.monotonic()
-        subprocess.run(["systemctl", "--user", "start", "--no-block", GPU_SERVICE], capture_output=True)
+        subprocess.run(["systemctl", "--user", "start", "--no-block", service], capture_output=True)
 
 
 def gpu_idle(cfg, now=None):
     """Stop the GPU model once it has been idle long enough (called from Zade's main loop)."""
     now = time.monotonic() if now is None else now
-    if cfg["stt"]["provider"] == "gpu" and _gpu["used"] and now - _gpu["used"] > cfg["stt"].get("keep_alive_s", 30):
+    service = SERVICES.get(cfg["stt"]["provider"])
+    if service and _gpu["used"] and now - _gpu["used"] > cfg["stt"].get("keep_alive_s", 30):
         _gpu["used"] = 0.0
-        subprocess.run(["systemctl", "--user", "stop", "--no-block", GPU_SERVICE], capture_output=True)
+        subprocess.run(["systemctl", "--user", "stop", "--no-block", service], capture_output=True)
+
+
+def _qwen(audio, cfg, prompt):
+    """Qwen3-ASR through llama.cpp's llama-server (on the GPU through Vulkan). The hint words go in as
+    context, and the reply is started as "language English" so short phrases aren't written in Hindi."""
+    import base64
+    import json
+    import urllib.request
+
+    msgs = ([{"role": "system", "content": prompt}] if prompt else []) + [
+        {"role": "user", "content": [{"type": "input_audio", "input_audio": {
+            "data": base64.b64encode(to_wav(audio)).decode(), "format": "wav"}}]},
+        {"role": "assistant", "content": "language English<asr_text>"}]
+    req = urllib.request.Request(cfg["stt"]["qwen_url"].rstrip("/") + "/v1/chat/completions",
+                                 data=json.dumps({"messages": msgs, "temperature": 0, "max_tokens": 160}).encode(),
+                                 headers={"Content-Type": "application/json"})
+    with urllib.request.urlopen(req, timeout=15) as r:
+        text = json.load(r)["choices"][0]["message"]["content"]
+    return text.split("<asr_text>")[-1].strip()
 
 
 def _server(audio, cfg, prompt):
@@ -89,19 +109,21 @@ def has_speech(audio):
 
 def transcribe(audio, cfg, prompt="", hotwords=()):
     s = cfg["stt"]
-    if s["provider"] == "gpu":
+    if s["provider"] in SERVICES:
         if not has_speech(audio):  # the server has no silence filter: nothing said means nothing heard
             return ""
         words = ", ".join(dict.fromkeys([*s["hotwords"], *hotwords]))
         _gpu["used"] = time.monotonic()
-        deadline = time.monotonic() + 3  # still loading after the wake: wait a moment for it
+        deadline = time.monotonic() + 5  # still loading after the wake: wait a moment for it
+        engine = _qwen if s["provider"] == "qwen" else _server
         while True:
             try:
-                text = _server(audio, cfg, " ".join(x for x in (words, prompt) if x))
+                text = engine(audio, cfg, " ".join(x for x in (words, prompt) if x))
                 _gpu["used"] = time.monotonic()
                 return "" if HALLUCINATIONS.fullmatch(text.strip(" .!")) else text
             except Exception as e:
-                starting = isinstance(getattr(e, "reason", e), ConnectionRefusedError)  # the service is loading
+                # the service is still loading: connection refused, or llama.cpp's "503 loading model"
+                starting = isinstance(getattr(e, "reason", e), ConnectionRefusedError) or getattr(e, "code", None) == 503
                 if not starting or time.monotonic() > deadline:  # otherwise: the CPU model still works
                     log.warning("GPU speech server failed, using %s on the CPU: %s", s["model"], e)
                     break

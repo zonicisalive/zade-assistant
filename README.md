@@ -62,6 +62,23 @@ Then pick **Settings → Listening → Speech recognition → Large (GPU)** and 
 service when it starts listening (the model loads in ~0.5 s, while you talk) and stops it after
 `stt.keep_alive_s` (30 s) without a request, so it uses no VRAM while idle.
 
+## Qwen3-ASR (optional, best with Indian accents, ~1.5 GB VRAM while listening)
+
+Qwen3-ASR-0.6B through llama.cpp's Vulkan backend. On recordings of Indian-accented speakers it made ~20% fewer
+word errors than Whisper large-v3-turbo, and answers in ~0.06 s once loaded (~0.9 s from cold).
+
+```bash
+cd ~/.local/share/zade && git clone --depth 1 https://github.com/ggml-org/llama.cpp && cd llama.cpp
+cmake -B build -DGGML_VULKAN=ON -DGGML_CCACHE=OFF -DCMAKE_BUILD_TYPE=Release -DLLAMA_CURL=OFF
+cmake --build build -j --target llama-server
+mkdir -p ../qwen3-asr && cd ../qwen3-asr
+for f in Qwen3-ASR-0.6B-Q8_0.gguf mmproj-Qwen3-ASR-0.6B-Q8_0.gguf; do
+  curl -L -o $f https://huggingface.co/unslothai/Qwen3-ASR-0.6B-GGUF/resolve/main/$f; done
+cp ~/Zade/systemd/zade-qwen-asr.service ~/.config/systemd/user/ && systemctl --user daemon-reload
+```
+
+Then pick **Settings → Listening → Speech recognition → Qwen3 (GPU)** and restart Zade.
+
 ## Overlay inside your desktop shell (optional, saves ~225 MB)
 
 If you run a Quickshell-based shell (e.g. inir), add this line inside its `ShellRoot { ... }` in `shell.qml`:

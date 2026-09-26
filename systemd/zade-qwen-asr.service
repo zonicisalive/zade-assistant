@@ -1,0 +1,9 @@
+[Unit]
+Description=Zade speech recognition (Qwen3-ASR-0.6B via llama.cpp on the GPU through Vulkan, ~1.5 GB VRAM)
+# Build: see README ("Qwen3-ASR"). Zade starts this when it listens and stops it after stt.keep_alive_s
+# idle; it falls back to its CPU model when this isn't running.
+
+[Service]
+ExecStart=%h/.local/share/zade/llama.cpp/build/bin/llama-server -m %h/.local/share/zade/qwen3-asr/Qwen3-ASR-0.6B-Q8_0.gguf --mmproj %h/.local/share/zade/qwen3-asr/mmproj-Qwen3-ASR-0.6B-Q8_0.gguf --host 127.0.0.1 --port 8182 -ngl 99 -c 1024 -np 1
+Restart=on-failure
+RestartSec=5

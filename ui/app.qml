@@ -718,13 +718,14 @@ ShellRoot {
                                            selected: root.settings && root.settings.wake.model === modelData[0]
                                            onClicked: root.setSetting("wake.model", modelData[0]) } } }
                             Divider {}
-                            Row_ { label: "Speech recognition"; hint: "Large runs on the GPU (about 0.9 GB of VRAM, needs the zade-whisper service) and knows far more names; if it isn't running, Small is used."
+                            Row_ { label: "Speech recognition"; hint: "GPU models load only while Zade listens. Qwen3 is the most accurate with Indian accents (~1.5 GB VRAM); Whisper (GPU) ~1.1 GB. If a GPU model isn't available, Small is used."
                                 RowLayout { spacing: 8
-                                    Repeater { model: [["base.en", "Base"], ["small.en", "Small"], ["gpu", "Large (GPU)"]]
+                                    Repeater { model: [["base.en", "Base"], ["small.en", "Small"], ["gpu", "Whisper (GPU)"], ["qwen", "Qwen3 (GPU)"]]
                                         Chip { required property var modelData; text: modelData[1]
-                                               selected: root.settings && (modelData[0] === "gpu" ? root.settings.stt.provider === "gpu"
-                                                         : root.settings.stt.provider !== "gpu" && root.settings.stt.model === modelData[0])
-                                               onClicked: { if (modelData[0] === "gpu") root.setSetting("stt.provider", "gpu")
+                                               readonly property bool gpuChoice: modelData[0] === "gpu" || modelData[0] === "qwen"
+                                               selected: root.settings && (gpuChoice ? root.settings.stt.provider === modelData[0]
+                                                         : ["gpu", "qwen"].indexOf(root.settings.stt.provider) < 0 && root.settings.stt.model === modelData[0])
+                                               onClicked: { if (gpuChoice) root.setSetting("stt.provider", modelData[0])
                                                             else { root.setSetting("stt.provider", "whisper"); root.setSetting("stt.model", modelData[0]) } } } } } }
                             Divider {}
                             Row_ { label: "Wake word sensitivity"; hint: "Lower hears you more easily; higher avoids false wakes."
