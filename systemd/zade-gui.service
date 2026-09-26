@@ -1,0 +1,9 @@
+[Unit]
+Description=Zade screen pointer (UI-Venus-2-9B via llama.cpp on the GPU through Vulkan, ~7 GB VRAM)
+# Finds icons on screen for the screen guide. Zade starts this when a guide starts and stops it when the
+# guide ends. Models: bartowski/UI-Venus-2-9B-GGUF (Q4_K_M and the f16 mmproj) in ~/.local/share/zade/gui.
+
+[Service]
+ExecStart=%h/.local/share/zade/llama.cpp/build/bin/llama-server -m %h/.local/share/zade/gui/UI-Venus-2-9B-Q4_K_M.gguf --mmproj %h/.local/share/zade/gui/mmproj-UI-Venus-2-9B-f16.gguf --host 127.0.0.1 --port 8191 -ngl 99 -c 4096 -np 1 --reasoning-budget 0
+Restart=on-failure
+RestartSec=5

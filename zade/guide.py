@@ -75,9 +75,11 @@ def locate(label, labels):
 
 
 _GUIDE_POINT = (" If you can see the screenshot and the thing to click has no readable text of its own (an icon, "
-                "the X that closes a tab or window, an arrow), don't give the text beside it: set label null and add its centre on the screenshot, from 0 to 1000 across and down (0,0 top "
-                "left, 1000,1000 bottom right): "
-                '{"done": false, "label": null, "x": <number>, "y": <number>, "say": "..."}.')
+                "the X that closes a tab or window, an arrow), don't give the text beside it: set label null and add "
+                '"icon": a short description of it and where it is on screen.')
+# Pointing gets its own request: with the long text list in the same request, models point far off.
+POINT = ('Point at one thing on the screenshot. Reply JSON only: {"point_2d": [x, y]}, its centre from 0 to 1000 '
+         'across and down (0,0 top left, 1000,1000 bottom right).')
 
 
 def _parse(text):
@@ -89,11 +91,56 @@ def _parse(text):
         return {}
 
 
+def _point(text, img):
+    """Screen pixels from a pointing reply. Models answer as {"point_2d": [x, y]}, {"x": .., "y": ..} or a
+    bare pair, from 0 to 1000 whatever pixel size the image had; anything off that scale is a confused model."""
+    nums = re.findall(r"-?\d+(?:\.\d+)?", re.sub(r"\w*_2d", "", text or ""))[:2]
+    if len(nums) < 2:
+        return None
+    x, y = map(float, nums)
+    if not (0 <= x <= 1000 and 0 <= y <= 1000):
+        return None
+    return round(x * img.shape[1] / 1000), round(y * img.shape[0] / 1000)
+
+
+POINTER_SERVICE = "zade-gui"  # UI-Venus-2-9B: a model trained only to find things on screenshots
+VENUS = ("Output the center point of the position corresponding to the instruction: {}. The output should just be "
+         "the coordinates of a point, in the format [x,y].")
+
+
+def _point_local(what, img, cfg, wait_s=30):
+    """Where `what` is on screen, from the local pointer model (0-1000 coordinates). It was tested pointing within
+    5 px at icons that cloud models missed by hundreds. Waits while the service is still loading."""
+    import base64
+    import io
+    import urllib.error
+    import urllib.request
+
+    from PIL import Image
+
+    buf = io.BytesIO()
+    Image.fromarray(img).resize((1920, round(img.shape[0] * 1920 / img.shape[1]))).save(buf, "PNG")
+    body = json.dumps({"temperature": 0, "max_tokens": 30, "chat_template_kwargs": {"enable_thinking": False},
+                       "messages": [{"role": "user", "content": [
+                           {"type": "image_url", "image_url": {"url": "data:image/png;base64,"
+                                                                      + base64.b64encode(buf.getvalue()).decode()}},
+                           {"type": "text", "text": VENUS.format(what)}]}]}).encode()
+    url = cfg["guide"].get("pointer_url", "http://127.0.0.1:8191").rstrip("/") + "/v1/chat/completions"
+    deadline = time.monotonic() + wait_s
+    while True:
+        try:
+            req = urllib.request.Request(url, body, {"Content-Type": "application/json"})
+            with urllib.request.urlopen(req, timeout=60) as r:
+                return _point(json.load(r)["choices"][0]["message"]["content"], img)
+        except (urllib.error.URLError, ConnectionError) as e:  # still loading (refused, or 503 while it loads)
+            if time.monotonic() > deadline:
+                raise RuntimeError(f"the screen pointer isn't answering: {e}") from e
+            time.sleep(1)
 
 
 def _cloud(system, msg, img, cfg):
-    """Ask a cloud model that can see: Claude or any OpenAI-compatible one (Gemini, OpenRouter, ...). The
-    screenshot goes at 1280 px wide; returns (reply text, (x, y) factors from its 0-1000 coordinates to screen pixels)."""
+    """Ask a cloud model that can see: Claude or any OpenAI-compatible one (NanoGPT, OpenRouter, ...), with the
+    screenshot at 1280 px wide."""
     import base64
     import io
 
@@ -103,22 +150,20 @@ def _cloud(system, msg, img, cfg):
 
     provider = cfg["guide"]["provider"]
     model = cfg["guide"]["model"] or cfg["providers"][provider]["model"]
-    factor = img.shape[1] / 1280
     buf = io.BytesIO()
-    Image.fromarray(img).resize((1280, round(img.shape[0] / factor))).save(buf, "PNG")
+    Image.fromarray(img).resize((1280, round(img.shape[0] * 1280 / img.shape[1]))).save(buf, "PNG")
     b64 = base64.b64encode(buf.getvalue()).decode()
     client = providers._client(provider, cfg).with_options(timeout=40)
     if provider == "anthropic":
         r = client.messages.create(model=model, max_tokens=500, system=system, messages=[{"role": "user", "content": [
             {"type": "image", "source": {"type": "base64", "media_type": "image/png", "data": b64}},
             {"type": "text", "text": msg}]}])
-        return r.content[0].text, (img.shape[1] / 1000, img.shape[0] / 1000)
+        return r.content[0].text
     r = client.chat.completions.create(model=model, temperature=0, extra_body=providers._private(client), messages=[
         {"role": "system", "content": system},
-        {"role": "user", "content": [  # the image first: after the long text list, Qwen's y drifts to the top
-            {"type": "image_url", "image_url": {"url": "data:image/png;base64," + b64}},
-            {"type": "text", "text": msg}]}])
-    return r.choices[0].message.content, (img.shape[1] / 1000, img.shape[0] / 1000)
+        {"role": "user", "content": [{"type": "image_url", "image_url": {"url": "data:image/png;base64," + b64}},
+                                     {"type": "text", "text": msg}]}])
+    return r.choices[0].message.content
 
 
 def _local(system, msg, cfg):
@@ -131,28 +176,32 @@ def _local(system, msg, cfg):
     return r.message.content
 
 
+def find(what, img, cfg):
+    """Screen pixels of something without text (an icon), or None."""
+    if cfg["guide"].get("pointer", "local") == "local":
+        try:
+            return _point_local(what, img, cfg)
+        except Exception as e:  # not installed or not answering: the planning model can still try
+            log.warning("local screen pointer failed, asking the cloud model: %s", e)
+    return _point(_cloud(POINT, f"Point at {what}", img, cfg), img)
+
+
 def plan(goal, labels, done_steps, cfg, img=None):
-    """The next step: {"done", "label", "point", "say"}. point is an (x, y) on screen when the model pointed at
-    something without text (only cloud models see the screenshot)."""
+    """The next step: {"done", "label", "point", "say"}. point is an (x, y) on screen when a cloud model (only
+    they see the screenshot) chose something without text; a second request finds where it is."""
     listing = "\n".join(f"{l['x']},{l['y']}: {l['text']}" for l in labels[:220])
     msg = f"Goal: {goal}\nDone so far: {'; '.join(done_steps) or 'nothing'}\nOn screen:\n{listing}"
-    system = PLAN + _GUIDE_POINT
-    out, factor = {}, None
+    out, point = {}, None
     if cfg.get("guide", {}).get("provider", "local") != "local" and img is not None:
         try:
-            text, factor = _cloud(system, msg, img, cfg)
-            out = _parse(text)
+            out = _parse(_cloud(PLAN + _GUIDE_POINT, msg, img, cfg))
+            icon = out.get("icon") or out.get("label")  # models also put the icon's description in label
+            if icon and not locate(out.get("label"), labels):
+                point = find(icon, img, cfg)
         except Exception as e:  # no key, offline, quota: the local model still works
             log.warning("cloud screen model failed, using the local one: %s", e)
     if not out:
-        out, factor = _parse(_local(system, msg, cfg)), None  # it can't see: no points from it
-    point = None
-    try:
-        x, y = float(out["x"]), float(out["y"])
-        if factor and 0 <= x <= 1000 and 0 <= y <= 1000:  # anything else is a model confused about the scale
-            point = (round(x * factor[0]), round(y * factor[1]))
-    except (KeyError, TypeError, ValueError):
-        pass
+        out = _parse(_local(PLAN, msg, cfg))
     return {"done": bool(out.get("done")), "label": out.get("label") or None, "point": point,
             "say": str(out.get("say") or "I'm not sure what to click next.")}
 
@@ -203,6 +252,9 @@ class Session:
         self.stopped = threading.Event()
         self.wake = threading.Event()
         self._clicker = None
+        self._pointer = cfg["guide"].get("pointer", "local") == "local" and cfg["guide"].get("provider") != "local"
+        if self._pointer:  # loads while the first step is planned; stopped with the guide, so VRAM is freed
+            subprocess.run(["systemctl", "--user", "start", "--no-block", POINTER_SERVICE], capture_output=True)
         show_pointer(None)  # the overlay starts hidden
         self._overlay = subprocess.Popen(["qs", "-p", str(POINTER_QML)], stdout=subprocess.DEVNULL,
                                          stderr=subprocess.DEVNULL, start_new_session=True)
@@ -275,3 +327,5 @@ class Session:
             self._clicker.close()
         if self._overlay.poll() is None:
             self._overlay.terminate()
+        if self._pointer:
+            subprocess.run(["systemctl", "--user", "stop", "--no-block", POINTER_SERVICE], capture_output=True)

@@ -86,7 +86,8 @@ DEFAULTS = {
     # Screen guide's planner: local (the Ollama model, reads the screen as text) | anthropic | openai
     # (any OpenAI-compatible API, e.g. Gemini). Cloud models also see the screenshot, so they can point at
     # icons without text. model "" = that provider's model from Integrations.
-    "guide": {"provider": "local", "model": ""},  # used when you don't name a place; empty = guessed from your internet connection
+    # provider/model plan each step; pointer "local" finds icons with the zade-gui service, "cloud" asks the model
+    "guide": {"provider": "local", "model": "", "pointer": "local", "pointer_url": "http://127.0.0.1:8191"},
     # provider: spotify | youtube | youtube music ("play X on youtube" picks one for a single request).
     # mode (Spotify): app = play in the Spotify app | connect = Spotify Connect (Premium, needs login)
     # play_on (Spotify Connect, no device named): this_pc | last_used (wherever Spotify played last)

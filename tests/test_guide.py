@@ -30,14 +30,20 @@ def test_cloud_model_points_at_icons_and_falls_back(monkeypatch):
 
     img = np.zeros((1440, 2560, 3), np.uint8)
     cfg = {"llm": {"host": "http://x", "model": "m", "keep_alive": "30s"},
-           "guide": {"provider": "openai", "model": "gemini-2.5-flash"}, "providers": {"openai": {"model": "x"}}}
-    monkeypatch.setattr(guide, "_cloud", lambda system, msg, img, cfg: (
-        '```json\n{"done": false, "label": null, "x": 640, "y": 100, "say": "Click the gear icon"}\n```', (2.0, 2.0)))
-    p = guide.plan("open settings", LABELS, [], cfg, img=img)
-    assert p["point"] == (1280, 200) and p["label"] is None       # 0-1000 of the screenshot -> screen pixels
+           "guide": {"provider": "openai", "model": "z-ai/glm-4.6v", "pointer": "cloud"},
+           "providers": {"openai": {"model": "x"}}}
+    asked = []
 
-    monkeypatch.setattr(guide, "_cloud", lambda system, msg, img, cfg: ('{"label": null, "x": 2360, "y": 14}', (2.0, 2.0)))
-    assert guide.plan("open settings", LABELS, [], cfg, img=img)["point"] is None  # off the 0-1000 scale
+    def cloud(system, msg, img, cfg):
+        asked.append(msg)
+        if system == guide.POINT:  # the second request: where the icon is
+            return '```json\n{"point_2d": [500, 100]}\n```'
+        return '{"done": false, "label": null, "icon": "the gear at the top", "say": "Click the gear icon"}'
+
+    monkeypatch.setattr(guide, "_cloud", cloud)
+    p = guide.plan("open settings", LABELS, [], cfg, img=img)
+    assert p["point"] == (1280, 144) and p["label"] is None       # 0-1000 of the screenshot -> screen pixels
+    assert asked[-1] == "Point at the gear at the top"
 
     def down(*a):
         raise RuntimeError("no key")
@@ -46,3 +52,30 @@ def test_cloud_model_points_at_icons_and_falls_back(monkeypatch):
     monkeypatch.setattr(guide, "_local", lambda system, msg, cfg: '{"done": true, "say": "Done"}')
     assert guide.plan("open settings", LABELS, [], cfg, img=img)["done"] is True  # fell back to local
 
+
+def test_point_reads_every_reply_shape():
+    import numpy as np
+
+    img = np.zeros((1440, 2560, 3), np.uint8)
+    assert guide._point('{"point_2d": [19, 87]}', img) == (49, 125)
+    assert guide._point('{"x": "19", "y": 87}', img) == (49, 125)
+    assert guide._point('{"x": [19, 87]}', img) == (49, 125)
+    assert guide._point('{"x": 2360, "y": 14}', img) is None   # off the 0-1000 scale
+    assert guide._point("I can't see it", img) is None
+
+
+def test_icons_are_found_by_the_local_pointer_first(monkeypatch):
+    import numpy as np
+
+    img = np.zeros((1440, 2560, 3), np.uint8)
+    cfg = {"guide": {"provider": "openai", "model": "m", "pointer": "local"}}
+    monkeypatch.setattr(guide, "_point_local", lambda what, img, cfg: (48, 126))
+    monkeypatch.setattr(guide, "_cloud", lambda *a: (_ for _ in ()).throw(AssertionError("cloud not needed")))
+    assert guide.find("the Discord home icon", img, cfg) == (48, 126)
+
+    def down(*a):
+        raise RuntimeError("not running")
+
+    monkeypatch.setattr(guide, "_point_local", down)
+    monkeypatch.setattr(guide, "_cloud", lambda system, msg, img, cfg: '{"point_2d": [19, 87]}')
+    assert guide.find("the Discord home icon", img, cfg) == (49, 125)  # fell back to the cloud model
