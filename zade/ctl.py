@@ -98,6 +98,8 @@ def keys():
 def set_key(name, value):
     if name not in KEYS:
         return {"ok": False, "error": f"unknown key {name}"}
+    if any(c in value.strip() for c in "\r\n\0"):  # would split into a second line of the keys file
+        return {"ok": False, "error": "That key has a line break in it. Paste it again as one line."}
     lines = [line for line in _env_lines() if line.partition("=")[0].strip() != name]
     if value.strip():
         lines.append(f"{name}={value.strip()}")

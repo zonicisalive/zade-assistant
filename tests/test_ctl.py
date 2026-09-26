@@ -153,3 +153,10 @@ def test_settings_saved_at_the_same_moment_are_all_kept(env):
 def test_control_characters_in_a_setting_keep_the_file_readable(env):
     assert run("set", "llm.personality", "be nice\x0bplease\tand\x7f calm")["ok"]
     assert config.load(env / "config.toml")["llm"]["personality"] == "be nice\x0bplease\tand\x7f calm"
+
+
+def test_a_key_with_a_line_break_is_refused(env, monkeypatch):
+    monkeypatch.setattr(ctl, "ENV", env / "env")
+    assert not ctl.set_key("OPENAI_API_KEY", "sk-abc\nANTHROPIC_API_KEY=evil")["ok"]
+    assert ctl.set_key("OPENAI_API_KEY", "  sk-abc\n")["ok"]  # a trailing newline from pasting is fine
+    assert (env / "env").read_text() == "OPENAI_API_KEY=sk-abc\n"
