@@ -176,6 +176,8 @@ def parse_pattern(text, find_app):
     if re.fullmatch(rf"(?:what's the date|what's today's date|what is the date|what is today's date"
                     rf"|what day is it|what's the day|today's date|date){here}", text):
         return {"name": "date", "args": {}}
+    if re.fullmatch(r"lock(?: the| my)?(?: screen| computer| pc| system)?", text):
+        return {"name": "lock_screen", "args": {}}
     if re.fullmatch(r"(?:take a |take )?screenshot", text):
         return {"name": "screenshot", "args": {}}
     if m := re.fullmatch(r"(?:close|quit|kill|exit) (?:the )?(.+?)(?: app)?", text):
@@ -243,6 +245,23 @@ class Route:
     confidence: float = 1.0
 
 
+def parse_compound(text, find_app, table=None, min_score=90):
+    """ "mute and lock the screen", "open firefox, then set volume to 50": several instant commands in one
+    sentence. Every part must be an instant command or a shortcut, else None (the model handles it)."""
+    parts = [p for p in re.split(r"\s*,\s*(?:and |then )?|\s+(?:and then|and also|then|and|also|after that)\s+", text) if p]
+    if not 2 <= len(parts) <= 5:
+        return None
+    out = []
+    for part in parts:
+        if table and (phrase := match_shortcut(part, table, min_score)):
+            out.extend(table[phrase])
+        elif action := parse_pattern(part, find_app):
+            out.extend(action if isinstance(action, list) else [action])
+        else:
+            return None
+    return out
+
+
 def route(text, table, cfg, predict=None, find_app=lambda name: None):
     if not text:
         return Route("none")
@@ -251,6 +270,8 @@ def route(text, table, cfg, predict=None, find_app=lambda name: None):
     if action := parse_pattern(text, find_app):
         actions = action if isinstance(action, list) else [action]
         return Route("run", actions, "pattern", actions[0]["name"])
+    if actions := parse_compound(text, find_app, table, cfg["shortcut_min_score"]):
+        return Route("run", actions, "pattern", " + ".join(a["name"] for a in actions))
     if predict:
         try:
             actions, label, conf = laya_pick(predict, text, table)

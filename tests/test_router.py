@@ -248,3 +248,15 @@ def test_misheard_provider_and_liked_songs():
     assert P("play dancing on my own", find)["args"] == {"query": "dancing on my own"}  # 'my own' is no provider
     from zade import music
     assert music.LIKED.fullmatch("my like songs") and music.LIKED.fullmatch("liked songs")
+
+
+def test_several_instant_commands_in_one_sentence():
+    find = lambda q: ("firefox", "firefox") if q == "firefox" else None
+    r = router.route("mute and lock the screen", {}, CFG, find_app=find)
+    assert r.kind == "run" and [a["name"] for a in r.actions] == ["mute", "lock_screen"] and r.actions[0]["args"] == {"on": True}
+    r = router.route("open firefox, then set volume to 50", {}, CFG, find_app=find)
+    assert [a["name"] for a in r.actions] == ["open_app", "volume"] and r.actions[1]["args"] == {"set": 50}
+    r = router.route("set a timer for 5 minutes and play lofi on youtube", {}, CFG, find_app=find)
+    assert [a["name"] for a in r.actions] == ["set_timer", "play_music"]
+    assert router.route("open firefox and tell me a joke", {}, CFG, find_app=find).kind == "llm"  # one part needs the model
+    assert router.route("play rock and roll", {}, CFG, find_app=find).actions[0]["args"]["query"] == "rock and roll"
