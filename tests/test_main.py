@@ -164,8 +164,7 @@ def test_followup_uses_recent_history():
 
     ctx = make(said, ask=ask)
     assert z.handle(ctx, "plan a trip") == "Which city?"
-    assert z.wants_followup("Which city?") and z.wants_followup("Which one? Say the name.")
-    assert not z.wants_followup("Done.") and not z.wants_followup("I think you are Zonic!") and not z.wants_followup("")
+    assert z.wants_followup("Which city?") and not z.wants_followup("Done.") and not z.wants_followup("")
     z.handle(ctx, "Mumbai")
     assert seen == [[], [("plan a trip", "Which city?")]]
 

@@ -793,7 +793,7 @@ ShellRoot {
                             Row_ { label: "Voice typing"; hint: "Hold Right Alt, speak, release: the words are typed."
                                 Switch { checked: root.settings ? root.settings.dictation.enabled : false; onToggled: v => root.setSetting("dictation.enabled", v) } }
                             Divider {}
-                            Row_ { label: "Follow-up listening"; hint: "When Zade asks you something, listen for your answer without the wake word (only your voice, once it has learned it)."
+                            Row_ { label: "Follow-up listening"; hint: "When Zade asks a question, listen for your answer without the wake word."
                                 Switch { checked: root.settings ? root.settings.followup.enabled : false; onToggled: v => root.setSetting("followup.enabled", v) } }
                             Divider {}
                             Row_ { label: "Words to expect"; hint: "Names Whisper often mishears, separated by commas."

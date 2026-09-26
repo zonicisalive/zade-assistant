@@ -72,21 +72,6 @@ def _profile(data_dir):
     return np.load(path) if path.exists() else None
 
 
-def is_owner(audio, cfg, embed=embed, pieces=speech_pieces, profile=None):
-    """Whether the owner is the one speaking (their longest piece of speech matches the saved voiceprint).
-    True when there is no voiceprint yet or too little speech to judge."""
-    owner = _profile(cfg["paths"]["data"]) if profile is None else profile
-    spans = pieces(audio)
-    if owner is None or not spans:
-        return True
-    start, end = max(spans, key=lambda s: s[1] - s[0])
-    if end - start < MIN_JUDGE_S * RATE:
-        return True
-    e = embed(audio[start:end], cfg["paths"]["data"])
-    # stricter than focus_threshold: your clips score 0.45-0.79 against your voiceprint, friends' at most 0.46
-    return e is None or float(e @ owner) >= cfg["audio"].get("owner_threshold", 0.40)
-
-
 def focus(audio, cfg, embed=embed, pieces=speech_pieces, profile=None):
     """The recording with other people's speech removed (unchanged if there's nothing to remove).
     If the speaker is the owner (matches their saved voiceprint), other voices are judged against that

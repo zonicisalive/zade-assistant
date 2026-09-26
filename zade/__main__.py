@@ -255,8 +255,7 @@ def guide_active(ctx):
 
 
 def wants_followup(reply):
-    """Listen for an answer without the wake word when Zade asked something ("Which city? Say the name.")."""
-    return "?" in (reply or "")
+    return bool(reply) and reply.rstrip().endswith("?")
 
 
 def dispatch(ctx, action, from_model=False):
@@ -454,7 +453,9 @@ def handle(ctx, raw):
             from . import guide
 
             guide.pause_pointer()
-        emotion, reply = split_emotion(ctx.ask(text, memory.facts(ctx.conn), ctx.cfg, run_tool, recent(ctx)))
+        raw = ctx.ask(text, memory.facts(ctx.conn), ctx.cfg, run_tool, recent(ctx))
+        log.info("model said %r", raw)
+        emotion, reply = split_emotion(raw)
         if guiding:
             threading.Thread(target=brain.unload, args=(ctx.cfg,), daemon=True).start()
         reply = tidy(reply, acted=bool(called))
@@ -555,7 +556,7 @@ def main():
     ptt = next(detectors) if bindings[0] else None    # push-to-talk key detector
     typer = next(detectors) if bindings[1] else None  # voice-typing key detector
 
-    def hear(timeout=None, released=None, cancelled=None, keep_reply=False, owner_only=False):
+    def hear(timeout=None, released=None, cancelled=None, keep_reply=False):
         stt.gpu_start(cfg)  # the GPU speech model (if used) loads while the user talks
         # keep_reply: while answering a question, keep it (e.g. a command to approve) on screen
         ui.show("listening", heard="", emotion="neutral", **({} if keep_reply else {"reply": ""}))
@@ -564,14 +565,6 @@ def main():
             ui.show("idle")
             return None
         ui.show("thinking")
-        if owner_only:  # without the wake word, only the owner's voice counts (not the TV or others talking)
-            try:
-                if not voice_focus.is_owner(a, cfg):
-                    log.info("follow-up: not the owner's voice, ignored")
-                    ui.show("idle")
-                    return None
-            except Exception as e:
-                log.warning("owner check failed: %s", e)
         if cfg["audio"].get("voice_focus"):
             try:
                 a = voice_focus.focus(a, cfg)
@@ -721,7 +714,7 @@ def main():
         # Follow-up: when Zade asked a question, listen briefly for an answer without the wake word.
         while cfg["followup"]["enabled"] and wants_followup(reply) and not barge and not snoozed():
             audio.cue(stream, soft=True, cfg=cfg)
-            text = hear(cfg["followup"]["listen_s"], owner_only=True)
+            text = hear(cfg["followup"]["listen_s"])
             if text is None:
                 break
             reply = respond(text)
