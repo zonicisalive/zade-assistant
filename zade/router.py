@@ -135,6 +135,11 @@ def parse_pattern(text, find_app):
         return {"name": "media", "args": {"cmd": "next"}}
     if re.fullmatch(r"(?:previous|last|go back(?: to the)?(?: previous| last)?)(?: song| track| one)?", text):
         return {"name": "media", "args": {"cmd": "previous"}}
+    # Name questions, answered from settings and memory (the small model mixed up "my" and "your")
+    if re.fullmatch(r"(?:what(?: is|'?s) your name|your name is what|who are you|what should i call you)", text):
+        return {"name": "whoami", "args": {"who": "assistant"}}
+    if re.fullmatch(r"(?:what(?: is|'?s) my name|my name is what|who am i|do you know my name)", text):
+        return {"name": "whoami", "args": {"who": "user"}}
     # "show me your happy face", "make a sad expression", "play playful expression" (heard as "play flool")
     if m := re.fullmatch(r"(?:show|make|do|give|play|place)(?: me)?(?: a| an| the| your)? (.+?) (?:face|expression|look)",
                          text):

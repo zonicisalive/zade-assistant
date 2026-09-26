@@ -20,7 +20,7 @@ from . import actions, brain, config, info, memory, router
 log = logging.getLogger("zade")
 # Tools whose calls are never learned as shortcuts (memory, one-off content, or risky).
 STOP_WORDS = {"stop", "cancel", "never mind", "nevermind", "shut up", "quiet", "be quiet", "nothing"}
-MEMORY_TOOLS = {"express", "dnd", "look_at_screen", "system_status", "set_reminder", "list_reminders", "cancel_reminder", "sync_apps", "remember", "forget", "list_facts", "make_shortcut", "sleep", "set_timer", "note_add",
+MEMORY_TOOLS = {"whoami", "express", "dnd", "look_at_screen", "system_status", "set_reminder", "list_reminders", "cancel_reminder", "sync_apps", "remember", "forget", "list_facts", "make_shortcut", "sleep", "set_timer", "note_add",
                 "notes_read", "web_answer", "clipboard_read", "clipboard_copy", "type_text", "power", "shell"}
 
 
@@ -123,7 +123,7 @@ def apply_live(cfg, new):
 
 # Actions that need a spoken yes at each safety level (shell and power always ask, in actions.py).
 RISKY = {"close_app", "type_text", "clipboard_copy", "press_keys"}
-READ_ONLY = {"express", "dnd", "time", "date", "weather", "web_answer", "notes_read", "list_facts", "list_reminders",
+READ_ONLY = {"whoami", "express", "dnd", "time", "date", "weather", "web_answer", "notes_read", "list_facts", "list_reminders",
              "system_status", "look_at_screen", "clipboard_read", "remember", "forget", "note_add",
              "set_timer", "set_reminder", "cancel_reminder", "make_shortcut", "sync_apps", "sleep",
              "shell", "power"}
@@ -194,6 +194,13 @@ def dispatch(ctx, action, from_model=False):
             from . import vision
 
             return vision.look(a.get("question") or "What's on the screen?", ctx.cfg), True
+        if name == "whoami":
+            if a.get("who") == "assistant":
+                return f"I'm {ctx.cfg['persona']['name'] or 'Zade'}, your voice assistant.", True
+            for fact in memory.facts(ctx.conn):
+                if m := re.search(r"(?:name is|called|i am|i'm)\s+([A-Z][\w-]*)", fact, re.I):
+                    return f"Your name is {m[1]}.", True
+            return "I don't know your name yet. Tell me: my name is ...", True
         if name == "express":  # the face itself is set by handle(); this is what Zade says
             e = a.get("emotion", "")
             if e not in EMOTIONS:

@@ -326,3 +326,16 @@ def test_weather_uses_the_default_place(monkeypatch):
     z.dispatch(ctx, {"name": "weather", "args": {}})
     z.dispatch(ctx, {"name": "weather", "args": {"place": "Delhi"}})
     assert asked == ["Mumbai", "Delhi"]
+
+
+def test_name_questions_are_answered_exactly():
+    said = []
+    ctx = make(said)
+    ctx.cfg["persona"]["name"] = "Zade"
+    z.handle(ctx, "What is your name?")
+    z.handle(ctx, "My name is what.")
+    memory.add_fact(ctx.conn, "user's name is Zonic")
+    z.handle(ctx, "My name is what.")
+    z.handle(ctx, "What's my name?")
+    assert said == ["I'm Zade, your voice assistant.", "I don't know your name yet. Tell me: my name is ...",
+                    "Your name is Zonic.", "Your name is Zonic."]
