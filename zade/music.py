@@ -23,7 +23,9 @@ from .actions import Failed
 
 log = logging.getLogger("zade")
 REDIRECT = "http://127.0.0.1:8888/callback"  # add this in your Spotify app's settings
-SCOPES = "user-modify-playback-state user-read-playback-state"
+SCOPES = "user-modify-playback-state user-read-playback-state user-library-read"
+# "my liked songs", "my favourites", "my library": the user's Liked Songs, not a song with that name
+LIKED = re.compile(r"(?:my |the )?(?:liked|saved|favou?rite|favou?rites)(?: songs| tracks| music| playlist)?|my (?:library|music)")
 
 _cache = {"token": None, "expires": 0.0}
 
@@ -197,12 +199,29 @@ def split_device(query, devices):
 
 
 def _play_connect(uri, token, devices, device=None):
-    """Play on the chosen device, else the active one (or the first available); its name, or None."""
+    """Play on the chosen device, else the active one (or the first available); its name, or None.
+    uri: one track, or a list of tracks (Liked Songs)."""
     if not devices:
         return None
     device = device or next((d for d in devices if d["is_active"]), devices[0])
-    _api("PUT", "/me/player/play?device_id=" + device["id"], token, {"uris": [uri]})
+    _api("PUT", "/me/player/play?device_id=" + device["id"], token, {"uris": uri if isinstance(uri, list) else [uri]})
     return device["name"]
+
+
+def liked_uris(token, n=50):
+    """Up to n of the user's Liked Songs, newest first, shuffled."""
+    import random
+
+    try:
+        items = _api("GET", f"/me/tracks?limit={n}", token)["items"]
+    except OSError as e:
+        if "401" in str(e) or "403" in str(e):
+            raise Failed("To play your Liked Songs, log in to Spotify again in the Zade app: it needs one more "
+                         "permission.") from e
+        raise
+    uris = [i["track"]["uri"] for i in items if i.get("track")]
+    random.shuffle(uris)
+    return uris
 
 
 def login(cid, secret, open_browser=None, timeout_s=180):
@@ -267,6 +286,26 @@ def play_youtube(query, provider="youtube"):
     return f"I opened {name} search for {query}."
 
 
+def _play_liked(cid, secret, refresh, user, devices, chosen, mode, play_on):
+    if not refresh:  # without a login Zade can't read them: open the Liked Songs page in the app
+        _open("spotify:collection:tracks")
+        return "I opened your Liked Songs in Spotify."
+    user = user or _user_token(cid, secret, refresh)
+    uris = liked_uris(user)
+    if not uris:
+        raise Failed("Your Liked Songs list is empty.")
+    devices = devices if devices is not None else _devices(user)
+    if not chosen and play_on == "this_pc":
+        chosen = next((d for d in devices if d["type"].lower() == "computer"
+                       and d["name"].lower() == socket.gethostname().lower()), None)
+    if not chosen and not (mode == "connect" and play_on != "this_pc"):
+        _open(uris[0])  # start this PC's app, which then shows up as a device
+        devices = _devices(user)
+        chosen = next((d for d in devices if d["type"].lower() == "computer"), None)
+    where = _play_connect(uris, user, devices, chosen)
+    return f"Playing your Liked Songs, shuffled{' on ' + where if where else ''}."
+
+
 def play(query, mode="app", provider="spotify", device="", play_on="this_pc", fix=None):
     """fix: optional callable turning a misheard request into the likely real "song by artist"."""
     if provider in YOUTUBE:
@@ -299,6 +338,8 @@ def play(query, mode="app", provider="spotify", device="", play_on="this_pc", fi
                 raise Failed(f"I can't find {device} in Spotify. It sees {names}.")
         else:
             query, chosen = split_device(query, devices)
+    if LIKED.fullmatch(query.strip()):
+        return _play_liked(cid, secret, refresh, user, devices, chosen, mode, play_on)
     try:
         token = _token(cid, secret)
         track, score = _find(query, token)

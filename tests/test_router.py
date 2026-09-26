@@ -231,3 +231,11 @@ def test_show_an_expression():
                     ("make a sad expression", "sad"), ("do the wink face", "wink")]:
         assert P(text, find) == {"name": "express", "args": {"emotion": e}}, text
     assert P("show me your banana face", find) == {"name": "express", "args": {"emotion": ""}}
+
+
+def test_search_for_it_goes_to_the_model():
+    P, find = router.parse_pattern, lambda q: None
+    assert P("search for it", find) is None and P("google that", find) is None
+    assert P("search for cheap flights", find) == {"name": "web_search", "args": {"query": "cheap flights"}}
+    assert P("open discord and facebook", lambda q: ("discord", "discord") if q == "discord" else None) == [
+        {"name": "open_app", "args": {"name": "discord"}}, {"name": "open_website", "args": {"site": "facebook"}}]

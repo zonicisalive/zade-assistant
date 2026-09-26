@@ -175,6 +175,10 @@ SITES = {
     "instagram": "https://www.instagram.com", "whatsapp": "https://web.whatsapp.com",
     "netflix": "https://www.netflix.com", "amazon": "https://www.amazon.in", "wikipedia": "https://en.wikipedia.org",
     "spotify": "https://open.spotify.com", "linkedin": "https://www.linkedin.com", "maps": "https://maps.google.com",
+    "facebook": "https://www.facebook.com", "fb": "https://www.facebook.com", "messenger": "https://www.messenger.com",
+    "threads": "https://www.threads.net", "pinterest": "https://www.pinterest.com", "flipkart": "https://www.flipkart.com",
+    "hotstar": "https://www.hotstar.com", "primevideo": "https://www.primevideo.com", "twitch": "https://www.twitch.tv",
+    "drive": "https://drive.google.com", "outlook": "https://outlook.live.com", "stackoverflow": "https://stackoverflow.com",
 }
 WINDOW = {
     "close": ["close-window"], "fullscreen": ["fullscreen-window"], "maximize": ["maximize-column"],

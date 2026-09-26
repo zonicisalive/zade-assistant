@@ -218,3 +218,17 @@ def test_model_fixes_a_misheard_song_only_when_the_match_is_poor(monkeypatch):
     assert asked == ["cola berry d"]
     assert music.play("scars by juice wrld", fix=fix) == "Playing Scars by Juice WRLD."
     assert asked == ["cola berry d"]  # a good match never waits for the model
+
+
+def test_liked_songs_play_the_users_library(monkeypatch):
+    calls, searched = [], []
+    connect(monkeypatch, calls, searched)
+    liked = {"items": [{"track": {"uri": f"spotify:track:L{i}"}} for i in range(3)]}
+    api = music._api
+    monkeypatch.setattr(music, "_api", lambda m, path, t, body=None:
+                        liked if path.startswith("/me/tracks") else (calls.append((m, path, body)) if m == "PUT" else api(m, path, t, body)))
+    assert music.play("my liked songs", "connect") == "Playing your Liked Songs, shuffled on archlinux."
+    assert searched == []                                     # never searched for a song called that
+    put = calls[-1]
+    assert put[1] == "/me/player/play?device_id=pc" and sorted(put[2]["uris"]) == [f"spotify:track:L{i}" for i in range(3)]
+    assert music.LIKED.fullmatch("my favourites") and not music.LIKED.fullmatch("liked by eminem")

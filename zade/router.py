@@ -183,7 +183,9 @@ def parse_pattern(text, find_app):
     if m := re.fullmatch(r"(increase|raise|lower|decrease)(?: the)? volume(?: a bit| a little)?", text):
         return {"name": "volume", "args": {"delta": 10 if m[1] in ("increase", "raise") else -10}}
     if m := re.fullmatch(r"(?:search|google|look up)(?: for)? (.+)", text):
-        return {"name": "web_search", "args": {"query": m[1]}}
+        # "search for it / that" points back at the conversation: the model knows what "it" is
+        if m[1] not in ("it", "that", "this", "them", "those", "him", "her", "the same"):
+            return {"name": "web_search", "args": {"query": m[1]}}
     return None
 
 
