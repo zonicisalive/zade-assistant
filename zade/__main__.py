@@ -23,7 +23,7 @@ log = logging.getLogger("zade")
 STOP_WORDS = {
     "stop", "stop it", "stop that", "stop now", "stop talking", "stop listening", "stop speaking", "just stop",
     "cancel", "cancel it", "cancel that", "abort", "never mind", "nevermind", "nvm", "forget it", "forget that",
-    "forget about it", "leave it", "drop it", "skip it", "enough", "that's enough", "thats enough", "okay stop",
+    "forget about it", "leave it", "drop it", "enough", "that's enough", "thats enough", "okay stop",
     "ok stop", "shut up", "shush", "hush", "quiet", "be quiet", "silence", "zip it", "go away", "go to sleep",
     "nothing", "no nothing", "nothing nothing",
     # Hindi / Hinglish
@@ -61,6 +61,19 @@ TALK_WORDS = re.compile(r"\b(?:yaar|yar|bhai|bro|dude|man|na|ji|abhi|now|please|
 def plain(text):
     """ "bas yaar, rehne do bhai" -> "bas rehne do": the words that carry the meaning."""
     return " ".join(TALK_WORDS.sub(" ", text).split())
+
+
+def after_stop(raw):
+    """What was said after a stop word said on its own ("Stop. Play the next song." -> "Play the next song."),
+    "" when nothing real follows ("Hey, stop." or "Stop. Canild."), None when there's no such stop."""
+    clauses = [c.strip() for c in re.split(r"[.!?,]", raw or "") if c.strip()]
+    stops = [i for i, c in enumerate(clauses) if plain(router.normalize(c)) in STOP_WORDS]
+    if not stops:
+        return None
+    rest = ", ".join(clauses[stops[-1] + 1:])
+    words = router.normalize(rest).split()
+    # a lone mumble after "stop" ("Canild") is noise, but a one-word command ("Pause.") is not
+    return rest if len(words) > 1 or (words and router.parse_pattern(" ".join(words), lambda n: None)) else ""
 
 
 def dismissed(text):
@@ -394,8 +407,11 @@ def handle(ctx, raw):
     """Handle one utterance; return what Zade replied (for follow-up listening)."""
     text = router.normalize(raw)
     snooze = router.parse_snooze(text) is not None  # "stop for 10 minutes" is a command, not a plain stop
-    if not snooze and any(plain(router.normalize(x)) in STOP_WORDS for x in re.split(r"[.!?,]", raw or "")):
-        text = "stop"  # "Hey, stop." "Stop. Cancel."
+    if not snooze and (after := after_stop(raw)) is not None:
+        if not after:
+            text = "stop"  # "Hey, stop." "Stop. Cancel." "Nobody will listen. Hey, stop."
+        else:
+            raw, text = after, router.normalize(after)  # "Stop. Play the next song.": the correction counts
     if not snooze and (text in STOP_WORDS or dismissed(text)):
         return ""
     if taught := router.parse_teach(text):

@@ -433,3 +433,11 @@ def test_song_titles_and_requests_are_not_waving_off():
     for text in ["i don't need any help", "no i'm good", "i was talking to my mom", "not talking to you",
                  "nahi chahiye", "no thanks that's all", "by mistake", "sorry wrong person", "bye", "i'm good thanks"]:
         assert z.dismissed(text), text
+
+
+def test_a_correction_after_stop_still_runs():
+    assert z.after_stop("Stop. Play the next song.") == "Play the next song"
+    assert z.after_stop("Cancel that, set a timer for 5 minutes.") == "set a timer for 5 minutes"
+    assert z.after_stop("Wait, stop, open Discord.") == "open Discord"
+    assert z.after_stop("Stop. Canild.") == "" and z.after_stop("Nobody will listen. Hey, stop.") == ""
+    assert z.after_stop("Stop the song") is None and z.after_stop("Skip it.") is None  # commands, not stops
