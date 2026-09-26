@@ -60,6 +60,68 @@ def _seconds(n, unit):
     return int(n) * UNITS[unit.rstrip("s") if unit.rstrip("s") in UNITS else unit]
 
 
+NUMBERS = {"a": 1, "an": 1, "one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "seven": 7, "eight": 8,
+           "nine": 9, "ten": 10, "eleven": 11, "twelve": 12, "fifteen": 15, "twenty": 20, "twenty five": 25,
+           "thirty": 30, "forty": 40, "forty five": 45, "fifty": 50, "sixty": 60, "ninety": 90,
+           "a couple of": 2, "couple of": 2, "a couple": 2, "a few": 3, "few": 3, "ek": 1, "do": 2, "teen": 3,
+           "char": 4, "paanch": 5, "panch": 5, "das": 10, "bees": 20, "tees": 30, "aadha": 0.5, "adha": 0.5}
+DURATION_UNITS = {"s": 1, "sec": 1, "secs": 1, "second": 1, "seconds": 1, "m": 60, "min": 60, "mins": 60,
+                  "minute": 60, "minutes": 60, "minat": 60, "h": 3600, "hr": 3600, "hrs": 3600, "hour": 3600,
+                  "hours": 3600, "ghanta": 3600, "ghante": 3600, "ghanta bhar": 3600}
+VAGUE = {"a bit": 600, "a little bit": 600, "a little while": 900, "a while": 1800, "some time": 1800,
+         "sometime": 1800, "a moment": 60, "a minute or two": 120, "thodi der": 900, "kuch der": 1800}
+
+
+def duration(text):
+    """Seconds in a spoken length of time: "10 minutes", "an hour and a half", "half an hour", "2 hrs 30 min",
+    "a while", "das minute"; None if it isn't one."""
+    t = " ".join(text.split())
+    t = re.sub(r"^(?:for |the next |next |about |around |like |roughly )+", "", t)
+    if t in VAGUE:
+        return VAGUE[t]
+    special = {"half an hour": 1800, "half hour": 1800, "a half hour": 1800, "quarter of an hour": 900,
+               "a quarter of an hour": 900, "quarter hour": 900, "an hour and a half": 5400,
+               "one and a half hours": 5400, "1 and a half hours": 5400, "a day": 86400, "the day": 86400,
+               "the night": 36000, "tonight": 36000, "aadha ghanta": 1800, "adha ghanta": 1800}
+    if t in special:
+        return special[t]
+    num = "|".join(sorted(map(re.escape, NUMBERS), key=len, reverse=True))
+    unit = "|".join(sorted(map(re.escape, DURATION_UNITS), key=len, reverse=True))
+    part = rf"(\d+(?:\.\d+)?|{num}) ?({unit})"
+    if not re.fullmatch(rf"{part}(?:(?: and| ,)? {part})*", t):
+        return None
+    total = 0.0
+    for n, u in re.findall(part, t):
+        total += (float(n) if n[0].isdigit() else NUMBERS[n]) * DURATION_UNITS[u]
+    return int(total) or None
+
+
+# Asking Zade to be quiet (without the time these are ordinary stop words)
+_QUIET = (r"(?:stop|shut up|be quiet|keep quiet|stay quiet|quiet|silence|sleep|go to sleep|take a break|"
+          r"mute yourself|pause yourself|snooze|leave me alone|go away|"
+          r"(?:stop|don't|dont|do not) (?:respond|responding|reply|replying|talk|talking|listen|listening|answer|"
+          r"answering|speak|speaking|disturb me|bother me|interrupt me)|"
+          r"(?:stop )?(?:respond|reply|talk|listen|answer|speak)(?:ing)? (?:to me )?(?:no more|nothing)|"
+          r"chup|chup raho|chup ho ja|chup ho jao|chup karo|chup rehna|bas karo|mat bolo|mat sunna|band ho ja)")
+_RESUME = (r"(?:you can (?:talk|speak|listen|respond|reply)(?: to me)?(?: now| again)?|"
+           r"start (?:listening|responding|talking|replying)(?: again)?|stop being quiet|wake up|come back|i'?m back|"
+           r"unmute yourself|unsnooze|end (?:the )?snooze|ab bolo|ab bol sakte ho)")
+
+
+def parse_snooze(text):
+    """"stop for 10 minutes", "don't respond for an hour", "10 minute ke liye chup raho" -> seconds (0 = resume)."""
+    if re.fullmatch(_RESUME, text):
+        return 0
+    words = text.split()
+    for i in range(1, len(words)):  # every split into "<be quiet> <time>" or "<time> <be quiet>"
+        head, tail = " ".join(words[:i]), " ".join(words[i:])
+        if re.fullmatch(_QUIET, head) and (d := duration(re.sub(r"^(?:till|until) ", "", tail))):
+            return d
+        if re.fullmatch(rf"(?:(?:ke liye|tak|for) )?{_QUIET}", tail) and (d := duration(head)):
+            return d
+    return None
+
+
 def _open_one(name, find_app):
     if find_app(name):
         return {"name": "open_app", "args": {"name": name}}
@@ -121,6 +183,8 @@ def parse_pattern(text, find_app):
         return {"name": "system_status", "args": {"what": "all"}}
     if re.fullmatch(r"(?:what are|list|read|show)(?: me)? my reminders", text):
         return {"name": "list_reminders", "args": {}}
+    if (seconds := parse_snooze(text)) is not None:
+        return {"name": "snooze", "args": {"seconds": seconds}}
     if m := re.fullmatch(r"(?:(turn on|enable|start) )?(?:do not disturb|quiet mode)(?: (on|off))?|"
                          r"(turn off|disable|stop) (?:do not disturb|quiet mode)", text):
         return {"name": "dnd", "args": {"on": not (m[3] or m[2] == "off")}}

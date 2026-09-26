@@ -18,26 +18,57 @@ import numpy as np
 from . import actions, brain, config, info, memory, router
 
 log = logging.getLogger("zade")
-# Tools whose calls are never learned as shortcuts (memory, one-off content, or risky).
-STOP_WORDS = {"stop", "cancel", "never mind", "nevermind", "shut up", "quiet", "be quiet", "nothing"}
-# "No.", "nah", "no, it's nothing", "no thanks, that's all": the user waving Zade off
-DISMISS = {"no", "nope", "nah", "nothing", "never", "mind", "nevermind", "nvm", "leave", "forget", "it", "its", "it's",
-           "a", "just", "thanks", "thank", "you", "that's", "thats", "all", "not", "now", "okay", "ok", "fine", "cancel",
-           "stop", "i", "said", "was", "saying", "sorry"}
+# Said as a whole clause ("stop", "Hey, stop.", "bas, rehne do"): stop talking and listening. Only words that
+# can't start a real request, so "stop the song" and "thanks, now open discord" still work.
+STOP_WORDS = {
+    "stop", "stop it", "stop that", "stop now", "stop talking", "stop listening", "stop speaking", "just stop",
+    "cancel", "cancel it", "cancel that", "abort", "never mind", "nevermind", "nvm", "forget it", "forget that",
+    "forget about it", "leave it", "drop it", "skip it", "enough", "that's enough", "thats enough", "okay stop",
+    "ok stop", "shut up", "shush", "hush", "quiet", "be quiet", "silence", "zip it", "go away", "go to sleep",
+    "nothing", "no nothing", "nothing nothing",
+    # Hindi / Hinglish
+    "bas", "bas karo", "bas kar", "bas ho gaya", "chup", "chup karo", "chup kar", "chup ho ja", "chup raho",
+    "ruk", "ruko", "ruk ja", "ruk jao", "rehne do", "rehne de", "chhodo", "chhod do", "chod do", "chodo",
+    "kuch nahi", "kuch nahin", "koi baat nahi", "jaane do", "jane do", "band kar", "band karo", "bas rehne do",
+    "rehne do bas", "bas chhodo", "chhodo rehne do", "chup chap", "chup chaap", "bas bas", "stop stop", "ruko ruko",
+}
+# Whole utterances made only of these words, with at least one real "no" ("no thanks, that's all"): waved off
+DISMISS = {"no", "nope", "nah", "naa", "nahi", "nahin", "nothing", "never", "mind", "nevermind", "nvm", "leave",
+           "forget", "it", "its", "it's", "a", "just", "thanks", "thank", "you", "thankyou", "that's", "thats", "all",
+           "not", "now", "okay", "ok", "fine", "cancel", "stop", "i", "said", "was", "saying", "sorry", "bye",
+           "goodbye", "good", "alright", "right", "cool", "yeah", "yes", "else", "more", "anything", "that", "is",
+           "for", "today", "we're", "done", "dhanyavaad", "shukriya", "bas", "theek", "hai", "ji"}
+NEGATIVE = {"no", "nope", "nah", "naa", "nahi", "nahin", "nothing", "never", "nevermind", "nvm", "forget", "leave",
+            "bye", "goodbye", "done", "bas"}
+# Waving Zade off or talking to someone else, in the user's own words (short utterances only)
+WAVED_OFF = re.compile(
+    r"\b(?:(?:don't|do not|dont|didn't|did not) (?:need|want) (?:any |your |it|that|anything)?(?:help|anything|you)?"
+    r"|no need|not needed|no thanks|no thank you|nothing else|nothing more|that'?s (?:all|it|enough|fine)"
+    r"|that'?ll be all|we'?re done|all good|i'?m (?:good|fine|okay|ok|done|alright|all set|set)|i am (?:good|fine|okay|done)"
+    r"|leave me alone|go away|(?:i )?(?:wasn'?t|was not|am not|i'?m not|not) talking to you|not you"
+    r"|i was talking to (?:someone|somebody|him|her|them|my \w+)|(?:didn'?t|did not) (?:call|ask) you|nobody asked"
+    r"|ignore (?:that|it|me|this)|wrong (?:person|call)|by mistake|galti se|(?:good ?)?bye|see you"
+    r"|nahi chahiye|zarurat nahi|zaroorat nahi|kuch nahi chahiye"
+    r"|main theek hoon|mai thik hu|tujhse nahi|tumse nahi|aapse nahi)\b")
 
 
-# "I don't need any help", "I'm good", "no need": the user waving Zade off in their own words
-WAVED_OFF = re.compile(r"\b(?:(?:don't|do not|dont) need (?:any |your )?(?:help|anything)|no need|"
-                       r"(?:i'm|i am|im) (?:good|fine|okay|ok|done)|that's all|leave me alone)\b")
+TALK_WORDS = re.compile(r"\b(?:yaar|yar|bhai|bro|dude|man|na|ji|abhi|now|please|zade|okay|ok)\b")
+
+
+def plain(text):
+    """ "bas yaar, rehne do bhai" -> "bas rehne do": the words that carry the meaning."""
+    return " ".join(TALK_WORDS.sub(" ", text).split())
 
 
 def dismissed(text):
-    if WAVED_OFF.search(text) and len(text.split()) <= 6:
+    if WAVED_OFF.search(text) and len(text.split()) <= 8:
         return True
     words = re.findall(r"[a-z']+", text)
-    return bool(words) and set(words) <= DISMISS and bool(set(words) & {"no", "nope", "nah", "nothing", "never",
-                                                                        "nevermind", "nvm", "forget", "leave"})
-MEMORY_TOOLS = {"guide_screen", "guide", "guide_click", "guide_stop", "whoami", "express", "dnd", "look_at_screen", "system_status", "set_reminder", "list_reminders", "cancel_reminder", "sync_apps", "remember", "forget", "list_facts", "make_shortcut", "sleep", "set_timer", "note_add",
+    return bool(words) and set(words) <= DISMISS and bool(set(words) & NEGATIVE)
+
+
+# Tools whose calls are never learned as shortcuts (memory, one-off content, or risky).
+MEMORY_TOOLS = {"snooze", "guide_screen", "guide", "guide_click", "guide_stop", "whoami", "express", "dnd", "look_at_screen", "system_status", "set_reminder", "list_reminders", "cancel_reminder", "sync_apps", "remember", "forget", "list_facts", "make_shortcut", "sleep", "set_timer", "note_add",
                 "notes_read", "web_answer", "clipboard_read", "clipboard_copy", "type_text", "power", "shell"}
 
 
@@ -87,13 +118,22 @@ def split_emotion(reply):
 
 # Small models pad replies with offers ("How can I help you today?") and introductions nobody asked for.
 FILLER_SENTENCE = re.compile(
-    r"^(?:(?:alright|all right|okay|ok|sure|got it|understood|no problem)[,.!]? )?"
-    r"(?:(?:hello|hi|hey)(?: there)?(?:,? \w+)?[!.]? )?(?:how (?:can|may) i (?:help|assist)(?: you)?(?: today| now| further)?"
-    r"|what (?:would|else would|do|else do) you (?:like|want|need)(?: me)?(?: to do| to)?(?: next| today| now)?"
-    r"|(?:let me know|feel free to ask|just let me know|is there anything else|i'll be here)\b.*"
-    r"|(?:would you like|do you want|do you need) (?:me )?(?:to )?(?:help|assist)(?: you)?(?: with)? (?:something|anything).*"
+    r"^(?:(?:alright|all right|okay|ok|sure|got it|understood|no problem|of course|absolutely|great|noted)[,.!]? )?"
+    r"(?:(?:hello|hi|hey)(?: there)?(?:,? \w+)?[!.,]? )?(?:"
+    r"(?:how|what) (?:else )?(?:can|may|could|shall) i (?:help|assist|do)(?: you)?(?: with)?(?: for you)?"
+    r"(?: today| now| further| next| else)?"
+    r"|what (?:would|else would|do|else do|can|else can) (?:you|i) (?:like|want|need|do)(?: me)?(?: to do| to)?"
+    r"(?: for you)?(?: next| today| now| else)?"
+    r"|(?:let me know|feel free|just let me know|don't hesitate|do not hesitate|is there anything|is there something"
+    r"|anything else|if you need|if there'?s anything|whenever you need|i'?ll be (?:here|around)|i'?m (?:always )?here"
+    r"|i am (?:always )?here|i'?m (?:happy|glad|ready) to help|happy to help|glad to help|hope (?:this|that) helps"
+    r"|just say the word|ask me anything|you can ask me)\b.*"
+    r"|(?:would you like|do you want|do you need|shall i|should i) (?:me )?(?:to )?(?:help|assist)(?: you)?"
+    r"(?: with)? (?:something|anything).*"
     r"|(?:can|could) you tell me (?:more )?(?:about )?what you (?:need|want|would like)\b.*"
-    r"|(?:i'm|i am) (?:here|ready) to help\b.*|(?:i'm|i am) (?:zade|\w+), your (?:voice )?assistant\b.*)[.!?]*$",
+    r"|(?:i'?m|i am) (?:zade|\w+),? (?:your|a) (?:friendly |helpful |personal )?(?:voice |ai )?assistant\b.*"
+    r"|(?:i'?m|i am) (?:just )?(?:your|a) (?:friendly |helpful |personal )?(?:voice |ai )?assistant\b.*"
+    r")(?:,? \w+)?[.!?]*$",  # "..., Zonic?"
     re.I)
 # ...and claim they did things without calling a tool ("Instagram is now open!").
 CLAIMED = re.compile(r"\b(?:is now (?:open|displayed|showing|playing|closed)|is open now|now open|"
@@ -103,10 +143,14 @@ CLAIMED = re.compile(r"\b(?:is now (?:open|displayed|showing|playing|closed)|is 
 
 def tidy(reply, acted):
     """A model reply without filler sentences, and without a claimed action when no tool ran."""
+    if re.fullmatch(r"\W*silent\W*", reply, re.I):  # the model's own sign that nothing should be said
+        return ""
     if reply.lstrip().startswith("{"):  # a tool call written out as text instead of made: never read JSON aloud
         return "Sorry, I got mixed up. Say that again?"
     sentences = [x for x in re.split(r"(?<=[.!?])\s+", reply.strip()) if x]
-    kept = [x for x in sentences if not FILLER_SENTENCE.match(x)]
+    greet = re.compile(r"^((?:hello|hi|hey)(?: there)?(?:,? \w+)?)[!.,]? \w", re.I)  # "Hello Zonic, how can I..."
+    kept = [x if not FILLER_SENTENCE.match(x) else (g[1] + "!" if (g := greet.match(x)) else "") for x in sentences]
+    kept = [x for x in kept if x]
     reply = " ".join(kept)  # only filler ("I'm here to help if you need anything."): better to say nothing
     if not acted and any(CLAIMED.search(x) for x in kept):
         return "I couldn't do that."
@@ -144,6 +188,13 @@ def next_time(at, now=None):
     return t if t > now else t + datetime.timedelta(days=1)
 
 
+SNOOZE = {"until": 0.0}  # "stop for 10 minutes": the wake word is ignored until then (the hotkey still works)
+
+
+def snoozed(now=None):
+    return (time.time() if now is None else now) < SNOOZE["until"]
+
+
 def is_quiet(cfg, now=None):
     """Do Not Disturb, or inside the quiet-hours window (which may wrap past midnight)."""
     q = cfg["quiet"]
@@ -169,7 +220,7 @@ def apply_live(cfg, new):
 
 # Actions that need a spoken yes at each safety level (shell and power always ask, in actions.py).
 RISKY = {"close_app", "type_text", "clipboard_copy", "press_keys"}
-READ_ONLY = {"guide_screen", "guide", "guide_stop", "whoami", "express", "dnd", "time", "date", "weather", "web_answer", "notes_read", "list_facts", "list_reminders",
+READ_ONLY = {"snooze", "guide_screen", "guide", "guide_stop", "whoami", "express", "dnd", "time", "date", "weather", "web_answer", "notes_read", "list_facts", "list_reminders",
              "system_status", "look_at_screen", "clipboard_read", "remember", "forget", "note_add",
              "set_timer", "set_reminder", "cancel_reminder", "make_shortcut", "sync_apps", "sleep",
              "shell", "power"}
@@ -271,6 +322,11 @@ def dispatch(ctx, action, from_model=False):
             if e not in EMOTIONS:
                 return "I can make these faces: " + ", ".join(EMOTIONS) + ".", False
             return f"This is my {e} face.", True
+        if name == "snooze":
+            seconds = max(0, int(a.get("seconds") or 0))
+            SNOOZE["until"] = time.time() + seconds if seconds else 0.0
+            return (f"Okay, quiet for {_duration(seconds)}. Hold Win if you need me." if seconds
+                    else "I'm listening again."), True
         if name == "dnd":
             from . import ctl
 
@@ -338,9 +394,10 @@ def offer(ctx, text, acts):
 def handle(ctx, raw):
     """Handle one utterance; return what Zade replied (for follow-up listening)."""
     text = router.normalize(raw)
-    if any(router.normalize(x) in STOP_WORDS for x in re.split(r"[.!?,]", raw or "")):  # "Hey, stop." "Stop. Cancel."
-        text = "stop"
-    if text in STOP_WORDS or dismissed(text):
+    snooze = router.parse_snooze(text) is not None  # "stop for 10 minutes" is a command, not a plain stop
+    if not snooze and any(plain(router.normalize(x)) in STOP_WORDS for x in re.split(r"[.!?,]", raw or "")):
+        text = "stop"  # "Hey, stop." "Stop. Cancel."
+    if not snooze and (text in STOP_WORDS or dismissed(text)):
         if ctx.guide and text in STOP_WORDS:  # "stop" also ends a screen guide
             ctx.guide.stop()
         return ""
@@ -613,7 +670,7 @@ def main():
             source = audio.wait_for_wake(stream, wake, cfg["wake"]["threshold"], poll,
                                          verify=(lambda clip: stt.wake_check(clip, cfg)) if cfg["wake"]["verify"] else None,
                                          sure=cfg["wake"].get("sure", 0.5))
-        if source == "wake" and is_quiet(cfg):  # quiet hours / Do Not Disturb: ignore the wake word
+        if source == "wake" and (is_quiet(cfg) or snoozed()):  # quiet hours, Do Not Disturb, "stop for 10 min"
             log.info("wake word ignored (quiet)")
             continue
         if source == "dictate":  # voice typing: record while the key is held, type it, no model
@@ -649,7 +706,7 @@ def main():
             continue
         reply = respond(text)
         # Follow-up: when Zade asked a question, listen briefly for an answer without the wake word.
-        while cfg["followup"]["enabled"] and wants_followup(reply) and not barge:
+        while cfg["followup"]["enabled"] and wants_followup(reply) and not barge and not snoozed():
             audio.cue(stream, soft=True, cfg=cfg)
             text = hear(cfg["followup"]["listen_s"], owner_only=True)
             if text is None:

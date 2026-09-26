@@ -358,6 +358,9 @@ def test_click_it_without_a_guide():
 
 def test_model_filler_and_made_up_actions_are_dropped():
     assert z.tidy("Hello Zonic! How can I assist you today?", acted=False) == "Hello Zonic!"
+    assert z.tidy("Hello Zonic, how can I assist you today?", False) == "Hello Zonic!"
+    assert z.tidy("Sure! What can I do for you today, zonic?", False) == "Sure!"
+    assert z.tidy("SILENT", False) == ""
     assert z.tidy("I'm here to help if you need anything.", False) == ""  # only filler: stay quiet
     assert z.tidy("Alright, let me know if you change your mind.", False) == ""
     assert z.tidy("Your name is Zonic. I'm Zade, your voice assistant on your Arch Linux desktop.", False) == \
@@ -372,3 +375,16 @@ def test_model_filler_and_made_up_actions_are_dropped():
     assert z.tidy("Discord is open on workspace 2.", acted=False) == "Discord is open on workspace 2."
     assert z.tidy("I see a terminal. Can you tell me more about what you need help with?", True) == "I see a terminal."
     assert z.tidy('{"name": "remember", "arguments": {"fact": "x"}}', False).startswith("Sorry")
+
+
+def test_stop_for_a_while_ignores_the_wake_word_until_then(monkeypatch):
+    said = []
+    monkeypatch.setattr(z.time, "time", lambda: 1000.0)
+    for words, seconds in [("Stop for 10 minutes.", 600), ("Stop, for 10 minutes.", 600),
+                           ("Leave me alone for an hour.", 3600), ("10 minute ke liye chup raho", 600)]:
+        z.handle(make(said), words)
+        assert z.SNOOZE["until"] == 1000.0 + seconds and z.snoozed(1000.0 + seconds - 1)
+        assert not z.snoozed(1000.0 + seconds)
+    assert said[-1].startswith("Okay, quiet for 10 minutes")
+    z.handle(make(said), "you can talk now")
+    assert not z.snoozed() and said[-1] == "I'm listening again."

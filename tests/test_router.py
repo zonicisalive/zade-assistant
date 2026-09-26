@@ -272,3 +272,14 @@ def test_screen_guide_patterns():
     for t in ["help me write an email", "show me the weather", "where is mumbai"]:
         a = P(t, find)
         assert not a or a["name"] != "guide", t
+
+
+def test_snooze_and_durations():
+    for text, seconds in [("stop for 10 minutes", 600), ("stop listening for the next 15 mins", 900),
+                          ("dont respond for half an hour", 1800), ("be quiet for 2 hours and 30 minutes", 9000),
+                          ("shut up for a while", 1800), ("for 5 minutes stop listening", 300),
+                          ("go to sleep for twenty minutes", 1200), ("chup raho aadha ghanta", 1800),
+                          ("leave me alone for an hour and a half", 5400), ("you can talk now", 0)]:
+        assert router.parse_snooze(text) == seconds, text
+    for text in ["stop", "stop the song", "stop for pizza", "stop playing for 10 minutes", "pause music for 10 minutes"]:
+        assert router.parse_snooze(text) is None, text
