@@ -618,7 +618,7 @@ def main():
             return True
         # While Zade talks, its own voice reaches the mic: only a sure wake (not the low listening threshold,
         # which skips the second check) may interrupt it.
-        barge_at = max(cfg["wake"]["threshold"], cfg["wake"].get("sure", 0.5))
+        barge_at = max(cfg["wake"]["threshold"], config.wake_sure(cfg["wake"]))
         while stream.read_available >= audio.FRAME:
             if max(wake.predict(audio.read(stream)).values()) >= barge_at:
                 barge.append("wake")
@@ -709,7 +709,7 @@ def main():
         else:
             source = audio.wait_for_wake(stream, wake, cfg["wake"]["threshold"], poll,
                                          verify=(lambda clip: stt.wake_check(clip, cfg)) if cfg["wake"]["verify"] else None,
-                                         sure=cfg["wake"].get("sure", 0.5))
+                                         sure=config.wake_sure(cfg["wake"]))
         if source == "wake" and (is_quiet(cfg) or snoozed()):  # quiet hours, Do Not Disturb, "stop for 10 min"
             log.info("wake word ignored (quiet)")
             continue

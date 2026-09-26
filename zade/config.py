@@ -9,8 +9,9 @@ DEFAULTS = {
              # model re-listens to the last 2 s and must hear "hey zade" (or a close variant).
              "vad_threshold": 0.5, "verify": True, "verify_model": "tiny.en",
              # the wake model's score from which it wakes without the Whisper check (which mishears
-             # accented "hey Zade" as "is it", "hey dude" and rejected a third of real wakes)
-             "sure": 0.5},
+             # accented "hey Zade" as "is it", "hey dude" and rejected a third of real wakes).
+             # 0 = 0.3 above the threshold (at most 0.9): with both at 0.5 the check could never run.
+             "sure": 0.0},
     "audio": {"rms_threshold": 500, "noise_factor": 2.5, "silence_s": 0.8, "max_s": 10.0, "start_timeout_s": 4.0,
               # You're done talking when the sound falls below this share of your own voice level, so
               # people talking in the background don't keep the recording open. Lower = more patient.
@@ -113,6 +114,11 @@ def load(path=None):
     p = pathlib.Path(path or "~/.config/zade/config.toml").expanduser()
     user = tomllib.loads(p.read_text()) if p.exists() else {}
     return _merge(copy.deepcopy(DEFAULTS), user)
+
+
+def wake_sure(wake):
+    """The score from which a wake skips the Whisper check (see DEFAULTS["wake"]["sure"])."""
+    return wake.get("sure") or min(0.9, wake["threshold"] + 0.3)
 
 
 def load_env(path=None, override=False):

@@ -24,3 +24,9 @@ def test_load_env_override_replaces_changed_keys(tmp_path, monkeypatch):
     assert os.environ["ZADE_TEST_KEY"] == "old"
     config.load_env(env, override=True)
     assert os.environ["ZADE_TEST_KEY"] == "new"
+
+
+def test_the_whisper_wake_check_can_run_at_the_defaults():
+    assert config.wake_sure(config.DEFAULTS["wake"]) == 0.8                 # threshold 0.5: not every wake is sure
+    assert config.wake_sure({"threshold": 0.2, "sure": 0.0}) == 0.5         # a sensitive setup like mine
+    assert config.wake_sure({"threshold": 0.2, "sure": 0.6}) == 0.6         # set by hand: kept
