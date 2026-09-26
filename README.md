@@ -19,7 +19,9 @@ cp config.example.toml ~/.config/zade/config.toml
 Pull any Ollama model that supports tool calling and set it as `llm.model` in the config (or in the app).
 Zade wakes on "hey jarvis" (or Alexa, Hey Mycroft, Hey Rhasspy) until you use your own wake word. Any
 openWakeWord model works: in the app, **Settings → Listening → Wake word → + Add your own**, pick the `.onnx`
-file and type the phrase it listens for. To train one, record yourself with `uv run python -m zade.record_wake`,
+file and type the phrase it listens for. A ready "hey Zade" model (trained on ~100k American-accented voices)
+is attached to the [latest release](https://github.com/zonicisalive/zade-assistant/releases/latest) as
+`hey_zade.onnx`; add it with the phrase `hey zade`. To train one, record yourself with `uv run python -m zade.record_wake`,
 then run `scripts/train_wake.py` (I ran it on a free Kaggle GPU).
 
 ## My setup
