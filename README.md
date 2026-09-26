@@ -2,6 +2,9 @@
 
 Local-first voice assistant for the Linux desktop. Say "Zade", then a request.
 
+Custom made by Zonic ([@zonicisalive](https://github.com/zonicisalive)) for my own desktop. Anyone is free to
+fork it and change it however they wish; see [License](#license).
+
 ## Setup
 
 ```bash
@@ -89,3 +92,7 @@ LazyLoader { active: true; source: "file:///home/you/Zade/ui/ZadeHost.qml" }
 
 Restart the shell once. From then on, Zade updates to the overlay load by themselves (ZadeHost.qml watches its files). Zade sees the line (setting `ui.host_file`) and no longer starts its own overlay process.
 If a shell update removes the line, Zade automatically goes back to running its own.
+
+## License
+
+MIT: use it, fork it, change it and share it as you wish. See [LICENSE](LICENSE).
