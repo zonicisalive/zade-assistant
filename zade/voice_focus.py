@@ -9,6 +9,7 @@ at the same moment can't be separated; this removes others before, between and a
 import functools
 import logging
 import pathlib
+import shutil
 import urllib.request
 
 import numpy as np
@@ -30,7 +31,10 @@ def _extractor(data_dir):
     if not path.exists():
         path.parent.mkdir(parents=True, exist_ok=True)
         log.info("downloading the voice focus model (40 MB)")
-        urllib.request.urlretrieve(MODEL_URL, path)
+        part = path.with_suffix(".part")  # renamed only when complete: a dropped download never looks finished
+        with urllib.request.urlopen(MODEL_URL, timeout=30) as r, open(part, "wb") as f:
+            shutil.copyfileobj(r, f)
+        part.rename(path)
     return sherpa_onnx.SpeakerEmbeddingExtractor(
         sherpa_onnx.SpeakerEmbeddingExtractorConfig(model=str(path), num_threads=2))
 
