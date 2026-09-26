@@ -8,8 +8,7 @@ fork it and change it however they wish; see [License](#license).
 ## Setup
 
 ```bash
-sudo pacman -S --needed portaudio playerctl wireplumber gtk3 uv   # plus Ollama with ROCm
-ollama pull qwen3:4b-instruct
+sudo pacman -S --needed portaudio playerctl wireplumber gtk3 uv   # plus Ollama for the brain
 uv python install 3.11 && CC=gcc uv sync   # CC=gcc: evdev builds from source
 mkdir -p ~/.local/share/zade/voices ~/.config/zade
 uv run python -m piper.download_voices en_US-lessac-medium --data-dir ~/.local/share/zade/voices
@@ -17,7 +16,22 @@ mkdir -p ~/.local/share/zade/kokoro && for f in kokoro-v1.0.onnx voices-v1.0.bin
 cp config.example.toml ~/.config/zade/config.toml
 ```
 
-Train the "Zade" wake word: see `docs/superpowers/plans/2026-09-23-zade-v1.md`, Task 10. Until then Zade wakes on "hey jarvis".
+Pull any Ollama model that supports tool calling and set it as `llm.model` in the config (or in the app).
+Zade wakes on "hey jarvis" until you train your own wake word: record yourself with
+`uv run python -m zade.record_wake`, then train with `scripts/train_wake.py` (I ran it on a free Kaggle GPU).
+
+## My setup
+
+What I used on my own desktop. Nothing here is required; swap in whatever suits your machine.
+
+- Arch Linux with the niri compositor and the Quickshell-based inir shell (Zade's overlay lives inside it)
+- AMD Radeon RX 9060 XT 16 GB and a Ryzen 5 7600X; the GPU parts run on Vulkan or ROCm
+- Brain: qwen2.5:7b-instruct through Ollama, unloaded 30 s after the last request
+- Hearing: Qwen3-ASR-0.6B through llama.cpp on the GPU (see below), with the small.en Whisper model on the CPU
+  as a fallback
+- Wake word: my own "hey Zade", trained on recordings of me and three friends plus synthetic Indian-accented voices
+- Voice: Kokoro (af_heart), fully local
+- Spotify through Spotify Connect, weather from Open-Meteo, web answers through DuckDuckGo
 
 ## Run
 
@@ -50,8 +64,8 @@ Without keys, Zade opens Spotify's search instead.
 
 ## GPU speech recognition (optional, ~0.9 GB VRAM)
 
-Whisper large-v3-turbo through whisper.cpp's Vulkan backend (works on AMD). It knows far more names than the
-CPU model; Zade falls back to the CPU model whenever the server isn't running.
+The first GPU option I tried: Whisper large-v3-turbo through whisper.cpp's Vulkan backend (works on AMD). It
+knows far more names than the CPU model; Zade falls back to the CPU model whenever the server isn't running.
 
 ```bash
 sudo pacman -S --needed vulkan-headers spirv-headers shaderc
@@ -65,10 +79,11 @@ Then pick **Settings → Listening → Speech recognition → Large (GPU)** and 
 service when it starts listening (the model loads in ~0.5 s, while you talk) and stops it after
 `stt.keep_alive_s` (30 s) without a request, so it uses no VRAM while idle.
 
-## Qwen3-ASR (optional, best with Indian accents, ~1.5 GB VRAM while listening)
+## Qwen3-ASR (optional, ~1.5 GB VRAM while listening)
 
-Qwen3-ASR-0.6B through llama.cpp's Vulkan backend. On recordings of Indian-accented speakers it made ~20% fewer
-word errors than Whisper large-v3-turbo, and answers in ~0.06 s once loaded (~0.9 s from cold).
+What I ended up using: Qwen3-ASR-0.6B through llama.cpp's Vulkan backend. On recordings of me and my friends
+(Indian accents) it made ~20% fewer word errors than Whisper large-v3-turbo, and answers in ~0.06 s once loaded
+(~0.9 s from cold).
 
 ```bash
 cd ~/.local/share/zade && git clone --depth 1 https://github.com/ggml-org/llama.cpp && cd llama.cpp
