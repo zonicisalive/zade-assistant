@@ -116,7 +116,7 @@ _UI = (r"(?:button|btn|option|options|setting|settings|menu|icon|tab|switch|togg
        r"text box|textbox|message bar|message box|chat box|send button|play button|pause button|volume|"
        r"close button|minimize button|maximize button|x button|scroll bar|title bar|status bar|taskbar|dock|tray)")
 _ON_SCREEN = r"(?: (?:on|in) (?:my|the|this) (?:screen|window|app|page)| here| over here| screen (?:pe|par|mein|me))"
-_FIND = (r"(?:where(?: is|'?s| are|'?re| do i find| can i find| would i find| will i find)|show me(?: where)?(?: is)?|"
+_FIND = (r"(?:where(?: is|'?s| are|'?re| do i find| can i find| would i find| will i find)?|show me(?: where)?(?: is)?|"
          r"how do i find|help me find|find|locate|look for|i can'?t find|i cannot find|i don'?t see|i can'?t see|"
          r"kaha hai|kahan hai)")
 _POINT = r"(?:point|pointing|highlight|circle|mark|indicate)(?: it)?(?: me)?(?: out)?(?: to| at| towards| toward)?"
@@ -127,14 +127,15 @@ def parse_point_at(text):
     -> what to point at (None when it isn't about the screen)."""
     t = re.sub(r"^(?:can you |could you |please |just )+", "", text)
     art = r"(?:(?:the|my|a|an|that|this) )?"
+    app = r"(?: (?:in|on|for|of|inside|from) (?:the )?[a-z0-9][\w' ]*?)?"  # "... for discord", "... in settings"
     if m := re.fullmatch(rf"{_POINT} {art}(.+?){_ON_SCREEN}?", t):  # pointing is always about the screen
         if not re.fullmatch(r"(?:how|it|that|this)(?: .*)?", m[1]):
             return m[1]
     if m := re.fullmatch(rf"{_FIND} {art}(.+?){_ON_SCREEN}", t):  # anything, said to be on the screen
         return m[1]
-    if m := re.fullmatch(rf"{_FIND} {art}(.+? {_UI}|{_UI})", t):  # a screen thing by its kind
+    if m := re.fullmatch(rf"{_FIND} {art}((?:.+? )?{_UI}{app})", t):  # a screen thing by its kind
         return m[1]
-    if m := re.fullmatch(rf"{art}(.+? {_UI}|{_UI}) (?:kaha|kahan) (?:hai|he|h)(?:{_ON_SCREEN})?", t):
+    if m := re.fullmatch(rf"{art}((?:.+? )?{_UI}{app}) (?:kaha|kahan) (?:hai|he|h)(?:{_ON_SCREEN})?", t):
         return m[1]
     return None
 

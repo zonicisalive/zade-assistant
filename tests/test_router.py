@@ -290,7 +290,10 @@ def test_pointing_at_things_on_screen():
                         ("point at the send button", "send button"), ("show me the settings icon", "settings icon"),
                         ("find wifi on my screen", "wifi"), ("message bar kaha hai", "message bar"),
                         ("highlight the search box", "search box"), ("point me to discord", "discord"),
-                        ("i cant find the send button", "send button"), ("where are the notifications", "notifications")]:
+                        ("i cant find the send button", "send button"), ("where are the notifications", "notifications"),
+                        ("where is the message bar for discord", "message bar for discord"),
+                        ("where is the wifi toggle in settings", "wifi toggle in settings"),
+                        ("where notification", "notification")]:
         assert router.parse_point_at(router.normalize(text)) == thing, text
     for text in ["where is delhi", "show me how to share screen", "show me my reminders", "what is the weather"]:
         assert router.parse_point_at(router.normalize(text)) is None, text

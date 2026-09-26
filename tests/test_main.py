@@ -429,6 +429,7 @@ def test_claims_must_match_the_tools_that_ran():
         "I couldn't do all of that."
     assert z.tidy("I've sent the message.", ["send_message"]) == "I've sent the message."
     assert z.tidy("Discord is now open.", ["open_app"]) == "Discord is now open."
+    assert z.tidy("Pointing at the message bar in Discord, it's at the bottom.") == "I couldn't do that."
 
 
 def test_messages_to_people_are_always_confirmed(monkeypatch):

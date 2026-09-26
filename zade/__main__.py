@@ -147,6 +147,8 @@ CLAIMS = [
      {"close_app", "window", "press_keys"}),
     (re.compile(r"\b(?:is now (?:playing|paused)|now playing|i(?:'ve| have)? (?:paused|played|resumed))\b", re.I),
      {"play_music", "media"}),
+    (re.compile(r"\b(?:pointing (?:at|to|out)|i(?:'m| am| have|'ve)? (?:pointed|highlighted|circled))\b", re.I),
+     {"guide", "guide_screen"}),
     (re.compile(r"\b(?:is now (?:displayed|showing)|now displayed|i(?:'ve| have)? (?:turned on|turned off|switched))\b",
                 re.I), None),  # any tool will do
 ]
