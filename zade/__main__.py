@@ -616,8 +616,11 @@ def main():
             trigger.clear()
             barge.append("hotkey")
             return True
+        # While Zade talks, its own voice reaches the mic: only a sure wake (not the low listening threshold,
+        # which skips the second check) may interrupt it.
+        barge_at = max(cfg["wake"]["threshold"], cfg["wake"].get("sure", 0.5))
         while stream.read_available >= audio.FRAME:
-            if max(wake.predict(audio.read(stream)).values()) >= cfg["wake"]["threshold"]:
+            if max(wake.predict(audio.read(stream)).values()) >= barge_at:
                 barge.append("wake")
                 return True
         return False
