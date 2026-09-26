@@ -16,7 +16,8 @@ APP_DIRS = [
     pathlib.Path("~/.local/share/flatpak/exports/share/applications").expanduser(),
     pathlib.Path("~/.local/share/applications").expanduser(),  # last: your own entries win
 ]
-ROOT = re.compile(r"\b(sudo|su|pkexec|doas|run0)\b", re.IGNORECASE)
+ROOT = re.compile(r"\b(sudo|su|pkexec|doas|run0|systemd-run|machinectl|runuser|setpriv|chroot|nsenter)\b",
+                  re.IGNORECASE)
 START = {"yes", "yeah", "yep", "yup", "sure", "ok", "okay", "do", "run", "go"}
 ALLOWED = START | {"it", "ahead", "please", "zade"}
 NO = {"no", "nope", "don't", "dont", "cancel", "stop", "wait"}
@@ -301,9 +302,23 @@ def _spawn(cmd):
     subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
 
 
+def needs_root(cmd):
+    """Root tools by name, or anything that could hide one: a command built from $(...), `...` or ${...},
+    or a command name with wildcards ("/usr/bin/sud? id", "pkexe[c] id"). A courtesy check: the spoken yes
+    is the real guard."""
+    if ROOT.search(re.sub(r"[\\'\"]", "", cmd)) or re.search(r"\$\(|`|\$\{", cmd):
+        return True
+    for part in re.split(r"[;&|]+|\n", cmd):  # the first word of every command in a pipeline or list
+        words = part.split()
+        words = words[next((i for i, w in enumerate(words) if "=" not in w), len(words)):]  # skip VAR=value
+        if words and re.search(r"[*?\[]", words[0]):
+            return True
+    return False
+
+
 def shell(cmd, confirm):
-    if ROOT.search(re.sub(r"[\\'\"]", "", cmd)):
-        raise Failed("I won't run commands that need root.")
+    if needs_root(cmd):
+        raise Failed("I won't run commands that need root, or hide which command they run.")
     # Long commands are shown in the overlay (after the newline) instead of being read aloud.
     question = f"Run {cmd}?" if len(cmd) <= 40 else f"Should I run this command?\n{cmd}"
     if not confirm(question):

@@ -320,3 +320,11 @@ def test_send_message_uses_discords_quick_switcher(monkeypatch):
     assert actions.send_message("dexorto", "this is a test") == "Sent to dexorto on Discord."
     assert typed == [actions.wtype_args("ctrl+k"), ["--", "@dexorto"], actions.wtype_args("enter"),
                      ["--", "this is a test"], actions.wtype_args("enter")]
+
+
+def test_commands_needing_root_or_hiding_it_are_refused():
+    for cmd in ["sudo id", "/usr/bin/sud? id", "pkexe[c] id", "s$()udo id", "`echo sudo` id", "systemd-run --uid=0 id",
+                "ls; /bin/s? -c id", "X=1 /usr/bin/su* id", "machinectl shell root@"]:
+        assert actions.needs_root(cmd), cmd
+    for cmd in ["ls *.txt", "df -h", "grep -r foo .", "echo hi | wc -c", "find . -name '*.py'"]:
+        assert not actions.needs_root(cmd), cmd
