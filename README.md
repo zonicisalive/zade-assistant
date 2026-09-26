@@ -79,20 +79,6 @@ cp ~/Zade/systemd/zade-qwen-asr.service ~/.config/systemd/user/ && systemctl --u
 
 Then pick **Settings → Listening → Speech recognition → Qwen3 (GPU)** and restart Zade.
 
-## Screen pointer (optional, for the screen guide, ~7 GB VRAM while guiding)
-
-The screen guide finds text on screen exactly (OCR), but icons need a model that sees. UI-Venus-2-9B, trained
-only to find things on screenshots, pointed within 5 px at icons that cloud models missed by hundreds of pixels
-(Holo2-4B and UI-TARS-1.5-7B were tested too, and missed more). It needs llama.cpp (built above) and a cloud
-screen guide model to plan the steps; Zade starts it when a guide starts and stops it when the guide ends.
-
-```bash
-mkdir -p ~/.local/share/zade/gui && cd ~/.local/share/zade/gui
-for f in UI-Venus-2-9B-Q4_K_M.gguf mmproj-UI-Venus-2-9B-f16.gguf; do
-  curl -L -o $f https://huggingface.co/bartowski/UI-Venus-2-9B-GGUF/resolve/main/$f; done
-cp ~/Zade/systemd/zade-gui.service ~/.config/systemd/user/ && systemctl --user daemon-reload
-```
-
 ## Overlay inside your desktop shell (optional, saves ~225 MB)
 
 If you run a Quickshell-based shell (e.g. inir), add this line inside its `ShellRoot { ... }` in `shell.qml`:

@@ -349,13 +349,6 @@ def test_waving_zade_off_is_silent():
         assert not z.dismissed(t), t
 
 
-def test_click_it_without_a_guide():
-    said = []
-    ctx = make(said)
-    z.handle(ctx, "click it")
-    assert said == ["I'm not pointing at anything right now."]
-
-
 def test_model_filler_and_made_up_actions_are_dropped():
     assert z.tidy("Hello Zonic! How can I assist you today?") == "Hello Zonic!"
     assert z.tidy("Hello Zonic, how can I assist you today?") == "Hello Zonic!"
@@ -390,26 +383,6 @@ def test_stop_for_a_while_ignores_the_wake_word_until_then(monkeypatch):
     assert not z.snoozed() and said[-1] == "I'm listening again."
 
 
-def test_text_model_and_screen_pointer_take_turns(monkeypatch):
-    from zade import brain, guide
-
-    events = []
-
-    class Guide:
-        uses_pointer = True
-        stopped = type("E", (), {"is_set": lambda self: False})()
-
-    monkeypatch.setattr(guide, "pause_pointer", lambda: events.append("pointer off"))
-    monkeypatch.setattr(brain, "unload", lambda cfg: events.append("text model off"))
-    ctx = make([], ask=lambda *a, **k: events.append("text model answers") or "Four.")
-    ctx.guide = Guide()
-    z.handle(ctx, "what is two plus two")
-    for t in list(z.threading.enumerate()):
-        if t is not z.threading.current_thread() and t.daemon:
-            t.join(1)
-    assert events == ["pointer off", "text model answers", "text model off"]
-
-
 def test_nothing_heard_leaves_no_history_entry():
     ctx = make([])
     assert z.safe_handle(ctx, "") == ""
@@ -429,7 +402,6 @@ def test_claims_must_match_the_tools_that_ran():
         "I couldn't do all of that."
     assert z.tidy("I've sent the message.", ["send_message"]) == "I've sent the message."
     assert z.tidy("Discord is now open.", ["open_app"]) == "Discord is now open."
-    assert z.tidy("Pointing at the message bar in Discord, it's at the bottom.") == "I couldn't do that."
 
 
 def test_messages_to_people_are_always_confirmed(monkeypatch):

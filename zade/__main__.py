@@ -68,7 +68,7 @@ def dismissed(text):
 
 
 # Tools whose calls are never learned as shortcuts (memory, one-off content, or risky).
-MEMORY_TOOLS = {"send_message", "snooze", "guide_screen", "guide", "guide_click", "guide_stop", "whoami", "express", "dnd", "look_at_screen", "system_status", "set_reminder", "list_reminders", "cancel_reminder", "sync_apps", "remember", "forget", "list_facts", "make_shortcut", "sleep", "set_timer", "note_add",
+MEMORY_TOOLS = {"send_message", "snooze", "whoami", "express", "dnd", "look_at_screen", "system_status", "set_reminder", "list_reminders", "cancel_reminder", "sync_apps", "remember", "forget", "list_facts", "make_shortcut", "sleep", "set_timer", "note_add",
                 "notes_read", "web_answer", "clipboard_read", "clipboard_copy", "type_text", "power", "shell"}
 
 
@@ -95,8 +95,6 @@ class Ctx:
     app_words: list = field(default_factory=list)  # installed app names, given to Whisper as hotwords
     show: Callable = lambda **fields: None  # overlay updates (emotion); ui.set in the real app
     route: str = ""  # how the last request was handled (shortcut, pattern, llm, ...), for History
-    guide: object = None  # the running screen-guide session, if any
-    heard: str = ""  # the words being handled, as transcribed
 
 
 def dictation_text(raw):
@@ -148,8 +146,6 @@ CLAIMS = [
      {"close_app", "window", "press_keys"}),
     (re.compile(r"\b(?:is now (?:playing|paused)|now playing|i(?:'ve| have)? (?:paused|played|resumed))\b", re.I),
      {"play_music", "media"}),
-    (re.compile(r"\b(?:pointing (?:at|to|out)|i(?:'m| am| have|'ve)? (?:pointed|highlighted|circled))\b", re.I),
-     {"guide", "guide_screen"}),
     (re.compile(r"\b(?:is now (?:displayed|showing)|now displayed|i(?:'ve| have)? (?:turned on|turned off|switched))\b",
                 re.I), None),  # any tool will do
 ]
@@ -236,7 +232,7 @@ def apply_live(cfg, new):
 
 # Actions that need a spoken yes at each safety level (shell and power always ask, in actions.py).
 RISKY = {"close_app", "type_text", "clipboard_copy", "press_keys", "send_message"}
-READ_ONLY = {"snooze", "guide_screen", "guide", "guide_stop", "whoami", "express", "dnd", "time", "date", "weather", "web_answer", "notes_read", "list_facts", "list_reminders",
+READ_ONLY = {"snooze", "whoami", "express", "dnd", "time", "date", "weather", "web_answer", "notes_read", "list_facts", "list_reminders",
              "system_status", "look_at_screen", "clipboard_read", "remember", "forget", "note_add",
              "set_timer", "set_reminder", "cancel_reminder", "make_shortcut", "sync_apps", "sleep",
              "shell", "power"}
@@ -264,10 +260,6 @@ def recent(ctx, now=None):
     f = ctx.cfg["followup"]
     now = time.monotonic() if now is None else now
     return [(u, r) for t, u, r in ctx.history if now - t <= f["history_s"]][-f["history_turns"]:]
-
-
-def guide_active(ctx):
-    return bool(ctx.guide) and not ctx.guide.stopped.is_set()
 
 
 def wants_followup(reply):
@@ -314,24 +306,6 @@ def dispatch(ctx, action, from_model=False):
             from . import vision
 
             return vision.look(a.get("question") or "What's on the screen?", ctx.cfg), True
-        if name == "guide_screen":  # the model's name for the same thing
-            name = "guide"
-        if name == "guide":
-            from . import guide
-
-            if ctx.guide:
-                ctx.guide.stop()
-            ctx.guide = guide.Session(a["goal"], ctx.cfg, ctx.say, heard=ctx.heard)
-            ctx.guide.start()
-            return "", True  # the session speaks its first instruction itself
-        if name == "guide_click":
-            if not (ctx.guide and not ctx.guide.stopped.is_set()):
-                return "I'm not pointing at anything right now.", False
-            return ctx.guide.click(), True
-        if name == "guide_stop":
-            if ctx.guide:
-                ctx.guide.stop()
-            return "Okay, I stopped guiding.", True
         if name == "whoami":
             if a.get("who") == "assistant":
                 return f"I'm {ctx.cfg['persona']['name'] or 'Zade'}, your voice assistant.", True
@@ -415,14 +389,11 @@ def offer(ctx, text, acts):
 
 def handle(ctx, raw):
     """Handle one utterance; return what Zade replied (for follow-up listening)."""
-    ctx.heard = raw or ""
     text = router.normalize(raw)
     snooze = router.parse_snooze(text) is not None  # "stop for 10 minutes" is a command, not a plain stop
     if not snooze and any(plain(router.normalize(x)) in STOP_WORDS for x in re.split(r"[.!?,]", raw or "")):
         text = "stop"  # "Hey, stop." "Stop. Cancel."
     if not snooze and (text in STOP_WORDS or dismissed(text)):
-        if ctx.guide and text in STOP_WORDS:  # "stop" also ends a screen guide
-            ctx.guide.stop()
         return ""
     if taught := router.parse_teach(text):
         phrase, request = taught
@@ -469,19 +440,12 @@ def handle(ctx, raw):
                 ctx.turn.append({"name": name, "args": args})
             return out or "done"
 
-        guiding = guide_active(ctx) and ctx.guide.uses_pointer
-        if guiding:  # the text model and the screen pointer take turns in VRAM
-            from . import guide
-
-            guide.pause_pointer()
         # the words as heard: normalizing drops "can you" and the like for matching commands, which turns
         # "What can you do?" into "what do"
         said = " ".join((raw or "").split()) or text
         answer = ctx.ask(said, memory.facts(ctx.conn), ctx.cfg, run_tool, recent(ctx))
         log.info("model said %r", answer)
         emotion, reply = split_emotion(answer)
-        if guiding:
-            threading.Thread(target=brain.unload, args=(ctx.cfg,), daemon=True).start()
         reply = tidy(reply, called)
         ctx.show(emotion=choose_emotion(emotion, reply))
         if reply:
@@ -722,8 +686,7 @@ def main():
                 say("Reminder: " + ctx.alerts.pop(0))
             continue
         audio.cue(stream, cfg=cfg)
-        if not guide_active(ctx):  # while guiding, the screen pointer has the VRAM
-            threading.Thread(target=brain.warm_up, args=(cfg,), daemon=True).start()
+        threading.Thread(target=brain.warm_up, args=(cfg,), daemon=True).start()
         # Push-to-talk: while the key is still held, record until it is released.
         ptt_active = source == "hotkey" and ptt and ptt.held()
         if cfg["sound"]["wake_reply"] and not ptt_active:  # e.g. "Yes?" before listening

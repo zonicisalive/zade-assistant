@@ -817,18 +817,6 @@ ShellRoot {
                                                selected: root.settings && String(root.settings.llm.keep_alive) === modelData[0]
                                                onClicked: root.setSetting("llm.keep_alive", modelData[0]) } } } }
                             Divider {}
-                            Row_ { label: "Screen guide model"; hint: "Plans 'guide me to ...'. Cloud models also look at the screenshot, so they find icons without text and plan better; keys go in Integrations (Gemini is free: OpenAI-compatible with its URL)."
-                                RowLayout { spacing: 8
-                                    Repeater { model: [["local", "Local"], ["anthropic", "Claude"], ["openai", "OpenAI-compatible"]]
-                                        Chip { required property var modelData; text: modelData[1]
-                                               selected: root.settings && root.settings.guide.provider === modelData[0]
-                                               onClicked: root.setSetting("guide.provider", modelData[0]) } } } }
-                            Row_ { label: "Screen guide cloud model"; hint: "Empty uses the model set in Integrations. Examples: gemini-2.5-flash, claude-haiku-4-5."
-                                visible: root.settings && root.settings.guide.provider !== "local"
-                                Field { Layout.preferredWidth: 220; placeholder: "same as Integrations"
-                                        text: root.settings ? root.settings.guide.model : ""
-                                        onEdited: root.setSetting("guide.model", text) } }
-                            Divider {}
                             Row_ { label: "Local model"; hint: "Any Ollama model with tool calling."
                                 Field { Layout.preferredWidth: 220; text: root.settings ? root.settings.llm.model : ""
                                         onEdited: root.setSetting("llm.model", text) } }
