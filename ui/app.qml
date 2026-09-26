@@ -1,6 +1,7 @@
 // Zade control app: status, personality, settings, memory and history.
 // Talks to Zade through `python -m zade.ctl` (JSON), and follows the wallpaper colors like the overlay.
 import QtQuick
+import QtQuick.Dialogs
 import QtQuick.Layouts
 import Quickshell
 import Quickshell.Io
@@ -44,9 +45,10 @@ ShellRoot {
             })
         })
     }
-    readonly property var wakeWords: [["~/.local/share/zade/zade.onnx", "Hey Zade"], ["hey_jarvis", "Hey Jarvis"],
-                                      ["alexa", "Alexa"], ["hey_mycroft", "Hey Mycroft"], ["hey_rhasspy", "Hey Rhasspy"]]
-    // What to say to wake Zade, for hints: the chosen built-in word, or "hey zade" for a custom model.
+    // [model, phrase, removable]: built in, your trained zade.onnx, and models added in Settings
+    property var wakeWords: [["hey_jarvis", "Hey Jarvis", false]]
+    property string wakeUpload: ""       // a model file picked to add, waiting for its phrase
+    // What to say to wake Zade, for hints: the chosen wake word's phrase.
     readonly property string wakePhrase: {
         const w = settings ? wakeWords.find(x => x[0] === settings.wake.model) : null
         return (w ? w[1] : "Hey Zade").toLowerCase()
@@ -128,6 +130,23 @@ ShellRoot {
         ctl(["reminders"], r => { if (r) reminders = r })
         ctl(["history"], r => { if (r) history = r })
         ctl(["keys"], r => { if (r) keys = r })
+        ctl(["wake-list"], r => { if (r && r.ok) wakeWords = r.words })
+    }
+    function addWakeWord(phrase) {
+        ctl(["wake-add", wakeUpload, phrase], r => {
+            if (r && r.ok) { wakeUpload = ""; needsRestart = status.running; flash("Added \u201c" + r.phrase + "\u201d.")
+                             ctl(["wake-list"], w => { if (w && w.ok) wakeWords = w.words })
+                             ctl(["settings"], s => { if (s) settings = s }) }
+            else flash(r && r.error ? r.error : "Couldn't add that model.")
+        })
+    }
+    function removeWakeWord(model) {
+        ctl(["wake-del", model], r => {
+            if (r && r.ok) { needsRestart = status.running; flash("Removed.")
+                             ctl(["wake-list"], w => { if (w && w.ok) wakeWords = w.words })
+                             ctl(["settings"], s => { if (s) settings = s }) }
+            else flash(r && r.error ? r.error : "Couldn't remove it.")
+        })
     }
     function setKey(name, value) {
         ctl(["key-set", name, value], r => {
@@ -364,6 +383,13 @@ ShellRoot {
         implicitWidth: 980
         implicitHeight: 680
         color: root.c.surface_container_low
+
+        FileDialog {
+            id: wakeFile
+            title: "Choose a wake word model"
+            nameFilters: ["openWakeWord models (*.onnx)"]
+            onAccepted: root.wakeUpload = decodeURIComponent(String(selectedFile).replace(/^file:\/\//, ""))
+        }
 
         RowLayout {
             anchors.fill: parent
@@ -711,12 +737,24 @@ ShellRoot {
                                        onClicked: root.settingsTab = modelData[0] } } }
 
                         Group { visible: root.settingsTab === "listening"
-                            Row_ { label: "Wake word"; hint: "What you say to call Zade. Restart Zade after changing it." }
+                            Row_ { label: "Wake word"; hint: "What you say to call Zade. Add your own openWakeWord model (.onnx), for example one trained with scripts/train_wake.py. Restart Zade after changing it." }
                             Flow { Layout.fillWidth: true; Layout.bottomMargin: 12; spacing: 8
                                 Repeater { model: root.wakeWords
                                     Chip { required property var modelData; text: modelData[1]
                                            selected: root.settings && root.settings.wake.model === modelData[0]
-                                           onClicked: root.setSetting("wake.model", modelData[0]) } } }
+                                           onClicked: root.setSetting("wake.model", modelData[0]) } }
+                                Chip { text: "+ Add your own"; onClicked: wakeFile.open() } }
+                            RowLayout { visible: root.wakeUpload !== ""; Layout.fillWidth: true; Layout.bottomMargin: 12; spacing: 8
+                                Muted { text: root.wakeUpload.split("/").pop(); elide: Text.ElideMiddle; Layout.maximumWidth: 220 }
+                                Field { id: wakePhraseField; Layout.fillWidth: true; placeholder: "What it listens for, e.g. hey computer"
+                                        onAccepted: root.addWakeWord(text) }
+                                Button { text: "Add"; accent: true; onClicked: root.addWakeWord(wakePhraseField.text) }
+                                Button { text: "Cancel"; onClicked: root.wakeUpload = "" } }
+                            RowLayout { Layout.bottomMargin: 12; spacing: 8
+                                readonly property var chosen: root.settings ? root.wakeWords.find(w => w[0] === root.settings.wake.model) : null
+                                visible: !!chosen && chosen[2]
+                                Button { text: parent.chosen ? "Remove \u201c" + parent.chosen[1] + "\u201d" : ""; danger: true
+                                         onClicked: root.removeWakeWord(parent.chosen[0]) } }
                             Divider {}
                             Row_ { label: "Speech recognition"; hint: "GPU models load only while Zade listens. Qwen3 is the most accurate with Indian accents (~1.5 GB VRAM); Whisper (GPU) ~1.1 GB. If a GPU model isn't available, Small is used."
                                 RowLayout { spacing: 8

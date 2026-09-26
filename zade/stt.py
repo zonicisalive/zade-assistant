@@ -165,20 +165,31 @@ WAKE_WORDS = {
 
 
 def wake_word(model):
-    """The WAKE_WORDS key for a wake model name or path (a custom model counts as "zade")."""
+    """The WAKE_WORDS key for a wake model name or path. Any other model is named after its phrase
+    ("hey_computer.onnx", as uploaded in the app), and that name is the word."""
     stem = pathlib.Path(model).stem.lower()
-    return next((k for k in WAKE_WORDS if k in stem), "zade")
+    return next((k for k in WAKE_WORDS if k in stem), stem)
+
+
+def wake_phrase(word):
+    """What Whisper is primed with, and the words that count as hearing it: from WAKE_WORDS, or for an
+    uploaded model from its name ("hey_computer" -> "Hey Computer", {"computer"})."""
+    if word in WAKE_WORDS:
+        return WAKE_WORDS[word]
+    words = [w for w in re.split(r"[^a-z]+", word.lower()) if w]
+    core = {w for w in words if w not in ("hey", "hi", "hello", "ok", "okay", "yo")} or set(words)
+    return " ".join(words).title(), core
 
 
 def heard_wake_word(text, word="zade"):
-    return any(w in WAKE_WORDS[word][1] for w in re.findall(r"[a-z]+", text.lower()))
+    return any(w in wake_phrase(word)[1] for w in re.findall(r"[a-z]+", text.lower()))
 
 
 def wake_check(audio, cfg):
     """Second opinion on a wake: a tiny Whisper model must actually hear the wake word in the last ~2 s."""
     word = wake_word(cfg["wake"]["model"])
     segments, _ = _whisper(cfg["wake"]["verify_model"], "cpu").transcribe(
-        audio.astype(np.float32) / 32768, language="en", beam_size=1, hotwords=WAKE_WORDS[word][0], vad_filter=False)
+        audio.astype(np.float32) / 32768, language="en", beam_size=1, hotwords=wake_phrase(word)[0], vad_filter=False)
     text = " ".join(seg.text.strip() for seg in segments)
     log.info("wake check heard %r", text)
     return heard_wake_word(text, word)

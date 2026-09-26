@@ -83,6 +83,10 @@ def test_wake_check_follows_the_chosen_wake_word(monkeypatch):
     assert stt.wake_word("~/.local/share/zade/zade.onnx") == "zade"
     assert stt.wake_word("hey_jarvis") == "jarvis" and stt.wake_word("alexa") == "alexa"
     assert stt.heard_wake_word("Hey Jarvis.", "jarvis") and not stt.heard_wake_word("Hey Zade", "jarvis")
+    # an uploaded model is named after its phrase: its words (not "hey") are what must be heard
+    assert stt.wake_word("~/.local/share/zade/wake/hey_computer.onnx") == "hey_computer"
+    assert stt.wake_phrase("hey_computer") == ("Hey Computer", {"computer"})
+    assert stt.heard_wake_word("Hey, computer.", "hey_computer") and not stt.heard_wake_word("Hey Zade", "hey_computer")
 
     class Fake:
         def transcribe(self, audio, **kw):

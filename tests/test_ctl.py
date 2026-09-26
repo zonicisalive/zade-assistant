@@ -108,3 +108,26 @@ def test_shortcut_phrases_are_stored_the_way_speech_is_matched(env):
     step = json.dumps([{"name": "open_app", "args": {"name": "steam"}}])
     assert run("shortcut-save", "Hey Zade, Gaming Mode!", step) == {"ok": True}
     assert [s["phrase"] for s in run("shortcuts")] == ["gaming mode"]
+
+
+def test_your_own_wake_word_model(env, monkeypatch):
+    import pathlib
+
+    import openwakeword
+
+    monkeypatch.setattr(ctl, "DATA", env)
+    model = pathlib.Path(openwakeword.__file__).parent / "resources" / "models" / "alexa_v0.1.onnx"
+    if not model.exists():
+        pytest.skip("openWakeWord's models aren't downloaded")
+    junk = env / "notes.onnx"
+    junk.write_text("not a model")
+    assert not run("wake-add", str(junk), "hey", "notes")["ok"]
+    assert not run("wake-add", str(model))["ok"]                        # no phrase
+    r = run("wake-add", str(model), "Hey", "Computer!")
+    assert r["ok"] and r["phrase"] == "Hey Computer" and (env / "wake" / "hey_computer.onnx").exists()
+    assert config.load(env / "config.toml")["wake"]["model"].endswith("wake/hey_computer.onnx")
+    words = run("wake-list")["words"]
+    assert ["hey_jarvis", "Hey Jarvis", False] in words and [r["model"], "Hey Computer", True] in words
+    assert not run("wake-del", "hey_jarvis")["ok"]                      # built-in: not removable
+    assert run("wake-del", str(env / "wake" / "hey_computer.onnx"))["ok"]
+    assert config.load(env / "config.toml")["wake"]["model"] == "hey_jarvis"  # was in use: back to a built-in

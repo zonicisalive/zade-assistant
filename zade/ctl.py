@@ -165,6 +165,68 @@ def preview(voice, speed):
     return {"ok": True}
 
 
+BUILTIN_WAKE = [("hey_jarvis", "Hey Jarvis"), ("alexa", "Alexa"), ("hey_mycroft", "Hey Mycroft"),
+                ("hey_rhasspy", "Hey Rhasspy")]
+
+
+def _wake_dir():
+    return DATA / "wake"  # wake word models uploaded in the app, each named after its phrase
+
+
+def _home_path(p):
+    """ "~/..." when under the home folder, as the settings write paths."""
+    try:
+        return "~/" + str(p.relative_to(pathlib.Path.home()))
+    except ValueError:
+        return str(p)
+
+
+def wake_list():
+    """Wake words to choose from: [model, phrase, removable]. Built in, your trained zade.onnx, and uploads."""
+    out = [[m, name, False] for m, name in BUILTIN_WAKE]
+    if (DATA / "zade.onnx").exists():
+        out.insert(0, [_home_path(DATA / "zade.onnx"), "Hey Zade", False])
+    for p in sorted(_wake_dir().glob("*.onnx")):
+        out.append([_home_path(p), p.stem.replace("_", " ").title(), True])
+    return out
+
+
+def wake_add(src, phrase):
+    """Use your own openWakeWord model (.onnx): check that it loads and runs, keep a copy named after the
+    phrase it listens for, and switch to it."""
+    import re
+
+    src = pathlib.Path(src).expanduser()
+    slug = re.sub(r"[^a-z0-9]+", "_", (phrase or "").lower()).strip("_")
+    if not src.is_file() or src.suffix.lower() != ".onnx":
+        return {"ok": False, "error": "Pick an openWakeWord model file ending in .onnx."}
+    if not slug:
+        return {"ok": False, "error": "Type the phrase the model listens for, like \"hey computer\"."}
+    try:
+        import numpy as np
+        from openwakeword.model import Model
+
+        Model(wakeword_models=[str(src)], inference_framework="onnx").predict(np.zeros(1280, np.int16))
+    except Exception as e:
+        return {"ok": False, "error": f"That file isn't a working wake word model: {e}"}
+    _wake_dir().mkdir(parents=True, exist_ok=True)
+    dest = _wake_dir() / f"{slug}.onnx"
+    dest.write_bytes(src.read_bytes())
+    set_setting("wake.model", _home_path(dest))
+    return {"ok": True, "model": _home_path(dest), "phrase": slug.replace("_", " ").title()}
+
+
+def wake_del(model):
+    """Remove an uploaded wake word model (never a built-in one or your trained zade.onnx)."""
+    p = pathlib.Path(model).expanduser()
+    if p.parent != _wake_dir() or not p.is_file():
+        return {"ok": False, "error": "Only wake words you added can be removed."}
+    p.unlink()
+    if pathlib.Path(config.load(CONFIG)["wake"]["model"]).expanduser() == p:
+        set_setting("wake.model", "hey_jarvis")  # it was in use: back to a built-in one
+    return {"ok": True}
+
+
 def run(argv):
     cmd, args = (argv[0], argv[1:]) if argv else ("status", [])
     if cmd == "status":
@@ -226,6 +288,12 @@ def run(argv):
         if not clips:
             return {"ok": False, "error": "Record your voice first: python -m zade.record_wake"}
         return {"ok": True, "clips": voice_focus.enroll(clips, DATA)}
+    if cmd == "wake-list":
+        return {"ok": True, "words": wake_list()}
+    if cmd == "wake-add":  # the app's "Add your own": a model file and the phrase it listens for
+        return wake_add(args[0] if args else "", " ".join(args[1:]))
+    if cmd == "wake-del":
+        return wake_del(args[0] if args else "")
     if cmd == "voices":
         return KOKORO_VOICES
     if cmd == "preview":
