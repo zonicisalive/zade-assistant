@@ -256,7 +256,7 @@ def _clips(source):
                 yield name.split("/")[0], z.read(name)
 
 
-def add_recordings(sources, clips_dir, n_samples, synthetic_ok=True):
+def add_recordings(sources, clips_dir, n_samples, synthetic_ok=True, real_share=0.05):
     """Mix real voices into the generated ones: repeated so they make up ~5% of the positives
     (augmentation adds different noise and echo to every copy), and near-misses as negatives."""
     got = {kind: [] for kind in KINDS}
@@ -273,7 +273,10 @@ def add_recordings(sources, clips_dir, n_samples, synthetic_ok=True):
     if not pos and not neg:
         print("No recordings found: training on synthetic voices only.", flush=True)
         return
-    for kind, clips, copies in [("positive_train", pos, max(1, n_samples // 20 // max(1, len(pos)))),
+    # Each real clip is repeated (with different noise and echo every time) until real voices make up
+    # real_share of all the wake-word examples.
+    real_copies = max(1, round(real_share * (n_samples + len(synthetic)) / ((1 - real_share) * max(1, len(pos)))))
+    for kind, clips, copies in [("positive_train", pos, real_copies),
                                 ("negative_train", neg, 10)]:
         for i, data in enumerate(clips):
             for c in range(copies):
@@ -349,7 +352,7 @@ def inner(args):
         generate_on_all_gpus(work, config, torch.cuda.device_count())
     sh(*train, "--generate_clips")
     add_recordings(find_recordings(args.recordings), work / "model" / MODEL_NAME, args.samples,
-                   synthetic_ok=not args.no_synthetic)
+                   synthetic_ok=not args.no_synthetic, real_share=args.real_share)
     sh(*train, "--augment_clips")
     onnx = work / "model" / f"{MODEL_NAME}.onnx"
     try:
@@ -373,6 +376,8 @@ def main():
     p.add_argument("--audioset-parts", type=int, default=3, help="AudioSet background files, ~700 MB each")
     p.add_argument("--max-background", type=int, default=100000, help="cap on background clips")
     p.add_argument("--acav-gb", type=float, default=17.3, help="GB of pre-computed negative features (17.3 = all)")
+    p.add_argument("--real-share", type=float, default=0.05,
+                   help="share of wake-word examples that are real recordings (repeated with new noise each time)")
     p.add_argument("--no-synthetic", action="store_true", help="leave out the Indian-accent synthetic clips")
     p.add_argument("--recordings", default="", help="recording zips, comma-separated (found automatically on Kaggle)")
     argv = sys.argv[1:]
