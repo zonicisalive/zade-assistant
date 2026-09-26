@@ -86,7 +86,8 @@ TOOLS = [
        "(device: a speaker, phone or computer, like \"echo dot\").", ["query"],
        query=S, provider={"type": "string", "enum": ["spotify", "youtube", "youtube music"]}, device=S),
     _t("guide_screen", "Guide the user on their screen, step by step, by pointing at what to click for a task in an "
-       "app or setting on this computer (e.g. 'share my screen in Discord', 'find the Wi-Fi settings'). Not for "
+       "app or setting on this computer (e.g. 'share my screen in Discord', 'find the Wi-Fi settings'), or point at "
+       "something on screen ('where is the message bar', 'point at the send button'). Not for "
        "general how-to questions that don't involve their screen.", ["goal"], goal=S),
     _t("look_at_screen", "Look at the user's screen and answer a question about it (read text, errors, "
        "describe what is shown).", ["question"], question=S),

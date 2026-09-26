@@ -266,7 +266,7 @@ def test_screen_guide_patterns():
     P, find = router.parse_pattern, lambda q: None
     assert P("guide me to turn on screen share in discord", find) == {"name": "guide", "args": {"goal": "turn on screen share in discord"}}
     assert P("show me how to change zade's voice", find)["args"] == {"goal": "change zade's voice"}
-    assert P("where is the settings button", find)["args"] == {"goal": "find the settings button"}
+    assert P("where is the settings button", find)["args"] == {"goal": "click the settings button"}
     assert P("click it", find) == {"name": "guide_click", "args": {}} and P("stop guiding", find)["name"] == "guide_stop"
     assert P("show me your happy face", find)["name"] == "express"
     for t in ["help me write an email", "show me the weather", "where is mumbai"]:
@@ -283,3 +283,16 @@ def test_snooze_and_durations():
         assert router.parse_snooze(text) == seconds, text
     for text in ["stop", "stop the song", "stop for pizza", "stop playing for 10 minutes", "pause music for 10 minutes"]:
         assert router.parse_snooze(text) is None, text
+
+
+def test_pointing_at_things_on_screen():
+    for text, thing in [("point out to message bar on my screen", "message bar"), ("where is the message bar", "message bar"),
+                        ("point at the send button", "send button"), ("show me the settings icon", "settings icon"),
+                        ("find wifi on my screen", "wifi"), ("message bar kaha hai", "message bar"),
+                        ("highlight the search box", "search box"), ("point me to discord", "discord"),
+                        ("i cant find the send button", "send button"), ("where are the notifications", "notifications")]:
+        assert router.parse_point_at(router.normalize(text)) == thing, text
+    for text in ["where is delhi", "show me how to share screen", "show me my reminders", "what is the weather"]:
+        assert router.parse_point_at(router.normalize(text)) is None, text
+    assert router.parse_pattern(router.normalize("Where is the message bar?"), lambda n: None) == \
+        {"name": "guide", "args": {"goal": "click the message bar"}}

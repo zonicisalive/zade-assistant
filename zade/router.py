@@ -108,6 +108,37 @@ _RESUME = (r"(?:you can (?:talk|speak|listen|respond|reply)(?: to me)?(?: now| a
            r"unmute yourself|unsnooze|end (?:the )?snooze|ab bolo|ab bol sakte ho)")
 
 
+# Things on a screen: "where is X" is about the screen only when X is one of these (not "where is delhi")
+_UI = (r"(?:button|btn|option|options|setting|settings|menu|icon|tab|switch|toggle|bar|box|field|link|input|sidebar|"
+       r"side bar|panel|window|dropdown|drop down|checkbox|check box|slider|scrollbar|toolbar|tool bar|page|section|"
+       r"list|channel|chat|folder|toggle|key|shortcut|logo|arrow|dot|dots|gear|cog|avatar|profile picture|"
+       r"notification|notifications|badge|popup|pop up|dialog|prompt|search|searchbar|address bar|url bar|"
+       r"text box|textbox|message bar|message box|chat box|send button|play button|pause button|volume|"
+       r"close button|minimize button|maximize button|x button|scroll bar|title bar|status bar|taskbar|dock|tray)")
+_ON_SCREEN = r"(?: (?:on|in) (?:my|the|this) (?:screen|window|app|page)| here| over here| screen (?:pe|par|mein|me))"
+_FIND = (r"(?:where(?: is|'?s| are|'?re| do i find| can i find| would i find| will i find)|show me(?: where)?(?: is)?|"
+         r"how do i find|help me find|find|locate|look for|i can'?t find|i cannot find|i don'?t see|i can'?t see|"
+         r"kaha hai|kahan hai)")
+_POINT = r"(?:point|pointing|highlight|circle|mark|indicate)(?: it)?(?: me)?(?: out)?(?: to| at| towards| toward)?"
+
+
+def parse_point_at(text):
+    """ "point at the send button", "where is the message bar", "find wifi on my screen", "message bar kaha hai"
+    -> what to point at (None when it isn't about the screen)."""
+    t = re.sub(r"^(?:can you |could you |please |just )+", "", text)
+    art = r"(?:(?:the|my|a|an|that|this) )?"
+    if m := re.fullmatch(rf"{_POINT} {art}(.+?){_ON_SCREEN}?", t):  # pointing is always about the screen
+        if not re.fullmatch(r"(?:how|it|that|this)(?: .*)?", m[1]):
+            return m[1]
+    if m := re.fullmatch(rf"{_FIND} {art}(.+?){_ON_SCREEN}", t):  # anything, said to be on the screen
+        return m[1]
+    if m := re.fullmatch(rf"{_FIND} {art}(.+? {_UI}|{_UI})", t):  # a screen thing by its kind
+        return m[1]
+    if m := re.fullmatch(rf"{art}(.+? {_UI}|{_UI}) (?:kaha|kahan) (?:hai|he|h)(?:{_ON_SCREEN})?", t):
+        return m[1]
+    return None
+
+
 def parse_snooze(text):
     """"stop for 10 minutes", "don't respond for an hour", "10 minute ke liye chup raho" -> seconds (0 = resume)."""
     if re.fullmatch(_RESUME, text):
@@ -202,9 +233,8 @@ def parse_pattern(text, find_app):
     # Screen guide: point at what to click, step by step; click only when asked
     if m := re.fullmatch(r"(?:guide me|walk me through|show me how)(?: how)?(?: to)? (.+?)(?: on (?:my |the )?screen)?", text):
         return {"name": "guide", "args": {"goal": m[1]}}
-    if m := re.fullmatch(r"(?:show me )?where(?: is|'?s| are| do i find)(?: the)? (.+? (?:button|option|setting|settings|menu|"
-                         r"icon|tab|switch|toggle))(?: on (?:my |the )?screen)?", text):
-        return {"name": "guide", "args": {"goal": f"find the {m[1]}"}}
+    if thing := parse_point_at(text):
+        return {"name": "guide", "args": {"goal": f"click the {thing}"}}
     if re.fullmatch(r"(?:click|press|tap)(?: on)? (?:it|that|there|this)|(?:yes )?(?:do it|click it for me)", text):
         return {"name": "guide_click", "args": {}}
     if re.fullmatch(r"stop (?:guiding|the guide|helping)|(?:end|exit|cancel) (?:the )?guide", text):
