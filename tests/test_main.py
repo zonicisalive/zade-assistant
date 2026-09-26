@@ -388,3 +388,23 @@ def test_stop_for_a_while_ignores_the_wake_word_until_then(monkeypatch):
     assert said[-1].startswith("Okay, quiet for 10 minutes")
     z.handle(make(said), "you can talk now")
     assert not z.snoozed() and said[-1] == "I'm listening again."
+
+
+def test_text_model_and_screen_pointer_take_turns(monkeypatch):
+    from zade import brain, guide
+
+    events = []
+
+    class Guide:
+        uses_pointer = True
+        stopped = type("E", (), {"is_set": lambda self: False})()
+
+    monkeypatch.setattr(guide, "pause_pointer", lambda: events.append("pointer off"))
+    monkeypatch.setattr(brain, "unload", lambda cfg: events.append("text model off"))
+    ctx = make([], ask=lambda *a, **k: events.append("text model answers") or "Four.")
+    ctx.guide = Guide()
+    z.handle(ctx, "what is two plus two")
+    for t in list(z.threading.enumerate()):
+        if t is not z.threading.current_thread() and t.daemon:
+            t.join(1)
+    assert events == ["pointer off", "text model answers", "text model off"]

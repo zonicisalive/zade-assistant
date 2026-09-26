@@ -250,6 +250,10 @@ def recent(ctx, now=None):
     return [(u, r) for t, u, r in ctx.history if now - t <= f["history_s"]][-f["history_turns"]:]
 
 
+def guide_active(ctx):
+    return bool(ctx.guide) and not ctx.guide.stopped.is_set()
+
+
 def wants_followup(reply):
     """Keep listening after anything Zade said; silence ends it (not after "stop", which says nothing)."""
     return bool(reply)
@@ -444,7 +448,14 @@ def handle(ctx, raw):
                 ctx.turn.append({"name": name, "args": args})
             return out or "done"
 
+        guiding = guide_active(ctx) and ctx.guide.uses_pointer
+        if guiding:  # the text model and the screen pointer take turns in VRAM
+            from . import guide
+
+            guide.pause_pointer()
         emotion, reply = split_emotion(ctx.ask(text, memory.facts(ctx.conn), ctx.cfg, run_tool, recent(ctx)))
+        if guiding:
+            threading.Thread(target=brain.unload, args=(ctx.cfg,), daemon=True).start()
         reply = tidy(reply, acted=bool(called))
         ctx.show(emotion=choose_emotion(emotion, reply))
         if reply:
@@ -693,7 +704,8 @@ def main():
                 say("Reminder: " + ctx.alerts.pop(0))
             continue
         audio.cue(stream, cfg=cfg)
-        threading.Thread(target=brain.warm_up, args=(cfg,), daemon=True).start()
+        if not guide_active(ctx):  # while guiding, the screen pointer has the VRAM
+            threading.Thread(target=brain.warm_up, args=(cfg,), daemon=True).start()
         # Push-to-talk: while the key is still held, record until it is released.
         ptt_active = source == "hotkey" and ptt and ptt.held()
         if cfg["sound"]["wake_reply"] and not ptt_active:  # e.g. "Yes?" before listening

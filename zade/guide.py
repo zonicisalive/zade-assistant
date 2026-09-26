@@ -152,6 +152,8 @@ def _pointer_ask(text, img, cfg, system=None, max_tokens=30, prefill=None, wait_
 
     from PIL import Image
 
+    # (re)start it: it steps aside while the text model answers something mid-guide (they never share VRAM)
+    subprocess.run(["systemctl", "--user", "start", "--no-block", POINTER_SERVICE], capture_output=True)
     buf = io.BytesIO()
     Image.fromarray(img).resize((1920, round(img.shape[0] * 1920 / img.shape[1]))).save(buf, "PNG")
     image = {"type": "image_url", "image_url": {"url": "data:image/png;base64," + base64.b64encode(buf.getvalue()).decode()}}
@@ -171,6 +173,11 @@ def _pointer_ask(text, img, cfg, system=None, max_tokens=30, prefill=None, wait_
             if time.monotonic() > deadline:
                 raise RuntimeError(f"the screen pointer isn't answering: {e}") from e
             time.sleep(1)
+
+
+def pause_pointer():
+    """Free the pointer model's VRAM for the text model (it loads again in ~2 s at the next guide step)."""
+    subprocess.run(["systemctl", "--user", "stop", POINTER_SERVICE], capture_output=True)
 
 
 def _point_local(what, img, cfg):
@@ -330,9 +337,13 @@ class Session:
         self.stopped = threading.Event()
         self.wake = threading.Event()
         self._clicker = None
-        self._pointer = cfg["guide"].get("pointer", "local") == "local"
-        if self._pointer:  # loads while the first step is planned; stopped with the guide, so VRAM is freed
+        self.uses_pointer = cfg["guide"].get("pointer", "local") == "local"
+        if self.uses_pointer:  # loads while the first step is planned; stopped with the guide, so VRAM is freed
             subprocess.run(["systemctl", "--user", "start", "--no-block", POINTER_SERVICE], capture_output=True)
+            from . import brain
+
+            # the text model (~1.3 s to load back) and the pointer (~2 s) take turns instead of sharing VRAM
+            threading.Thread(target=brain.unload, args=(cfg,), daemon=True).start()
         show_pointer(None)  # the overlay starts hidden
         self._overlay = subprocess.Popen(["qs", "-p", str(POINTER_QML)], stdout=subprocess.DEVNULL,
                                          stderr=subprocess.DEVNULL, start_new_session=True)
@@ -407,5 +418,5 @@ class Session:
             self._clicker.close()
         if self._overlay.poll() is None:
             self._overlay.terminate()
-        if self._pointer:
+        if self.uses_pointer:
             subprocess.run(["systemctl", "--user", "stop", "--no-block", POINTER_SERVICE], capture_output=True)
