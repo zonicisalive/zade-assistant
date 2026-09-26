@@ -64,6 +64,8 @@ def log(conn, text, actions, source, ok):
         "INSERT INTO history (text, action, source, ok) VALUES (?, ?, ?, ?)",
         (text, _key(actions), source, int(ok)),
     )
+    # only recent habits matter for shortcut offers; without a cap the table grows with every request
+    conn.execute("DELETE FROM history WHERE rowid <= (SELECT MAX(rowid) FROM history) - 2000")
     conn.commit()
 
 

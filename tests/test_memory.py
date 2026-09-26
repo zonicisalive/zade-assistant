@@ -107,3 +107,10 @@ def test_forgetting_removes_only_the_best_match():
     assert memory.forget_fact(c, "i") == 1 and len(memory.facts(c)) == 2   # not all three
     assert memory.forget_fact(c, "_") == 0 and memory.forget_fact(c, "%") == 0  # wildcards are literal
     assert memory.forget_fact(c, "my city") == 1 and "my city is silvassa" not in memory.facts(c)
+
+
+def test_action_history_keeps_only_recent_rows():
+    c = memory.connect(":memory:")
+    for i in range(2100):
+        memory.log(c, f"open app {i}", [{"name": "open_app", "args": {"name": str(i)}}], "pattern", True)
+    assert c.execute("SELECT COUNT(*) FROM history").fetchone()[0] == 2000
