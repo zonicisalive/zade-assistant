@@ -160,6 +160,12 @@ def _user_token(cid, secret, refresh):
     """Access token for your account, reused for its hour of life (a fresh one per song cost seconds)."""
     if _user_cache.get("refresh") != refresh or time.time() > _user_cache.get("expires", 0) - 60:
         data = _post_token(cid, secret, {"grant_type": "refresh_token", "refresh_token": refresh})
+        if (new := data.get("refresh_token")) and new != refresh:
+            # Spotify may rotate it and revoke the old one: keep the new one, or the next login fails
+            from . import ctl
+
+            ctl.set_key("SPOTIFY_REFRESH_TOKEN", new)
+            os.environ["SPOTIFY_REFRESH_TOKEN"] = refresh = new
         _user_cache.update(refresh=refresh, token=data["access_token"],
                            expires=time.time() + data.get("expires_in", 3600))
     return _user_cache["token"]

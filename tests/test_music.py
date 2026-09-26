@@ -245,3 +245,15 @@ def test_liked_songs_never_jump_to_another_device(monkeypatch):
     monkeypatch.setattr(music.socket, "gethostname", lambda: "otherbox")  # this PC's Spotify never shows up
     assert music.play("my liked songs", "app") == "I opened your Liked Songs in Spotify on this PC."
     assert not [c for c in calls if c[0] == "PUT"]                          # nothing sent to the phone or speaker
+
+
+def test_a_rotated_spotify_refresh_token_is_kept(monkeypatch):
+    from zade import ctl
+
+    saved = []
+    monkeypatch.setattr(ctl, "set_key", lambda name, value: saved.append((name, value)))
+    monkeypatch.setattr(music, "_post_token", lambda cid, secret, form: {"access_token": "A", "refresh_token": "NEW"})
+    monkeypatch.setattr(music, "_user_cache", {})
+    monkeypatch.setenv("SPOTIFY_REFRESH_TOKEN", "OLD")
+    assert music._user_token("id", "secret", "OLD") == "A"
+    assert saved == [("SPOTIFY_REFRESH_TOKEN", "NEW")] and music.os.environ["SPOTIFY_REFRESH_TOKEN"] == "NEW"
