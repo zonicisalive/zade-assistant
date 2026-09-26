@@ -157,10 +157,13 @@ def start():
 
 
 def stop():
-    if SERVICE.exists() and _systemctl("is-active", "zade").stdout.strip() == "active":
+    if SERVICE.exists():  # always, not only when "active": a crash-looping Zade is "activating" between tries
         _systemctl("stop", "zade")
-    elif pid := _pid():
-        os.kill(pid, signal.SIGTERM)
+    if _running() and (pid := _pid()):  # started by hand, outside systemd
+        try:
+            os.kill(pid, signal.SIGTERM)
+        except ProcessLookupError:
+            pass
     return {"ok": True}
 
 
@@ -259,10 +262,12 @@ def run(argv):
         stop()
         import time
 
-        for _ in range(40):
+        for _ in range(150):  # up to 15 s: mid-reply it can take a while to let go
             if not _running():
                 break
             time.sleep(0.1)
+        else:
+            return {"ok": False, "error": "Zade didn't stop in time, so it wasn't restarted. Try again."}
         return start()
     if cmd == "autostart":
         return autostart(args[0] == "on")
