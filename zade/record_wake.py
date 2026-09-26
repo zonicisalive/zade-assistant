@@ -56,10 +56,19 @@ def _take(stream, prompt, seconds=2.5):
     return trim(np.concatenate(frames))
 
 
+def next_index(folder, kind):
+    """The number after the highest clip already saved: counting files would overwrite the last clip
+    after one was deleted (60 clips, one removed, the next clip reuses number 59)."""
+    import re
+
+    nums = [int(m[1]) for p in folder.glob(f"{kind}_*.wav") if (m := re.fullmatch(rf"{kind}_(\d+)", p.stem))]
+    return max(nums) + 1 if nums else 0
+
+
 def _session(kind, count, prompts):
     folder = OUT / kind
     folder.mkdir(parents=True, exist_ok=True)
-    done = len(list(folder.glob("*.wav")))
+    done = next_index(folder, kind)
     stream = audio.open_stream()
     try:
         n = 0
