@@ -139,3 +139,9 @@ def test_openrouter_requests_zero_data_retention():
     assert providers._private(C) == {"provider": {"zdr": True, "data_collection": "deny"}}
     C.base_url = "https://api.openai.com/v1/"
     assert providers._private(C) is None
+
+
+def test_silent_turns_are_not_sent_back_to_the_model():
+    assert providers._history([("hi", "Hello!"), ("nobody will listen", ""), ("what time is it", "Ten.")]) == [
+        {"role": "user", "content": "hi"}, {"role": "assistant", "content": "Hello!"},
+        {"role": "user", "content": "what time is it"}, {"role": "assistant", "content": "Ten."}]

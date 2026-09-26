@@ -45,7 +45,8 @@ def _client(name, cfg):
 def _history(history):
     msgs = []
     for user, assistant in history:
-        msgs += [{"role": "user", "content": user}, {"role": "assistant", "content": assistant}]
+        if user and assistant:  # Zade stayed silent: an empty turn is refused by Claude's API (a 400)
+            msgs += [{"role": "user", "content": user}, {"role": "assistant", "content": assistant}]
     return msgs
 
 
