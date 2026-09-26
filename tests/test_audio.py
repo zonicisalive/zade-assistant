@@ -1,3 +1,5 @@
+import numpy as np
+
 from zade import audio
 
 A = dict(thr=500, silence_s=0.8, max_s=10.0, start_timeout_s=4.0)
@@ -205,3 +207,18 @@ def test_open_stream_waits_for_the_microphone(monkeypatch):
     monkeypatch.setattr(audio.sd, "_initialize", lambda: None)
     monkeypatch.setattr(audio.time, "sleep", lambda s: None)
     assert isinstance(audio.open_stream(), Stream) and len(tries) == 3
+
+
+def test_a_sure_wake_skips_the_check(monkeypatch):
+    class Model:
+        def __init__(self, score): self.score = score
+        def reset(self): pass
+        def predict(self, f): return {"w": self.score}
+
+    monkeypatch.setattr(audio, "read", lambda stream: np.zeros(audio.FRAME, np.int16))
+    checked = []
+    veto = lambda clip: checked.append(1) or False
+    assert audio.wait_for_wake(object(), Model(0.8), 0.2, verify=veto, sure=0.5) == "wake" and not checked
+    polls = iter([None, None, "hotkey"])
+    assert audio.wait_for_wake(object(), Model(0.3), 0.2, poll=lambda: next(polls), verify=veto, sure=0.5) == "hotkey"
+    assert checked  # an unsure wake was checked (and vetoed)

@@ -540,7 +540,8 @@ def main():
             barge.clear()
         else:
             source = audio.wait_for_wake(stream, wake, cfg["wake"]["threshold"], poll,
-                                         verify=(lambda clip: stt.wake_check(clip, cfg)) if cfg["wake"]["verify"] else None)
+                                         verify=(lambda clip: stt.wake_check(clip, cfg)) if cfg["wake"]["verify"] else None,
+                                         sure=cfg["wake"].get("sure", 0.5))
         if source == "wake" and is_quiet(cfg):  # quiet hours / Do Not Disturb: ignore the wake word
             log.info("wake word ignored (quiet)")
             continue

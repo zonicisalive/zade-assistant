@@ -93,9 +93,10 @@ RECENT_FRAMES = 25   # ~2 s of audio kept for the wake word's second opinion
 COOLDOWN_FRAMES = 12  # ~1 s ignored after a rejected wake, so the same sound can't re-trigger
 
 
-def wait_for_wake(stream, model, threshold, poll=None, verify=None):
+def wait_for_wake(stream, model, threshold, poll=None, verify=None, sure=1.01):
     """Return "wake" on the wake word, or whatever `poll()` returns when it is truthy (e.g. "hotkey").
-    With `verify`, a candidate wake only counts if verify(last ~2 s of audio) agrees."""
+    With `verify`, a candidate wake only counts if verify(last ~2 s of audio) agrees, unless the wake model
+    is sure (score >= `sure`): the tiny Whisper check mishears accented "hey Zade" as "is it" or "hey dude"."""
     model.reset()
     recent = collections.deque(maxlen=RECENT_FRAMES)
     cooldown = 0
@@ -111,7 +112,7 @@ def wait_for_wake(stream, model, threshold, poll=None, verify=None):
             cooldown -= 1
             continue
         if score >= threshold:
-            if verify is None or verify(np.concatenate(recent)):
+            if verify is None or score >= sure or verify(np.concatenate(recent)):
                 return "wake"
             log.info("wake rejected by the second check (score %.2f)", score)
             cooldown = COOLDOWN_FRAMES
