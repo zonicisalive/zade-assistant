@@ -296,13 +296,22 @@ def _play_liked(cid, secret, refresh, user, devices, chosen, mode, play_on):
     if not uris:
         raise Failed("Your Liked Songs list is empty.")
     devices = devices if devices is not None else _devices(user)
+    this_pc = lambda ds: next((d for d in ds if d["type"].lower() == "computer"
+                               and d["name"].lower() == socket.gethostname().lower()), None)
     if not chosen and play_on == "this_pc":
-        chosen = next((d for d in devices if d["type"].lower() == "computer"
-                       and d["name"].lower() == socket.gethostname().lower()), None)
+        chosen = this_pc(devices)
     if not chosen and not (mode == "connect" and play_on != "this_pc"):
-        _open(uris[0])  # start this PC's app, which then shows up as a device
-        devices = _devices(user)
-        chosen = next((d for d in devices if d["type"].lower() == "computer"), None)
+        # Start this PC's app and wait for it to show up as a device. Never fall back to whatever device is
+        # active: that sent "play my liked songs" to the phone.
+        _open(uris[0])
+        for _ in range(8):
+            time.sleep(1)
+            devices = _devices(user)
+            if chosen := this_pc(devices):
+                break
+        else:
+            _open("spotify:collection:tracks")
+            return "I opened your Liked Songs in Spotify on this PC."
     where = _play_connect(uris, user, devices, chosen)
     return f"Playing your Liked Songs, shuffled{' on ' + where if where else ''}."
 

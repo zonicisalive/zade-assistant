@@ -232,3 +232,16 @@ def test_liked_songs_play_the_users_library(monkeypatch):
     put = calls[-1]
     assert put[1] == "/me/player/play?device_id=pc" and sorted(put[2]["uris"]) == [f"spotify:track:L{i}" for i in range(3)]
     assert music.LIKED.fullmatch("my favourites") and not music.LIKED.fullmatch("liked by eminem")
+
+
+def test_liked_songs_never_jump_to_another_device(monkeypatch):
+    calls, searched = [], []
+    connect(monkeypatch, calls, searched)
+    liked = {"items": [{"track": {"uri": f"spotify:track:L{i}"}} for i in range(3)]}
+    api = music._api
+    monkeypatch.setattr(music, "_api", lambda m, path, t, body=None:
+                        liked if path.startswith("/me/tracks") else (calls.append((m, path, body)) if m == "PUT" else api(m, path, t, body)))
+    monkeypatch.setattr(music.time, "sleep", lambda s: None)
+    monkeypatch.setattr(music.socket, "gethostname", lambda: "otherbox")  # this PC's Spotify never shows up
+    assert music.play("my liked songs", "app") == "I opened your Liked Songs in Spotify on this PC."
+    assert not [c for c in calls if c[0] == "PUT"]                          # nothing sent to the phone or speaker
