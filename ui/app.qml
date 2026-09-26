@@ -729,9 +729,9 @@ ShellRoot {
                             Divider {}
                             Row_ { label: "Wake word sensitivity"; hint: "Lower hears you more easily; higher avoids false wakes."
                                 RowLayout { spacing: 8
-                                    Repeater { model: [0.35, 0.5, 0.65]
+                                    Repeater { model: [0.2, 0.35, 0.5, 0.65]
                                         Chip { required property real modelData
-                                               text: ({ 0.35: "Easy", 0.5: "Normal", 0.65: "Strict" })[modelData]
+                                               text: ({ 0.2: "Very easy", 0.35: "Easy", 0.5: "Normal", 0.65: "Strict" })[modelData]
                                                selected: root.settings && Math.abs(root.settings.wake.threshold - modelData) < 0.01
                                                onClicked: root.setSetting("wake.threshold", modelData) } } } }
                             Divider {}
