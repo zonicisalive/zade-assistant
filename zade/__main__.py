@@ -717,8 +717,11 @@ def main():
             audio.cue(stream, soft=True, cfg=cfg)
             text = hear(released=lambda: not typer.held(), cancelled=typer.cancelled)
             if text and (typed := dictation_text(text)):
-                actions._call(["wtype", "--", typed])
-                log.info("typed %r", typed)
+                try:
+                    actions._call(["wtype", "--", typed])
+                    log.info("typed %r", typed)
+                except actions.Failed as e:
+                    log.warning("voice typing failed: %s", e)
             ui.show("idle")
             continue
         if source == "typed":  # from the app: no microphone, straight to handling

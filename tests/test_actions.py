@@ -353,3 +353,8 @@ def test_close_app_closes_its_windows_and_reports_a_miss(monkeypatch):
     monkeypatch.setattr(actions, "_output", lambda cmd: "[]")
     with pytest.raises(actions.Failed):   # no window, and the name is too long for pkill: not open
         actions._close_app(("google-chrome", "google-chrome-stable"), "chrome")
+
+
+def test_a_missing_program_is_a_failure_not_a_crash():
+    with pytest.raises(actions.Failed, match="isn't installed"):
+        actions._call(["zade-no-such-program-xyz", "--help"])

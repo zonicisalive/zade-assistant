@@ -143,7 +143,10 @@ def app_names(dirs=USER_APP_DIRS):
 
 
 def _call(cmd):
-    subprocess.run(cmd, check=False, capture_output=True)
+    try:
+        subprocess.run(cmd, check=False, capture_output=True)
+    except FileNotFoundError:  # e.g. wtype or playerctl not installed: a spoken failure, never a crash
+        raise Failed(f"{cmd[0]} isn't installed, so I can't do that.") from None
 
 
 def _feed(cmd, text):
