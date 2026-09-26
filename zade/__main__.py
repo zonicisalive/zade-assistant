@@ -453,9 +453,12 @@ def handle(ctx, raw):
             from . import guide
 
             guide.pause_pointer()
-        raw = ctx.ask(text, memory.facts(ctx.conn), ctx.cfg, run_tool, recent(ctx))
-        log.info("model said %r", raw)
-        emotion, reply = split_emotion(raw)
+        # the words as heard: normalizing drops "can you" and the like for matching commands, which turns
+        # "What can you do?" into "what do"
+        said = " ".join((raw or "").split()) or text
+        answer = ctx.ask(said, memory.facts(ctx.conn), ctx.cfg, run_tool, recent(ctx))
+        log.info("model said %r", answer)
+        emotion, reply = split_emotion(answer)
         if guiding:
             threading.Thread(target=brain.unload, args=(ctx.cfg,), daemon=True).start()
         reply = tidy(reply, acted=bool(called))
@@ -465,7 +468,7 @@ def handle(ctx, raw):
         if executed:
             memory.log(ctx.conn, text, executed, "llm", True)
             offer(ctx, text, executed)
-    ctx.history.append((time.monotonic(), text, reply))
+    ctx.history.append((time.monotonic(), " ".join((raw or "").split()) or text, reply))  # as heard, for the model
     del ctx.history[:-20]
     return reply
 

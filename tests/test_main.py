@@ -414,3 +414,10 @@ def test_nothing_heard_leaves_no_history_entry():
     ctx = make([])
     assert z.safe_handle(ctx, "") == ""
     assert memory.requests(ctx.conn) == []
+
+
+def test_the_model_gets_the_words_as_heard():
+    got = []
+    ctx = make([], ask=lambda text, *a, **k: got.append(text) or "I can open apps and more.")
+    z.handle(ctx, "What can you do?")
+    assert got == ["What can you do?"]  # not "what do": "can you" is only dropped to match commands
