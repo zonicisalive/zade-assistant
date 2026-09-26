@@ -304,6 +304,23 @@ def shell(cmd, confirm):
     return out[:2000] if out else f"Done, exit code {p.returncode}."
 
 
+def send_message(to, text, app="discord"):
+    """Message a person on Discord the way a user would: its quick switcher (Ctrl+K) finds "@name" among
+    people only, Enter opens the chat, then the text is typed and sent."""
+    if (app or "discord").lower() != "discord":
+        raise Failed(f"I can only send messages on Discord for now, not {app}.")
+    was_running = subprocess.run(["pgrep", "-if", "discord"], capture_output=True).returncode == 0
+    run({"name": "open_app", "args": {"name": "discord"}}, None)
+    time.sleep(1.5 if was_running else 12)  # a cold start takes a while
+    # ponytail: trusts the switcher's top match for "@name" (exact usernames come first); reading the chat
+    # header back with OCR would catch a wrong pick
+    for step, pause in ((wtype_args("ctrl+k"), 0.7), (["--", "@" + to.lstrip("@")], 1.2),
+                        (wtype_args("enter"), 1.5), (["--", text], 0.3), (wtype_args("enter"), 0)):
+        _call(["wtype", *step])
+        time.sleep(pause)
+    return f"Sent to {to} on Discord."
+
+
 def run(action, confirm):
     name, a = action["name"], action.get("args", {})
     if name in ("open_app", "close_app"):
@@ -377,6 +394,8 @@ def run(action, confirm):
     if name == "type_text":
         _call(["wtype", "--", a["text"]])
         return ""
+    if name == "send_message":
+        return send_message(a["to"], a["text"], a.get("app", "discord"))
     if name == "brightness":
         if "set" in a:
             _call(["ddcutil", "setvcp", "10", str(max(0, min(100, int(a["set"]))))])

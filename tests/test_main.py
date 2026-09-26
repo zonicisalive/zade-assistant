@@ -357,24 +357,24 @@ def test_click_it_without_a_guide():
 
 
 def test_model_filler_and_made_up_actions_are_dropped():
-    assert z.tidy("Hello Zonic! How can I assist you today?", acted=False) == "Hello Zonic!"
-    assert z.tidy("Hello Zonic, how can I assist you today?", False) == "Hello Zonic!"
-    assert z.tidy("Sure! What can I do for you today, zonic?", False) == "Sure!"
-    assert z.tidy("SILENT", False) == ""
-    assert z.tidy("I'm here to help if you need anything.", False) == ""  # only filler: stay quiet
-    assert z.tidy("Alright, let me know if you change your mind.", False) == ""
-    assert z.tidy("Your name is Zonic. I'm Zade, your voice assistant on your Arch Linux desktop.", False) == \
+    assert z.tidy("Hello Zonic! How can I assist you today?") == "Hello Zonic!"
+    assert z.tidy("Hello Zonic, how can I assist you today?") == "Hello Zonic!"
+    assert z.tidy("Sure! What can I do for you today, zonic?") == "Sure!"
+    assert z.tidy("SILENT") == ""
+    assert z.tidy("I'm here to help if you need anything.") == ""  # only filler: stay quiet
+    assert z.tidy("Alright, let me know if you change your mind.") == ""
+    assert z.tidy("Your name is Zonic. I'm Zade, your voice assistant on your Arch Linux desktop.") == \
         "Your name is Zonic."
-    assert z.tidy("I don't have feelings. Would you like me to assist you with something?", False) == \
+    assert z.tidy("I don't have feelings. Would you like me to assist you with something?") == \
         "I don't have feelings."
-    assert z.tidy("Silvassa is 28 degrees. Let me know if you need anything else.", False) == "Silvassa is 28 degrees."
-    assert z.tidy("Would you like me to search for it?", False) == "Would you like me to search for it?"  # a real question
+    assert z.tidy("Silvassa is 28 degrees. Let me know if you need anything else.") == "Silvassa is 28 degrees."
+    assert z.tidy("Would you like me to search for it?") == "Would you like me to search for it?"  # a real question
     for claim in ["Instagram is now open! Enjoy exploring.", "Sure, closing the Discord application.", "closing."]:
-        assert z.tidy(claim, acted=False) == "I couldn't do that."
-    assert z.tidy("Opened Discord for you.", acted=True) == "Opened Discord for you."
-    assert z.tidy("Discord is open on workspace 2.", acted=False) == "Discord is open on workspace 2."
-    assert z.tidy("I see a terminal. Can you tell me more about what you need help with?", True) == "I see a terminal."
-    assert z.tidy('{"name": "remember", "arguments": {"fact": "x"}}', False).startswith("Sorry")
+        assert z.tidy(claim) == "I couldn't do that."
+    assert z.tidy("Opened Discord for you.", ["open_app"]) == "Opened Discord for you."
+    assert z.tidy("Discord is open on workspace 2.", ) == "Discord is open on workspace 2."
+    assert z.tidy("I see a terminal. Can you tell me more about what you need help with?", ["look_at_screen"]) == "I see a terminal."
+    assert z.tidy('{"name": "remember", "arguments": {"fact": "x"}}').startswith("Sorry")
 
 
 def test_stop_for_a_while_ignores_the_wake_word_until_then(monkeypatch):
@@ -421,3 +421,33 @@ def test_the_model_gets_the_words_as_heard():
     ctx = make([], ask=lambda text, *a, **k: got.append(text) or "I can open apps and more.")
     z.handle(ctx, "What can you do?")
     assert got == ["What can you do?"]  # not "what do": "can you" is only dropped to match commands
+
+
+def test_claims_must_match_the_tools_that_ran():
+    # it opened Discord (and toggled music), then said the message was sent
+    assert z.tidy("Discord is open and the message has been sent.", ["open_app", "media"]) == \
+        "I couldn't do all of that."
+    assert z.tidy("I've sent the message.", ["send_message"]) == "I've sent the message."
+    assert z.tidy("Discord is now open.", ["open_app"]) == "Discord is now open."
+
+
+def test_messages_to_people_are_always_confirmed(monkeypatch):
+    asked, ran = [], []
+    ctx = make([], run_action=lambda a, c: ran.append(a) or "Sent to dexorto on Discord.")
+    ctx.cfg["safety"]["confirm"] = "never"
+    ctx.confirm = lambda q: asked.append(q) or False
+    assert z.dispatch(ctx, {"name": "send_message", "args": {"to": "dexorto", "text": "hi"}}) == ("Cancelled.", False)
+    assert asked == ["Send hi to dexorto on Discord?"] and ran == []
+
+
+def test_a_declined_message_is_not_claimed_as_sent():
+    said = []
+
+    def ask(text, facts, cfg, run_tool, history=()):
+        run_tool("send_message", {"to": "dexorto", "text": "hi"})
+        return "The message has been sent."
+
+    ctx = make(said, ask=ask, run_action=lambda a, c: "Sent.")
+    ctx.confirm = lambda q: False
+    z.handle(ctx, "message dexorto hi")
+    assert said[-1] == "I couldn't do that."

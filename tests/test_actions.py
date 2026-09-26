@@ -309,3 +309,14 @@ def test_mute_takes_an_explicit_action(monkeypatch):
     assert actions.run({"name": "mute", "args": {"action": "unmute"}}, lambda q: True) == "Sound is back on."
     assert actions.run({"name": "mute", "args": {"on": False}}, lambda q: True) == "Sound is back on."  # patterns
     assert [c[-1] for c in calls] == ["1", "0", "0"]
+
+
+def test_send_message_uses_discords_quick_switcher(monkeypatch):
+    typed = []
+    monkeypatch.setattr(actions, "_call", lambda cmd: typed.append(cmd[1:]))
+    monkeypatch.setattr(actions.time, "sleep", lambda s: None)
+    monkeypatch.setattr(actions, "run", lambda a, c: "")
+    monkeypatch.setattr(actions.subprocess, "run", lambda *a, **k: type("R", (), {"returncode": 0})())
+    assert actions.send_message("dexorto", "this is a test") == "Sent to dexorto on Discord."
+    assert typed == [actions.wtype_args("ctrl+k"), ["--", "@dexorto"], actions.wtype_args("enter"),
+                     ["--", "this is a test"], actions.wtype_args("enter")]

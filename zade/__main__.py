@@ -68,7 +68,7 @@ def dismissed(text):
 
 
 # Tools whose calls are never learned as shortcuts (memory, one-off content, or risky).
-MEMORY_TOOLS = {"snooze", "guide_screen", "guide", "guide_click", "guide_stop", "whoami", "express", "dnd", "look_at_screen", "system_status", "set_reminder", "list_reminders", "cancel_reminder", "sync_apps", "remember", "forget", "list_facts", "make_shortcut", "sleep", "set_timer", "note_add",
+MEMORY_TOOLS = {"send_message", "snooze", "guide_screen", "guide", "guide_click", "guide_stop", "whoami", "express", "dnd", "look_at_screen", "system_status", "set_reminder", "list_reminders", "cancel_reminder", "sync_apps", "remember", "forget", "list_facts", "make_shortcut", "sleep", "set_timer", "note_add",
                 "notes_read", "web_answer", "clipboard_read", "clipboard_copy", "type_text", "power", "shell"}
 
 
@@ -135,14 +135,26 @@ FILLER_SENTENCE = re.compile(
     r"|(?:i'?m|i am) (?:just )?(?:your|a) (?:friendly |helpful |personal )?(?:voice |ai )?assistant\b.*"
     r")(?:,? \w+)?[.!?]*$",  # "..., Zonic?"
     re.I)
-# ...and claim they did things without calling a tool ("Instagram is now open!").
-CLAIMED = re.compile(r"\b(?:is now (?:open|displayed|showing|playing|closed)|is open now|now open|"
-                     r"i(?:'ve| have) (?:opened|closed|started|launched|turned on|turned off|switched))\b"
-                     r"|^(?:sure|okay|ok)?,? ?(?:closing|opening)\b", re.I)
+# ...and claim they did things no tool did ("Instagram is now open!", "the message has been sent" after only
+# opening Discord). Each kind of claim needs one of its tools to have run.
+CLAIMS = [
+    (re.compile(r"\b(?:(?:message|text)s? (?:has |have )?(?:been |was |were )?sent|sent (?:the |your |a |it |them )?"
+                r"(?:message|text)?|i(?:'ve| have)? messaged|(?:has|have) been (?:typed|written))\b", re.I),
+     {"send_message", "type_text", "press_keys"}),
+    (re.compile(r"\b(?:is now open|is open now|now open|i(?:'ve| have)? (?:opened|launched|started))\b"
+                r"|^(?:sure|okay|ok)?,? ?opening\b", re.I), {"open_app", "open_website", "window", "web_search"}),
+    (re.compile(r"\b(?:is now closed|i(?:'ve| have)? closed)\b|^(?:sure|okay|ok)?,? ?closing\b", re.I),
+     {"close_app", "window", "press_keys"}),
+    (re.compile(r"\b(?:is now (?:playing|paused)|now playing|i(?:'ve| have)? (?:paused|played|resumed))\b", re.I),
+     {"play_music", "media"}),
+    (re.compile(r"\b(?:is now (?:displayed|showing)|now displayed|i(?:'ve| have)? (?:turned on|turned off|switched))\b",
+                re.I), None),  # any tool will do
+]
 
 
-def tidy(reply, acted):
-    """A model reply without filler sentences, and without a claimed action when no tool ran."""
+def tidy(reply, called=()):
+    """A model reply without filler sentences, and without claims of actions that no tool took. `called` are
+    the tools that ran."""
     if re.fullmatch(r"\W*silent\W*", reply, re.I):  # the model's own sign that nothing should be said
         return ""
     if reply.lstrip().startswith("{"):  # a tool call written out as text instead of made: never read JSON aloud
@@ -152,8 +164,9 @@ def tidy(reply, acted):
     kept = [x if not FILLER_SENTENCE.match(x) else (g[1] + "!" if (g := greet.match(x)) else "") for x in sentences]
     kept = [x for x in kept if x]
     reply = " ".join(kept)  # only filler ("I'm here to help if you need anything."): better to say nothing
-    if not acted and any(CLAIMED.search(x) for x in kept):
-        return "I couldn't do that."
+    for claim, tools in CLAIMS:
+        if any(claim.search(x) for x in kept) and not (set(called) & tools if tools else called):
+            return "I couldn't do all of that." if called else "I couldn't do that."
     return reply
 
 
@@ -219,7 +232,7 @@ def apply_live(cfg, new):
 
 
 # Actions that need a spoken yes at each safety level (shell and power always ask, in actions.py).
-RISKY = {"close_app", "type_text", "clipboard_copy", "press_keys"}
+RISKY = {"close_app", "type_text", "clipboard_copy", "press_keys", "send_message"}
 READ_ONLY = {"snooze", "guide_screen", "guide", "guide_stop", "whoami", "express", "dnd", "time", "date", "weather", "web_answer", "notes_read", "list_facts", "list_reminders",
              "system_status", "look_at_screen", "clipboard_read", "remember", "forget", "note_add",
              "set_timer", "set_reminder", "cancel_reminder", "make_shortcut", "sync_apps", "sleep",
@@ -264,7 +277,10 @@ def dispatch(ctx, action, from_model=False):
         # Closing things on the model's own initiative always needs a yes; the user naming it doesn't.
         model_close = from_model and (name == "close_app" or (name == "window" and a.get("action") == "close")
                                       or (name == "press_keys" and actions.is_closing(a.get("keys", ""))))
-        if model_close or needs_confirm(name, ctx.cfg["safety"]["confirm"], a):
+        if name == "send_message":  # goes to another person: always read back first, whatever the setting
+            if not ctx.confirm(f"Send {a.get('text', '')} to {a.get('to', '')} on {a.get('app') or 'Discord'}?"):
+                return "Cancelled.", False
+        elif model_close or needs_confirm(name, ctx.cfg["safety"]["confirm"], a):
             detail = next((str(v) for v in a.values() if isinstance(v, (str, int))), "")
             if not ctx.confirm(f"{name.replace('_', ' ').capitalize()}{' ' + detail if detail else ''}?"):
                 return "Cancelled.", False
@@ -441,8 +457,9 @@ def handle(ctx, raw):
         executed, called = [], []
 
         def run_tool(name, args):
-            called.append(name)
             out, ok = dispatch(ctx, {"name": name, "args": args}, from_model=True)
+            if ok:  # only what really happened backs a claim ("sent" after a "no" to the confirmation is a lie)
+                called.append(name)
             if ok and name not in MEMORY_TOOLS:
                 executed.append({"name": name, "args": args})
                 ctx.turn.append({"name": name, "args": args})
@@ -461,7 +478,7 @@ def handle(ctx, raw):
         emotion, reply = split_emotion(answer)
         if guiding:
             threading.Thread(target=brain.unload, args=(ctx.cfg,), daemon=True).start()
-        reply = tidy(reply, acted=bool(called))
+        reply = tidy(reply, called)
         ctx.show(emotion=choose_emotion(emotion, reply))
         if reply:
             ctx.say(reply)

@@ -74,6 +74,10 @@ TOOLS = [
        "\"enter\", \"f5\"; several separated by commas.", ["keys"], keys=S),
     _t("clipboard_read", "Read the text on the clipboard."),
     _t("clipboard_copy", "Copy text to the clipboard.", ["text"], text=S),
+    _t("send_message", "Send a message to a person on Discord (opens Discord, finds them, types it, sends it). "
+                     "The user confirms first.", ["to", "text"], to={"type": "string", "description": "their name"},
+       text={"type": "string", "description": "the message, as the user wants it sent"},
+       app={"type": "string", "enum": ["discord"]}),
     _t("type_text", "Type text into the focused window as if typed on the keyboard.", ["text"], text=S),
     _t("brightness", "Monitor brightness: set to 0-100, or change by delta.",
        set={"type": "integer"}, delta={"type": "integer"}),
