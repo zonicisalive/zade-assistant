@@ -192,7 +192,8 @@ def test_teach_in_one_sentence():
 
 def test_stop_words_are_silent():
     said = []
-    for t in ["Stop.", "cancel", "never mind", "shut up", "quiet", "Stop. Canild."]:  # a misheard "stop, cancel"
+    for t in ["Stop.", "cancel", "never mind", "shut up", "quiet", "Stop. Canild.", "Nobody will listen. Hey, stop.",
+              "I don't need any help.", "No, I'm good."]:  # a misheard "stop, cancel"; waved off
         assert z.handle(make(said), t) == ""
     assert said == []
 
@@ -357,6 +358,8 @@ def test_click_it_without_a_guide():
 
 def test_model_filler_and_made_up_actions_are_dropped():
     assert z.tidy("Hello Zonic! How can I assist you today?", acted=False) == "Hello Zonic!"
+    assert z.tidy("I'm here to help if you need anything.", False) == ""  # only filler: stay quiet
+    assert z.tidy("Alright, let me know if you change your mind.", False) == ""
     assert z.tidy("Your name is Zonic. I'm Zade, your voice assistant on your Arch Linux desktop.", False) == \
         "Your name is Zonic."
     assert z.tidy("I don't have feelings. Would you like me to assist you with something?", False) == \

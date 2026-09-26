@@ -26,7 +26,14 @@ DISMISS = {"no", "nope", "nah", "nothing", "never", "mind", "nevermind", "nvm", 
            "stop", "i", "said", "was", "saying", "sorry"}
 
 
+# "I don't need any help", "I'm good", "no need": the user waving Zade off in their own words
+WAVED_OFF = re.compile(r"\b(?:(?:don't|do not|dont) need (?:any |your )?(?:help|anything)|no need|"
+                       r"(?:i'm|i am|im) (?:good|fine|okay|ok|done)|that's all|leave me alone)\b")
+
+
 def dismissed(text):
+    if WAVED_OFF.search(text) and len(text.split()) <= 6:
+        return True
     words = re.findall(r"[a-z']+", text)
     return bool(words) and set(words) <= DISMISS and bool(set(words) & {"no", "nope", "nah", "nothing", "never",
                                                                         "nevermind", "nvm", "forget", "leave"})
@@ -80,9 +87,10 @@ def split_emotion(reply):
 
 # Small models pad replies with offers ("How can I help you today?") and introductions nobody asked for.
 FILLER_SENTENCE = re.compile(
-    r"^(?:(?:hello|hi|hey)(?: there)?(?:,? \w+)?[!.]? )?(?:how (?:can|may) i (?:help|assist)(?: you)?(?: today| now| further)?"
+    r"^(?:(?:alright|all right|okay|ok|sure|got it|understood|no problem)[,.!]? )?"
+    r"(?:(?:hello|hi|hey)(?: there)?(?:,? \w+)?[!.]? )?(?:how (?:can|may) i (?:help|assist)(?: you)?(?: today| now| further)?"
     r"|what (?:would|else would|do|else do) you (?:like|want|need)(?: me)?(?: to do| to)?(?: next| today| now)?"
-    r"|(?:let me know|feel free to ask|just let me know|is there anything else)\b.*"
+    r"|(?:let me know|feel free to ask|just let me know|is there anything else|i'll be here)\b.*"
     r"|(?:would you like|do you want|do you need) (?:me )?(?:to )?(?:help|assist)(?: you)?(?: with)? (?:something|anything).*"
     r"|(?:can|could) you tell me (?:more )?(?:about )?what you (?:need|want|would like)\b.*"
     r"|(?:i'm|i am) (?:here|ready) to help\b.*|(?:i'm|i am) (?:zade|\w+), your (?:voice )?assistant\b.*)[.!?]*$",
@@ -98,8 +106,8 @@ def tidy(reply, acted):
     if reply.lstrip().startswith("{"):  # a tool call written out as text instead of made: never read JSON aloud
         return "Sorry, I got mixed up. Say that again?"
     sentences = [x for x in re.split(r"(?<=[.!?])\s+", reply.strip()) if x]
-    kept = [x for x in sentences if not FILLER_SENTENCE.match(x)] or sentences
-    reply = " ".join(kept)
+    kept = [x for x in sentences if not FILLER_SENTENCE.match(x)]
+    reply = " ".join(kept)  # only filler ("I'm here to help if you need anything."): better to say nothing
     if not acted and any(CLAIMED.search(x) for x in kept):
         return "I couldn't do that."
     return reply
@@ -330,7 +338,7 @@ def offer(ctx, text, acts):
 def handle(ctx, raw):
     """Handle one utterance; return what Zade replied (for follow-up listening)."""
     text = router.normalize(raw)
-    if router.normalize(re.split(r"[.!?,]", raw or "")[0]) in STOP_WORDS:  # "Stop. Cancel." as a whole sentence
+    if any(router.normalize(x) in STOP_WORDS for x in re.split(r"[.!?,]", raw or "")):  # "Hey, stop." "Stop. Cancel."
         text = "stop"
     if text in STOP_WORDS or dismissed(text):
         if ctx.guide and text in STOP_WORDS:  # "stop" also ends a screen guide
@@ -382,7 +390,8 @@ def handle(ctx, raw):
         emotion, reply = split_emotion(ctx.ask(text, memory.facts(ctx.conn), ctx.cfg, run_tool, recent(ctx)))
         reply = tidy(reply, acted=bool(called))
         ctx.show(emotion=choose_emotion(emotion, reply))
-        ctx.say(reply)
+        if reply:
+            ctx.say(reply)
         if executed:
             memory.log(ctx.conn, text, executed, "llm", True)
             offer(ctx, text, executed)
