@@ -77,6 +77,27 @@ def test_online_indian_voice_falls_back_to_a_local_indian_voice(monkeypatch):
         raise OSError("no internet")
 
     monkeypatch.setattr(tts, "_edge_audio", offline)
-    monkeypatch.setattr(tts, "_speak_kokoro", lambda text, cfg, interrupt=None: used.append(cfg["tts"]["voice"]) or False)
+    monkeypatch.setattr(tts, "_speak_kokoro", lambda text, cfg, interrupt=None, done=None: used.append(cfg["tts"]["voice"]) or False)
     tts.speak("Hello there.", c)
     assert used == ["hf_alpha"]
+
+
+def test_a_fallback_voice_goes_on_from_where_the_first_one_failed(monkeypatch):
+    spoken = []
+    monkeypatch.setattr(tts, "_play_async", lambda audio, sr: spoken.append(audio))
+    monkeypatch.setattr(tts, "_wait", lambda interrupt: False)
+
+    def edge(sentence, voice, speed):
+        if sentence.startswith("Second"):
+            raise OSError("network down")
+        return ("edge: " + sentence, 24000)
+
+    class K:
+        def create(self, s, **kw):
+            return ("kokoro: " + s, 24000)
+
+    monkeypatch.setattr(tts, "_edge_audio", edge)
+    monkeypatch.setattr(tts, "_kokoro", lambda data: K())
+    cfg = {"tts": {"provider": "kokoro", "voice": "en-IN-NeerjaNeural", "speed": 1.0}, "paths": {"data": "/tmp"}}
+    tts.speak("First sentence. Second sentence. Third.", cfg)
+    assert spoken == ["edge: First sentence.", "kokoro: Second sentence.", "kokoro: Third."]

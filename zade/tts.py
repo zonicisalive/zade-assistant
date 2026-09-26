@@ -70,19 +70,32 @@ def sentences(text):
     return [s for s in re.split(r"(?<=[.!?])\s+", text.strip()) if s]
 
 
-def _speak_kokoro(text, cfg, interrupt=None):
-    t = cfg["tts"]
-    k = _kokoro(cfg["paths"]["data"])
-    lang = "en-gb" if t["voice"].startswith("b") else "en-us"
-    # Synthesize the next sentence while the current one plays, so long answers start right away.
+def _speak_sentences(text, synth, interrupt, done):
+    """Synthesize the next sentence while the current one plays, so long answers start right away. `done`
+    counts the sentences already spoken: if synthesis fails partway, the sentence playing is let finish and
+    a fallback voice carries on from there instead of starting over."""
     pending = None
     for s in sentences(text):
-        audio = k.create(s, voice=t["voice"], speed=t["speed"], lang=lang)
+        try:
+            audio = synth(s)
+        except Exception:
+            if pending:
+                _wait(interrupt)
+            raise
         if pending and _wait(interrupt):
             return True
         _play_async(*audio)
         pending = audio
+        done.append(s)
     return bool(pending) and _wait(interrupt)
+
+
+def _speak_kokoro(text, cfg, interrupt=None, done=None):
+    t = cfg["tts"]
+    k = _kokoro(cfg["paths"]["data"])
+    lang = "en-gb" if t["voice"].startswith("b") else "en-us"
+    return _speak_sentences(text, lambda s: k.create(s, voice=t["voice"], speed=t["speed"], lang=lang), interrupt,
+                            [] if done is None else done)
 
 
 OFFLINE_INDIAN = "hf_alpha"  # Kokoro's Indian voice, used when an online Edge voice can't be reached
@@ -110,21 +123,17 @@ def _edge_audio(sentence, voice, speed):
     return np.frombuffer(pcm, np.int16).astype(np.float32) / 32768, 24000
 
 
-def _speak_edge(text, cfg, interrupt=None):
+def _speak_edge(text, cfg, interrupt=None, done=None):
     t = cfg["tts"]
-    pending = None
-    for s in sentences(text):
-        audio = _edge_audio(s, t["voice"], t["speed"])
-        if pending and _wait(interrupt):
-            return True
-        _play_async(*audio)
-        pending = audio
-    return bool(pending) and _wait(interrupt)
+    return _speak_sentences(text, lambda s: _edge_audio(s, t["voice"], t["speed"]), interrupt,
+                            [] if done is None else done)
 
 
 def _speak_piper(text, cfg, interrupt=None):
     voice = _piper(cfg["tts"]["piper_voice"], cfg["paths"]["data"])
     chunks = list(voice.synthesize(text))
+    if not chunks:  # "..." or "?!": nothing to say
+        return False
     return _play(np.concatenate([c.audio_int16_array for c in chunks]), chunks[0].sample_rate, interrupt)
 
 
@@ -142,15 +151,19 @@ def speak(text, cfg, interrupt=None):
             return _play(np.frombuffer(pcm, np.int16), 24000, interrupt)
         except Exception as e:  # any cloud failure (network, key, API): fall back to the local engine
             log.warning("cloud TTS failed, using piper: %s", e)
+    done = []  # sentences already spoken: a fallback voice goes on from there, never from the start
+    rest = lambda: " ".join(sentences(text)[len(done):])
     if t["provider"] == "kokoro" and t["voice"].endswith("Neural"):  # an online Indian voice (Edge)
         try:
-            return _speak_edge(text, cfg, interrupt)
+            return _speak_edge(text, cfg, interrupt, done)
         except Exception as e:  # offline or the service changed: an Indian voice that runs locally
             log.warning("Edge TTS failed, using Kokoro %s: %s", OFFLINE_INDIAN, e)
             cfg = {**cfg, "tts": {**t, "voice": OFFLINE_INDIAN}}
-    if t["provider"] == "kokoro":
+            text, done = rest(), []
+    if t["provider"] == "kokoro" and text:
         try:
-            return _speak_kokoro(text, cfg, interrupt)
+            return _speak_kokoro(text, cfg, interrupt, done)
         except Exception as e:  # missing model files or a Kokoro error: still answer, with Piper
             log.warning("Kokoro TTS failed, using piper: %s", e)
-    return _speak_piper(text, cfg, interrupt)
+            text = rest()
+    return _speak_piper(text, cfg, interrupt) if text else False
