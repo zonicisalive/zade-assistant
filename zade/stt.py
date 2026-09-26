@@ -46,6 +46,13 @@ def gpu_start(cfg):
         subprocess.run(["systemctl", "--user", "start", "--no-block", service], capture_output=True)
 
 
+def stop_unused(cfg):
+    """Stop Zade's speech servers for providers not in use (after switching, the old one kept its VRAM)."""
+    for provider, service in SERVICES.items():
+        if provider != cfg["stt"]["provider"]:
+            subprocess.run(["systemctl", "--user", "stop", "--no-block", service], capture_output=True)
+
+
 def gpu_idle(cfg, now=None):
     """Stop the GPU model once it has been idle long enough (called from Zade's main loop)."""
     now = time.monotonic() if now is None else now

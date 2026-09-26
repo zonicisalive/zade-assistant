@@ -550,6 +550,7 @@ def main():
         return reply
 
     stt.transcribe(np.zeros(audio.RATE, np.int16), cfg)  # load whisper before the first command
+    stt.stop_unused(cfg)  # a speech server left over from another provider
     stt.gpu_start(cfg)  # counts as a use, so a GPU model loaded at login is freed after the idle time
     if cfg["wake"]["verify"]:
         stt.wake_check(np.zeros(audio.RATE, np.int16), cfg)  # and the wake word's second-opinion model

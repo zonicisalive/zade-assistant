@@ -212,3 +212,14 @@ def test_qwen_asr_provider(monkeypatch):
     msgs = sent["body"]["messages"]
     assert sent["url"].endswith(":8182/v1/chat/completions")
     assert "Discord" in msgs[0]["content"] and msgs[-1] == {"role": "assistant", "content": "language English<asr_text>"}
+
+
+def test_unused_speech_servers_are_stopped(monkeypatch):
+    import zade.stt as S
+
+    c = copy.deepcopy(config.DEFAULTS)
+    c["stt"]["provider"] = "qwen"
+    ran = []
+    monkeypatch.setattr(S.subprocess, "run", lambda cmd, **kw: ran.append((cmd[2], cmd[-1])))
+    S.stop_unused(c)
+    assert ran == [("stop", "zade-whisper")]
