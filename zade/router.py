@@ -135,6 +135,16 @@ def parse_pattern(text, find_app):
         return {"name": "media", "args": {"cmd": "next"}}
     if re.fullmatch(r"(?:previous|last|go back(?: to the)?(?: previous| last)?)(?: song| track| one)?", text):
         return {"name": "media", "args": {"cmd": "previous"}}
+    # Screen guide: point at what to click, step by step; click only when asked
+    if m := re.fullmatch(r"(?:guide me|walk me through|show me how)(?: how)?(?: to)? (.+?)(?: on (?:my |the )?screen)?", text):
+        return {"name": "guide", "args": {"goal": m[1]}}
+    if m := re.fullmatch(r"(?:show me )?where(?: is|'?s| are| do i find)(?: the)? (.+? (?:button|option|setting|settings|menu|"
+                         r"icon|tab|switch|toggle))(?: on (?:my |the )?screen)?", text):
+        return {"name": "guide", "args": {"goal": f"find the {m[1]}"}}
+    if re.fullmatch(r"(?:click|press|tap)(?: on)? (?:it|that|there|this)|(?:yes )?(?:do it|click it for me)", text):
+        return {"name": "guide_click", "args": {}}
+    if re.fullmatch(r"stop (?:guiding|the guide|helping)|(?:end|exit|cancel) (?:the )?guide", text):
+        return {"name": "guide_stop", "args": {}}
     # Name questions, answered from settings and memory (the small model mixed up "my" and "your")
     # (matched at the start: extra words heard after the question, like background talk, don't matter)
     if re.match(r"(?:what(?: is|'?s) your name|your name is what)\b", text) or \

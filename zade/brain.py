@@ -78,6 +78,9 @@ TOOLS = [
     _t("play_music", "Play a song, artist or album by name. provider and device only when the user names them "
        "(device: a speaker, phone or computer, like \"echo dot\").", ["query"],
        query=S, provider={"type": "string", "enum": ["spotify", "youtube", "youtube music"]}, device=S),
+    _t("guide_screen", "Guide the user on their screen, step by step, by pointing at what to click for a task in an "
+       "app or setting on this computer (e.g. 'share my screen in Discord', 'find the Wi-Fi settings'). Not for "
+       "general how-to questions that don't involve their screen.", ["goal"], goal=S),
     _t("look_at_screen", "Look at the user's screen and answer a question about it (read text, errors, "
        "describe what is shown).", ["question"], question=S),
     _t("set_reminder", "Remind the user at a clock time. at is like \"17:00\" or \"5 pm\"; daily repeats it "

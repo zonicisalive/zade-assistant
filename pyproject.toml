@@ -19,6 +19,7 @@ dependencies = [
   "evdev>=2.0.0",
   "edge-tts>=7.2.8",
   "sherpa-onnx==1.10.46",
+  "rapidocr-onnxruntime>=1.4.4",
 ]
 
 [project.scripts]

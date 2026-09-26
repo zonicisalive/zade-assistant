@@ -260,3 +260,15 @@ def test_several_instant_commands_in_one_sentence():
     assert [a["name"] for a in r.actions] == ["set_timer", "play_music"]
     assert router.route("open firefox and tell me a joke", {}, CFG, find_app=find).kind == "llm"  # one part needs the model
     assert router.route("play rock and roll", {}, CFG, find_app=find).actions[0]["args"]["query"] == "rock and roll"
+
+
+def test_screen_guide_patterns():
+    P, find = router.parse_pattern, lambda q: None
+    assert P("guide me to turn on screen share in discord", find) == {"name": "guide", "args": {"goal": "turn on screen share in discord"}}
+    assert P("show me how to change zade's voice", find)["args"] == {"goal": "change zade's voice"}
+    assert P("where is the settings button", find)["args"] == {"goal": "find the settings button"}
+    assert P("click it", find) == {"name": "guide_click", "args": {}} and P("stop guiding", find)["name"] == "guide_stop"
+    assert P("show me your happy face", find)["name"] == "express"
+    for t in ["help me write an email", "show me the weather", "where is mumbai"]:
+        a = P(t, find)
+        assert not a or a["name"] != "guide", t

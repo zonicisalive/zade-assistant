@@ -30,7 +30,7 @@ def dismissed(text):
     words = re.findall(r"[a-z']+", text)
     return bool(words) and set(words) <= DISMISS and bool(set(words) & {"no", "nope", "nah", "nothing", "never",
                                                                         "nevermind", "nvm", "forget", "leave"})
-MEMORY_TOOLS = {"whoami", "express", "dnd", "look_at_screen", "system_status", "set_reminder", "list_reminders", "cancel_reminder", "sync_apps", "remember", "forget", "list_facts", "make_shortcut", "sleep", "set_timer", "note_add",
+MEMORY_TOOLS = {"guide_screen", "guide", "guide_click", "guide_stop", "whoami", "express", "dnd", "look_at_screen", "system_status", "set_reminder", "list_reminders", "cancel_reminder", "sync_apps", "remember", "forget", "list_facts", "make_shortcut", "sleep", "set_timer", "note_add",
                 "notes_read", "web_answer", "clipboard_read", "clipboard_copy", "type_text", "power", "shell"}
 
 
@@ -57,6 +57,7 @@ class Ctx:
     app_words: list = field(default_factory=list)  # installed app names, given to Whisper as hotwords
     show: Callable = lambda **fields: None  # overlay updates (emotion); ui.set in the real app
     route: str = ""  # how the last request was handled (shortcut, pattern, llm, ...), for History
+    guide: object = None  # the running screen-guide session, if any
 
 
 def dictation_text(raw):
@@ -133,7 +134,7 @@ def apply_live(cfg, new):
 
 # Actions that need a spoken yes at each safety level (shell and power always ask, in actions.py).
 RISKY = {"close_app", "type_text", "clipboard_copy", "press_keys"}
-READ_ONLY = {"whoami", "express", "dnd", "time", "date", "weather", "web_answer", "notes_read", "list_facts", "list_reminders",
+READ_ONLY = {"guide_screen", "guide", "guide_stop", "whoami", "express", "dnd", "time", "date", "weather", "web_answer", "notes_read", "list_facts", "list_reminders",
              "system_status", "look_at_screen", "clipboard_read", "remember", "forget", "note_add",
              "set_timer", "set_reminder", "cancel_reminder", "make_shortcut", "sync_apps", "sleep",
              "shell", "power"}
@@ -204,6 +205,24 @@ def dispatch(ctx, action, from_model=False):
             from . import vision
 
             return vision.look(a.get("question") or "What's on the screen?", ctx.cfg), True
+        if name == "guide_screen":  # the model's name for the same thing
+            name = "guide"
+        if name == "guide":
+            from . import guide
+
+            if ctx.guide:
+                ctx.guide.stop()
+            ctx.guide = guide.Session(a["goal"], ctx.cfg, ctx.say)
+            ctx.guide.start()
+            return "", True  # the session speaks its first instruction itself
+        if name == "guide_click":
+            if not (ctx.guide and not ctx.guide.stopped.is_set()):
+                return "I'm not pointing at anything right now.", False
+            return ctx.guide.click(), True
+        if name == "guide_stop":
+            if ctx.guide:
+                ctx.guide.stop()
+            return "Okay, I stopped guiding.", True
         if name == "whoami":
             if a.get("who") == "assistant":
                 return f"I'm {ctx.cfg['persona']['name'] or 'Zade'}, your voice assistant.", True
@@ -284,6 +303,8 @@ def handle(ctx, raw):
     """Handle one utterance; return what Zade replied (for follow-up listening)."""
     text = router.normalize(raw)
     if text in STOP_WORDS or dismissed(text):
+        if ctx.guide and text in STOP_WORDS:  # "stop" also ends a screen guide
+            ctx.guide.stop()
         return ""
     if taught := router.parse_teach(text):
         phrase, request = taught

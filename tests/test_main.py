@@ -346,3 +346,10 @@ def test_waving_zade_off_is_silent():
         assert z.dismissed(t), t
     for t in ["no music please", "nothing on tv tonight", "open firefox", "is it raining", "no wait open steam"]:
         assert not z.dismissed(t), t
+
+
+def test_click_it_without_a_guide():
+    said = []
+    ctx = make(said)
+    z.handle(ctx, "click it")
+    assert said == ["I'm not pointing at anything right now."]
