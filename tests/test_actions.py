@@ -301,3 +301,11 @@ def test_open_app_focuses_a_running_window(monkeypatch):
     windows.pop()  # Discord not open: launch it
     actions.run({"name": "open_app", "args": {"name": "discord"}}, lambda q: True)
     assert calls == [["gtk-launch", "discord"]]
+
+
+def test_mute_takes_an_explicit_action(monkeypatch):
+    calls = _calls(monkeypatch)
+    assert actions.run({"name": "mute", "args": {"action": "mute"}}, lambda q: True) == "Muted."
+    assert actions.run({"name": "mute", "args": {"action": "unmute"}}, lambda q: True) == "Sound is back on."
+    assert actions.run({"name": "mute", "args": {"on": False}}, lambda q: True) == "Sound is back on."  # patterns
+    assert [c[-1] for c in calls] == ["1", "0", "0"]

@@ -337,8 +337,11 @@ def run(action, confirm):
             _call([*SINK, f"{level}%"])
         return ""
     if name == "mute":  # set the state, never toggle: a toggle flips the wrong way when the state is unknown
-        _call(["wpctl", "set-mute", "@DEFAULT_AUDIO_SINK@", "1" if a.get("on", True) else "0"])
-        return "Muted." if a.get("on", True) else "Sound is back on."
+        # action="mute"/"unmute" from the model (a boolean "on" was ambiguous and it muted the wrong way);
+        # on=True/False from instant patterns and saved shortcuts
+        on = a["action"] != "unmute" if "action" in a else a.get("on", True)
+        _call(["wpctl", "set-mute", "@DEFAULT_AUDIO_SINK@", "1" if on else "0"])
+        return "Muted." if on else "Sound is back on."
     if name == "media":
         if a.get("cmd") not in MEDIA:
             raise Failed(f"Unknown media command {a.get('cmd')}.")
