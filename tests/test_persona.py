@@ -86,3 +86,10 @@ def test_prompt_guides_emotion_choice(monkeypatch):
     brain.ask("hi", [], cfg(), None, vram=lambda: 8.0)
     s = got["system"]
     assert "greeting" in s and "[sleepy]" in s and "dry facts" in s
+
+
+def test_emotion_tag_anywhere_is_removed():
+    assert z.split_emotion("Your name is Zonic. [neutral]") == ("neutral", "Your name is Zonic.")
+    assert z.split_emotion("[happy] Sure!") == ("happy", "Sure!")
+    assert z.split_emotion("Done! [excited] Enjoy.") == ("excited", "Done! Enjoy.")
+    assert z.split_emotion("Press [enter] to go.") == ("neutral", "Press [enter] to go.")  # not an emotion

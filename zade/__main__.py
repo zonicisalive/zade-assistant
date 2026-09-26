@@ -69,12 +69,12 @@ EMOTIONS = router.EMOTIONS
 
 
 def split_emotion(reply):
-    """"[happy] Sure!" -> ("happy", "Sure!"). The tag drives the face and is never spoken."""
-    m = re.match(r"\s*\[(\w+)\]\s*", reply or "")
-    if not m:
-        return "neutral", (reply or "").strip()
-    emotion = m[1].lower()
-    return (emotion if emotion in EMOTIONS else "neutral"), reply[m.end():].strip()
+    """"[happy] Sure!" -> ("happy", "Sure!"). The tag drives the face and is never spoken. Some models put it
+    at the end ("Sure! [happy]") or in the middle, so any emotion tag anywhere is taken out."""
+    reply = re.sub(r"^\s*\[\w+\]", lambda m: m[0] if m[0].strip()[1:-1].lower() in EMOTIONS else "", reply or "")
+    tags = [t.lower() for t in re.findall(r"\[(\w+)\]", reply) if t.lower() in EMOTIONS]
+    text = re.sub(r"\s*\[(?:" + "|".join(EMOTIONS) + r")\]\s*", " ", reply, flags=re.I)
+    return (tags[0] if tags else "neutral"), " ".join(text.split())
 
 
 def choose_emotion(emotion, reply):
