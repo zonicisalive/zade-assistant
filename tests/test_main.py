@@ -164,7 +164,7 @@ def test_followup_uses_recent_history():
 
     ctx = make(said, ask=ask)
     assert z.handle(ctx, "plan a trip") == "Which city?"
-    assert z.wants_followup("Which city?") and not z.wants_followup("Done.")
+    assert z.wants_followup("Which city?") and z.wants_followup("Done.") and not z.wants_followup("")
     z.handle(ctx, "Mumbai")
     assert seen == [[], [("plan a trip", "Which city?")]]
 
@@ -192,7 +192,7 @@ def test_teach_in_one_sentence():
 
 def test_stop_words_are_silent():
     said = []
-    for t in ["Stop.", "cancel", "never mind", "shut up", "quiet"]:
+    for t in ["Stop.", "cancel", "never mind", "shut up", "quiet", "Stop. Canild."]:  # a misheard "stop, cancel"
         assert z.handle(make(said), t) == ""
     assert said == []
 
@@ -353,3 +353,19 @@ def test_click_it_without_a_guide():
     ctx = make(said)
     z.handle(ctx, "click it")
     assert said == ["I'm not pointing at anything right now."]
+
+
+def test_model_filler_and_made_up_actions_are_dropped():
+    assert z.tidy("Hello Zonic! How can I assist you today?", acted=False) == "Hello Zonic!"
+    assert z.tidy("Your name is Zonic. I'm Zade, your voice assistant on your Arch Linux desktop.", False) == \
+        "Your name is Zonic."
+    assert z.tidy("I don't have feelings. Would you like me to assist you with something?", False) == \
+        "I don't have feelings."
+    assert z.tidy("Silvassa is 28 degrees. Let me know if you need anything else.", False) == "Silvassa is 28 degrees."
+    assert z.tidy("Would you like me to search for it?", False) == "Would you like me to search for it?"  # a real question
+    for claim in ["Instagram is now open! Enjoy exploring.", "Sure, closing the Discord application.", "closing."]:
+        assert z.tidy(claim, acted=False) == "I couldn't do that."
+    assert z.tidy("Opened Discord for you.", acted=True) == "Opened Discord for you."
+    assert z.tidy("Discord is open on workspace 2.", acted=False) == "Discord is open on workspace 2."
+    assert z.tidy("I see a terminal. Can you tell me more about what you need help with?", True) == "I see a terminal."
+    assert z.tidy('{"name": "remember", "arguments": {"fact": "x"}}', False).startswith("Sorry")

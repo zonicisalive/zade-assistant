@@ -78,6 +78,33 @@ def split_emotion(reply):
     return (tags[0] if tags else "neutral"), " ".join(text.split())
 
 
+# Small models pad replies with offers ("How can I help you today?") and introductions nobody asked for.
+FILLER_SENTENCE = re.compile(
+    r"^(?:(?:hello|hi|hey)(?: there)?(?:,? \w+)?[!.]? )?(?:how (?:can|may) i (?:help|assist)(?: you)?(?: today| now| further)?"
+    r"|what (?:would|else would|do|else do) you (?:like|want|need)(?: me)?(?: to do| to)?(?: next| today| now)?"
+    r"|(?:let me know|feel free to ask|just let me know|is there anything else)\b.*"
+    r"|(?:would you like|do you want|do you need) (?:me )?(?:to )?(?:help|assist)(?: you)?(?: with)? (?:something|anything).*"
+    r"|(?:can|could) you tell me (?:more )?(?:about )?what you (?:need|want|would like)\b.*"
+    r"|(?:i'm|i am) (?:here|ready) to help\b.*|(?:i'm|i am) (?:zade|\w+), your (?:voice )?assistant\b.*)[.!?]*$",
+    re.I)
+# ...and claim they did things without calling a tool ("Instagram is now open!").
+CLAIMED = re.compile(r"\b(?:is now (?:open|displayed|showing|playing|closed)|is open now|now open|"
+                     r"i(?:'ve| have) (?:opened|closed|started|launched|turned on|turned off|switched))\b"
+                     r"|^(?:sure|okay|ok)?,? ?(?:closing|opening)\b", re.I)
+
+
+def tidy(reply, acted):
+    """A model reply without filler sentences, and without a claimed action when no tool ran."""
+    if reply.lstrip().startswith("{"):  # a tool call written out as text instead of made: never read JSON aloud
+        return "Sorry, I got mixed up. Say that again?"
+    sentences = [x for x in re.split(r"(?<=[.!?])\s+", reply.strip()) if x]
+    kept = [x for x in sentences if not FILLER_SENTENCE.match(x)] or sentences
+    reply = " ".join(kept)
+    if not acted and any(CLAIMED.search(x) for x in kept):
+        return "I couldn't do that."
+    return reply
+
+
 def choose_emotion(emotion, reply):
     """The model's tag, except that a question back to the user shows interest instead of a blank face."""
     if emotion == "neutral" and reply.rstrip().endswith("?"):
@@ -165,7 +192,8 @@ def recent(ctx, now=None):
 
 
 def wants_followup(reply):
-    return bool(reply) and reply.rstrip().endswith("?")
+    """Keep listening after anything Zade said; silence ends it (not after "stop", which says nothing)."""
+    return bool(reply)
 
 
 def dispatch(ctx, action, from_model=False):
@@ -302,6 +330,8 @@ def offer(ctx, text, acts):
 def handle(ctx, raw):
     """Handle one utterance; return what Zade replied (for follow-up listening)."""
     text = router.normalize(raw)
+    if router.normalize(re.split(r"[.!?,]", raw or "")[0]) in STOP_WORDS:  # "Stop. Cancel." as a whole sentence
+        text = "stop"
     if text in STOP_WORDS or dismissed(text):
         if ctx.guide and text in STOP_WORDS:  # "stop" also ends a screen guide
             ctx.guide.stop()
@@ -339,9 +369,10 @@ def handle(ctx, raw):
         if ok and learnable and not r.phrase:
             offer(ctx, text, r.actions)
     else:
-        executed = []
+        executed, called = [], []
 
         def run_tool(name, args):
+            called.append(name)
             out, ok = dispatch(ctx, {"name": name, "args": args}, from_model=True)
             if ok and name not in MEMORY_TOOLS:
                 executed.append({"name": name, "args": args})
@@ -349,6 +380,7 @@ def handle(ctx, raw):
             return out or "done"
 
         emotion, reply = split_emotion(ctx.ask(text, memory.facts(ctx.conn), ctx.cfg, run_tool, recent(ctx)))
+        reply = tidy(reply, acted=bool(called))
         ctx.show(emotion=choose_emotion(emotion, reply))
         ctx.say(reply)
         if executed:
@@ -445,7 +477,7 @@ def main():
     ptt = next(detectors) if bindings[0] else None    # push-to-talk key detector
     typer = next(detectors) if bindings[1] else None  # voice-typing key detector
 
-    def hear(timeout=None, released=None, cancelled=None, keep_reply=False):
+    def hear(timeout=None, released=None, cancelled=None, keep_reply=False, owner_only=False):
         stt.gpu_start(cfg)  # the GPU speech model (if used) loads while the user talks
         # keep_reply: while answering a question, keep it (e.g. a command to approve) on screen
         ui.show("listening", heard="", emotion="neutral", **({} if keep_reply else {"reply": ""}))
@@ -454,6 +486,14 @@ def main():
             ui.show("idle")
             return None
         ui.show("thinking")
+        if owner_only:  # without the wake word, only the owner's voice counts (not the TV or others talking)
+            try:
+                if not voice_focus.is_owner(a, cfg):
+                    log.info("follow-up: not the owner's voice, ignored")
+                    ui.show("idle")
+                    return None
+            except Exception as e:
+                log.warning("owner check failed: %s", e)
         if cfg["audio"].get("voice_focus"):
             try:
                 a = voice_focus.focus(a, cfg)
@@ -602,7 +642,7 @@ def main():
         # Follow-up: when Zade asked a question, listen briefly for an answer without the wake word.
         while cfg["followup"]["enabled"] and wants_followup(reply) and not barge:
             audio.cue(stream, soft=True, cfg=cfg)
-            text = hear(cfg["followup"]["listen_s"])
+            text = hear(cfg["followup"]["listen_s"], owner_only=True)
             if text is None:
                 break
             reply = respond(text)

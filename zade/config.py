@@ -17,7 +17,7 @@ DEFAULTS = {
               "end_ratio": 0.25,
               # Voice focus: keep only the voice of whoever started talking (others are cut before
               # transcription). focus_threshold: higher cuts more, but may cut your own quieter words.
-              "voice_focus": True, "focus_threshold": 0.25},
+              "voice_focus": True, "focus_threshold": 0.25, "owner_threshold": 0.40},
     "stt": {
         # provider: whisper (faster-whisper on the CPU) | gpu (whisper.cpp server, large-v3-turbo on the GPU)
         # | qwen (Qwen3-ASR-0.6B on the GPU, most accurate with Indian accents) | openai. GPU ones fall back to the CPU.

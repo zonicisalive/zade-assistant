@@ -37,3 +37,15 @@ def test_owner_voiceprint_is_used_when_the_owner_speaks(tmp_path):
     embed = lambda clip, d: wobbly if clip is not None and len(clip) and clip[0] == 0 else other
     out = voice_focus.focus(audio, c, embed=embed, pieces=lambda a: spans)
     assert len(out) == RATE
+
+
+def test_follow_up_only_takes_the_owners_voice(tmp_path):
+    c = copy.deepcopy(config.DEFAULTS)
+    c["paths"]["data"] = str(tmp_path)
+    you, other = np.array([1.0, 0.0]), np.array([0.0, 1.0])
+    audio = np.zeros(2 * RATE, np.int16)
+    long, short = [(0, RATE)], [(0, RATE // 4)]
+    assert voice_focus.is_owner(audio, c, embed=lambda *a: you, pieces=lambda a: long, profile=you)
+    assert not voice_focus.is_owner(audio, c, embed=lambda *a: other, pieces=lambda a: long, profile=you)
+    assert voice_focus.is_owner(audio, c, embed=lambda *a: other, pieces=lambda a: short, profile=you)  # too short
+    assert voice_focus.is_owner(audio, c, embed=lambda *a: other, pieces=lambda a: long)  # no voiceprint saved
