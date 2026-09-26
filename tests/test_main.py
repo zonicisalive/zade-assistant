@@ -424,3 +424,12 @@ def test_a_declined_message_is_not_claimed_as_sent():
     ctx.confirm = lambda q: False
     z.handle(ctx, "message dexorto hi")
     assert said[-1] == "I couldn't do that."
+
+
+def test_song_titles_and_requests_are_not_waving_off():
+    for text in ["play see you again", "play i'm good", "play bye bye bye", "play goodbye by apocalyptica",
+                 "play not you by alan walker", "i closed chrome by mistake open it again"]:
+        assert not z.dismissed(text), text
+    for text in ["i don't need any help", "no i'm good", "i was talking to my mom", "not talking to you",
+                 "nahi chahiye", "no thanks that's all", "by mistake", "sorry wrong person", "bye", "i'm good thanks"]:
+        assert z.dismissed(text), text

@@ -40,16 +40,19 @@ DISMISS = {"no", "nope", "nah", "naa", "nahi", "nahin", "nothing", "never", "min
            "for", "today", "we're", "done", "dhanyavaad", "shukriya", "bas", "theek", "hai", "ji"}
 NEGATIVE = {"no", "nope", "nah", "naa", "nahi", "nahin", "nothing", "never", "nevermind", "nvm", "forget", "leave",
             "bye", "goodbye", "done", "bas"}
-# Waving Zade off or talking to someone else, in the user's own words (short utterances only)
+# Waving Zade off or talking to someone else, in the user's own words. The whole utterance must be that
+# (give or take "no", "sorry", "thanks"...): "play see you again" or "play goodbye by apocalyptica" are requests.
 WAVED_OFF = re.compile(
-    r"\b(?:(?:don't|do not|dont|didn't|did not) (?:need|want) (?:any |your |it|that|anything)?(?:help|anything|you)?"
+    r"(?:(?:no|nah|nope|okay|ok|oh|um|uh|actually|sorry|arre|nahi|bas|and)\s+)*(?:(?:i|we)\s+)?"
+    r"(?:(?:don't|do not|dont|didn't|did not) (?:need|want) (?:any |your |it|that|anything)?(?:help|anything|you)?"
     r"|no need|not needed|no thanks|no thank you|nothing else|nothing more|that'?s (?:all|it|enough|fine)"
     r"|that'?ll be all|we'?re done|all good|i'?m (?:good|fine|okay|ok|done|alright|all set|set)|i am (?:good|fine|okay|done)"
     r"|leave me alone|go away|(?:i )?(?:wasn'?t|was not|am not|i'?m not|not) talking to you|not you"
     r"|i was talking to (?:someone|somebody|him|her|them|my \w+)|(?:didn'?t|did not) (?:call|ask) you|nobody asked"
     r"|ignore (?:that|it|me|this)|wrong (?:person|call)|by mistake|galti se|(?:good ?)?bye|see you"
     r"|nahi chahiye|zarurat nahi|zaroorat nahi|kuch nahi chahiye"
-    r"|main theek hoon|mai thik hu|tujhse nahi|tumse nahi|aapse nahi)\b")
+    r"|main theek hoon|mai thik hu|tujhse nahi|tumse nahi|aapse nahi)"
+    r"(?:\s+(?:thanks|thank you|bro|yaar|bhai|man|dude|ji|now|anymore|for now|right now|sorry))*")
 
 
 TALK_WORDS = re.compile(r"\b(?:yaar|yar|bhai|bro|dude|man|na|ji|abhi|now|please|zade|okay|ok)\b")
@@ -61,7 +64,7 @@ def plain(text):
 
 
 def dismissed(text):
-    if WAVED_OFF.search(text) and len(text.split()) <= 8:
+    if WAVED_OFF.fullmatch(plain(text)) or WAVED_OFF.fullmatch(text):
         return True
     words = re.findall(r"[a-z']+", text)
     return bool(words) and set(words) <= DISMISS and bool(set(words) & NEGATIVE)
