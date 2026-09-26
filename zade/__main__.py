@@ -255,8 +255,8 @@ def guide_active(ctx):
 
 
 def wants_followup(reply):
-    """Keep listening after anything Zade said; silence ends it (not after "stop", which says nothing)."""
-    return bool(reply)
+    """Listen for an answer without the wake word when Zade asked something ("Which city? Say the name.")."""
+    return "?" in (reply or "")
 
 
 def dispatch(ctx, action, from_model=False):
@@ -419,6 +419,7 @@ def handle(ctx, raw):
     ctx.route = "llm"
     r = router.route(text, memory.shortcuts(ctx.conn), ctx.cfg["router"], ctx.predict, ctx.find_app)
     if r.kind == "none":  # nothing (or only noise) was said after the wake word: stay silent
+        ctx.route = ""  # and nothing worth a history entry
         return ""
     if r.kind == "confirm" and not ctx.confirm(f"Did you mean {r.label}?"):
         r = router.Route("llm")

@@ -64,7 +64,7 @@ DEFAULTS = {
     "dictation": {"enabled": True, "key": "KEY_RIGHTALT", "hold_s": 0.3},  # hold to type what you say
     # Questions that need the web: read results from SearXNG, or (disabled) open a search in the browser.
     "web": {"searxng_enabled": False, "searxng_url": "http://127.0.0.1:8080", "engine": "google"},
-    "followup": {"enabled": True, "listen_s": 5.0, "history_turns": 3, "history_s": 120},
+    "followup": {"enabled": True, "listen_s": 8.0, "history_turns": 3, "history_s": 120},
     "ui": {
         "enabled": True,
         "host_file": "~/.config/quickshell/inir/shell.qml",  # desktop shell that may host the overlay

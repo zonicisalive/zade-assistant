@@ -164,7 +164,8 @@ def test_followup_uses_recent_history():
 
     ctx = make(said, ask=ask)
     assert z.handle(ctx, "plan a trip") == "Which city?"
-    assert z.wants_followup("Which city?") and z.wants_followup("Done.") and not z.wants_followup("")
+    assert z.wants_followup("Which city?") and z.wants_followup("Which one? Say the name.")
+    assert not z.wants_followup("Done.") and not z.wants_followup("I think you are Zonic!") and not z.wants_followup("")
     z.handle(ctx, "Mumbai")
     assert seen == [[], [("plan a trip", "Which city?")]]
 
@@ -408,3 +409,9 @@ def test_text_model_and_screen_pointer_take_turns(monkeypatch):
         if t is not z.threading.current_thread() and t.daemon:
             t.join(1)
     assert events == ["pointer off", "text model answers", "text model off"]
+
+
+def test_nothing_heard_leaves_no_history_entry():
+    ctx = make([])
+    assert z.safe_handle(ctx, "") == ""
+    assert memory.requests(ctx.conn) == []
