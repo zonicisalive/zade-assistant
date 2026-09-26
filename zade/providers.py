@@ -96,7 +96,7 @@ def _anthropic(system, text, tools, run_tool, cfg, extra, history):
 
 def _private(client):
     """On OpenRouter: route only to providers with zero data retention (they keep nothing and can't train on it)."""
-    return {"provider": {"zdr": True, "data_collection": "deny"}} if "openrouter.ai" in str(client.base_url) else None
+    return {"provider": {"zdr": True, "data_collection": "deny"}} if "openrouter.ai" in str(getattr(client, "base_url", "")) else None
 
 
 def _openai(system, text, tools, run_tool, cfg, extra, history):
