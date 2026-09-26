@@ -316,7 +316,7 @@ def test_send_message_uses_discords_quick_switcher(monkeypatch):
     monkeypatch.setattr(actions, "_call", lambda cmd: typed.append(cmd[1:]))
     monkeypatch.setattr(actions.time, "sleep", lambda s: None)
     monkeypatch.setattr(actions, "run", lambda a, c: "")
-    monkeypatch.setattr(actions.subprocess, "run", lambda *a, **k: type("R", (), {"returncode": 0})())
+    monkeypatch.setattr(actions, "_focused_app", lambda: "discord")
     assert actions.send_message("dexorto", "this is a test") == "Sent to dexorto on Discord."
     assert typed == [actions.wtype_args("ctrl+k"), ["--", "@dexorto"], actions.wtype_args("enter"),
                      ["--", "this is a test"], actions.wtype_args("enter")]
@@ -328,3 +328,15 @@ def test_commands_needing_root_or_hiding_it_are_refused():
         assert actions.needs_root(cmd), cmd
     for cmd in ["ls *.txt", "df -h", "grep -r foo .", "echo hi | wc -c", "find . -name '*.py'"]:
         assert not actions.needs_root(cmd), cmd
+
+
+def test_send_message_never_types_outside_discord(monkeypatch):
+    typed = []
+    monkeypatch.setattr(actions, "_call", lambda cmd: typed.append(cmd))
+    monkeypatch.setattr(actions.time, "sleep", lambda s: None)
+    monkeypatch.setattr(actions.time, "monotonic", iter(range(0, 10000, 5)).__next__)
+    monkeypatch.setattr(actions, "run", lambda a, c: "")
+    monkeypatch.setattr(actions, "_focused_app", lambda: "kitty")   # a terminal kept focus
+    with pytest.raises(actions.Failed):
+        actions.send_message("dexorto", "rm -rf ~")
+    assert typed == []

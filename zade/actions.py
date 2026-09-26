@@ -332,18 +332,39 @@ def shell(cmd, confirm):
     return out[:2000] if out else f"Done, exit code {p.returncode}."
 
 
+def _focused_app():
+    try:
+        return (json.loads(_output(["niri", "msg", "-j", "focused-window"]) or "{}") or {}).get("app_id") or ""
+    except (OSError, ValueError, subprocess.SubprocessError):
+        return ""
+
+
+def _wait_focus(name, timeout_s):
+    """Whether a window of `name` has focus, waiting up to timeout_s for it."""
+    deadline = time.monotonic() + timeout_s
+    while name not in _focused_app().lower():
+        if time.monotonic() > deadline:
+            return False
+        time.sleep(0.3)
+    return True
+
+
 def send_message(to, text, app="discord"):
     """Message a person on Discord the way a user would: its quick switcher (Ctrl+K) finds "@name" among
-    people only, Enter opens the chat, then the text is typed and sent."""
+    people only, Enter opens the chat, then the text is typed and sent. Keys go only to Discord: it must
+    have focus before typing and before each Enter, or the message could land in a terminal."""
     if (app or "discord").lower() != "discord":
         raise Failed(f"I can only send messages on Discord for now, not {app}.")
-    was_running = subprocess.run(["pgrep", "-if", "discord"], capture_output=True).returncode == 0
     run({"name": "open_app", "args": {"name": "discord"}}, None)
-    time.sleep(1.5 if was_running else 12)  # a cold start takes a while
+    if not _wait_focus("discord", 25):  # a cold start (with its update check) can take a while
+        raise Failed("Discord didn't come to the front, so I didn't send anything.")
+    time.sleep(1.0)  # let the window take keys
     # ponytail: trusts the switcher's top match for "@name" (exact usernames come first); reading the chat
     # header back with OCR would catch a wrong pick
     for step, pause in ((wtype_args("ctrl+k"), 0.7), (["--", "@" + to.lstrip("@")], 1.2),
                         (wtype_args("enter"), 1.5), (["--", text], 0.3), (wtype_args("enter"), 0)):
+        if not _wait_focus("discord", 2):
+            raise Failed("Discord lost focus, so I stopped before sending.")
         _call(["wtype", *step])
         time.sleep(pause)
     return f"Sent to {to} on Discord."
