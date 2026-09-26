@@ -232,7 +232,11 @@ def is_quiet(cfg, now=None):
         return False
     now = now or datetime.datetime.now()
     minutes = now.hour * 60 + now.minute
-    start, end = (int(t.split(":")[0]) * 60 + int(t.split(":")[1]) for t in (q["start"], q["end"]))
+    try:
+        start, end = (int(t.split(":")[0]) * 60 + int(t.split(":")[1]) for t in (q["start"], q["end"]))
+    except (ValueError, IndexError, AttributeError):  # a hand-edited "11pm": never crash over it
+        log.warning("quiet hours ignored: start/end must be HH:MM, got %r and %r", q["start"], q["end"])
+        return False
     return start <= minutes < end if start <= end else minutes >= start or minutes < end
 
 

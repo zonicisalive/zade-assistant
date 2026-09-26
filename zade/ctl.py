@@ -46,6 +46,14 @@ def _coerce(default, text):
     return text
 
 
+def _clock(text):
+    """ "23:00" and "7:30" are times of day; "11pm" or "25:00" are not."""
+    import re
+
+    m = re.fullmatch(r"\s*(\d{1,2}):(\d{2})\s*", str(text))
+    return bool(m) and int(m[1]) < 24 and int(m[2]) < 60
+
+
 def set_setting(key, text):
     *tables, name = key.split(".")
     default = config.DEFAULTS
@@ -53,6 +61,8 @@ def set_setting(key, text):
         default = default.get(t, {})
     if not tables or name not in default or isinstance(default[name], dict):
         return {"ok": False, "error": f"unknown setting {key}"}
+    if key in ("quiet.start", "quiet.end") and not _clock(text):
+        return {"ok": False, "error": "Use a 24-hour time like 23:00."}
     user = _user_settings()
     node = user
     for t in tables:

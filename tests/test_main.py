@@ -441,3 +441,9 @@ def test_a_correction_after_stop_still_runs():
     assert z.after_stop("Wait, stop, open Discord.") == "open Discord"
     assert z.after_stop("Stop. Canild.") == "" and z.after_stop("Nobody will listen. Hey, stop.") == ""
     assert z.after_stop("Stop the song") is None and z.after_stop("Skip it.") is None  # commands, not stops
+
+
+def test_a_bad_quiet_hours_time_never_crashes():
+    cfg = copy.deepcopy(config.DEFAULTS)
+    cfg["quiet"].update(enabled=True, start="11pm", end="7am")
+    assert z.is_quiet(cfg) is False

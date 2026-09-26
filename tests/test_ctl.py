@@ -131,3 +131,8 @@ def test_your_own_wake_word_model(env, monkeypatch):
     assert not run("wake-del", "hey_jarvis")["ok"]                      # built-in: not removable
     assert run("wake-del", str(env / "wake" / "hey_computer.onnx"))["ok"]
     assert config.load(env / "config.toml")["wake"]["model"] == "hey_jarvis"  # was in use: back to a built-in
+
+
+def test_quiet_hours_must_be_times_of_day(env):
+    assert not run("set", "quiet.start", "11pm")["ok"] and not run("set", "quiet.end", "25:00")["ok"]
+    assert run("set", "quiet.start", "23:00")["ok"]
