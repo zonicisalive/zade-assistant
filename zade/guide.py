@@ -74,21 +74,80 @@ def locate(label, labels):
     return labels[hit[2]] if hit else None
 
 
-def plan(goal, labels, done_steps, cfg):
-    """Ask the language model for the next step as {"done", "label", "say"}."""
+_GUIDE_POINT = (" If you can see the screenshot and the thing to click has no text (an icon), set label null and "
+                "give \"x\" and \"y\" in screenshot pixels.")
+
+
+def _parse(text):
+    """The first JSON object in a model's reply (cloud models like to wrap it in ```json fences)."""
+    m = re.search(r"\{.*\}", text or "", re.S)
+    try:
+        return json.loads(m[0]) if m else {}
+    except ValueError:
+        return {}
+
+
+def _cloud(system, msg, img, cfg):
+    """Ask a cloud model that can see: Claude or any OpenAI-compatible one (Gemini, OpenRouter, ...). The
+    screenshot goes at 1280 px wide; returns (reply text, factor from its pixels to the screen's)."""
+    import base64
+    import io
+
+    from PIL import Image
+
+    from . import providers
+
+    provider = cfg["guide"]["provider"]
+    model = cfg["guide"]["model"] or cfg["providers"][provider]["model"]
+    factor = img.shape[1] / 1280
+    buf = io.BytesIO()
+    Image.fromarray(img).resize((1280, round(img.shape[0] / factor))).save(buf, "PNG")
+    b64 = base64.b64encode(buf.getvalue()).decode()
+    client = providers._client(provider, cfg).with_options(timeout=40)
+    if provider == "anthropic":
+        r = client.messages.create(model=model, max_tokens=500, system=system, messages=[{"role": "user", "content": [
+            {"type": "image", "source": {"type": "base64", "media_type": "image/png", "data": b64}},
+            {"type": "text", "text": msg}]}])
+        return r.content[0].text, factor
+    r = client.chat.completions.create(model=model, temperature=0, messages=[
+        {"role": "system", "content": system},
+        {"role": "user", "content": [{"type": "text", "text": msg},
+                                     {"type": "image_url", "image_url": {"url": "data:image/png;base64," + b64}}]}])
+    return r.choices[0].message.content, factor
+
+
+def _local(system, msg, cfg):
     import ollama
 
-    listing = "\n".join(f"{l['x']},{l['y']}: {l['text']}" for l in labels[:220])
-    msg = f"Goal: {goal}\nSteps done: {'; '.join(done_steps) or 'none'}\nOn screen:\n{listing}"
     r = ollama.Client(host=cfg["llm"]["host"], timeout=60).chat(
-        model=cfg["llm"]["model"], format="json", keep_alive="2m",  # stays loaded between guide steps
-        options={"temperature": 0, "num_predict": 200, "num_ctx": 8192},
-        messages=[{"role": "system", "content": PLAN}, {"role": "user", "content": msg}])
-    try:
-        out = json.loads(r.message.content)
-    except ValueError:
-        out = {}
-    return {"done": bool(out.get("done")), "label": out.get("label") or None,
+        model=cfg["llm"]["model"], format="json", keep_alive="2m",  # stays loaded between steps
+        options={"temperature": 0, "num_predict": 250, "num_ctx": 8192},
+        messages=[{"role": "system", "content": system}, {"role": "user", "content": msg}])
+    return r.message.content
+
+
+def plan(goal, labels, done_steps, cfg, img=None):
+    """The next step: {"done", "label", "point", "say"}. point is an (x, y) on screen when the model pointed at
+    something without text (only cloud models see the screenshot)."""
+    listing = "\n".join(f"{l['x']},{l['y']}: {l['text']}" for l in labels[:220])
+    msg = f"Goal: {goal}\nDone so far: {'; '.join(done_steps) or 'nothing'}\nOn screen:\n{listing}"
+    system = PLAN + _GUIDE_POINT
+    out, factor = {}, 1.0
+    if cfg.get("guide", {}).get("provider", "local") != "local" and img is not None:
+        try:
+            text, factor = _cloud(system, msg, img, cfg)
+            out = _parse(text)
+        except Exception as e:  # no key, offline, quota: the local model still works
+            log.warning("cloud screen model failed, using the local one: %s", e)
+    if not out:
+        out, factor = _parse(_local(system, msg, cfg)), 1.0
+    point = None
+    if out.get("x") is not None and out.get("y") is not None:
+        try:
+            point = (round(float(out["x"]) * factor), round(float(out["y"]) * factor))
+        except (TypeError, ValueError):
+            point = None
+    return {"done": bool(out.get("done")), "label": out.get("label") or None, "point": point,
             "say": str(out.get("say") or "I'm not sure what to click next.")}
 
 
@@ -150,15 +209,17 @@ class Session:
         """Look at the screen and point at the next thing. Returns what was said."""
         img = screenshot()
         labels = read_screen(img)
-        p = plan(self.goal, labels, self.done_steps, self.cfg)
+        p = plan(self.goal, labels, self.done_steps, self.cfg, img=img)
         if p["done"]:
             self.stop()
             return p["say"] if p["say"] else "That's done."
         spot = locate(p["label"], labels)
-        self.target = (spot["x"], spot["y"], p["label"]) if spot else None
-        show_pointer(*(self.target[:2] if spot else (None, None)), p["say"])
-        if spot:
-            self.done_steps.append(f"pointed at {p['label']}")
+        # the exact text position (OCR) if there is one, else where a cloud model pointed (an icon)
+        self.target = (spot["x"], spot["y"], p["label"]) if spot else \
+            ((*p["point"], "the spot") if p["point"] else None)
+        show_pointer(*(self.target[:2] if self.target else (None, None)), p["say"])
+        if self.target:
+            self.done_steps.append(f"pointed at {self.target[2]}")
         return p["say"]
 
     def _run(self):
