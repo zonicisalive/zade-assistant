@@ -136,3 +136,15 @@ def test_your_own_wake_word_model(env, monkeypatch):
 def test_quiet_hours_must_be_times_of_day(env):
     assert not run("set", "quiet.start", "11pm")["ok"] and not run("set", "quiet.end", "25:00")["ok"]
     assert run("set", "quiet.start", "23:00")["ok"]
+
+
+def test_settings_saved_at_the_same_moment_are_all_kept(env):
+    from concurrent.futures import ThreadPoolExecutor
+
+    keys = [("stt.provider", "whisper"), ("stt.model", "base.en"), ("sound.volume", "0.5"), ("ui.position", "bottom")]
+    with ThreadPoolExecutor(4) as ex:
+        results = list(ex.map(lambda kv: ctl.set_setting(*kv), keys * 5))
+    assert all(r["ok"] for r in results)
+    c = config.load(env / "config.toml")
+    assert (c["stt"]["provider"], c["stt"]["model"], c["sound"]["volume"], c["ui"]["position"]) == \
+        ("whisper", "base.en", 0.5, "bottom")

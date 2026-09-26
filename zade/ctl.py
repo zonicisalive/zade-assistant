@@ -63,15 +63,22 @@ def set_setting(key, text):
         return {"ok": False, "error": f"unknown setting {key}"}
     if key in ("quiet.start", "quiet.end") and not _clock(text):
         return {"ok": False, "error": "Use a 24-hour time like 23:00."}
-    user = _user_settings()
-    node = user
-    for t in tables:
-        node = node.setdefault(t, {})
-    node[name] = _coerce(default[name], text)
+    import tempfile
+
     CONFIG.parent.mkdir(parents=True, exist_ok=True)
-    tmp = CONFIG.with_suffix(".tmp")  # write then rename: Zade's live reload never sees half a file
-    tmp.write_text("# Written by the Zade app; edit freely.\n" + config.dumps(user) + "\n")
-    os.replace(tmp, CONFIG)
+    # The app can save two settings at once (a chip sets provider and model): one lock around read, change
+    # and write so neither is lost, and a temp file of its own so they can't rename each other's.
+    with open(CONFIG.with_suffix(".lock"), "w") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        user = _user_settings()
+        node = user
+        for t in tables:
+            node = node.setdefault(t, {})
+        node[name] = _coerce(default[name], text)
+        fd, tmp = tempfile.mkstemp(dir=CONFIG.parent, prefix=".config-", suffix=".tmp")
+        with os.fdopen(fd, "w") as f:  # write then rename: Zade's live reload never sees half a file
+            f.write("# Written by the Zade app; edit freely.\n" + config.dumps(user) + "\n")
+        os.replace(tmp, CONFIG)
     return {"ok": True, "live": config.is_live(key)}
 
 
