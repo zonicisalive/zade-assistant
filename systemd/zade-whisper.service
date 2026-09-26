@@ -1,5 +1,7 @@
 [Unit]
 Description=Zade speech recognition (whisper.cpp large-v3-turbo on the GPU via Vulkan, ~1.1 GB VRAM)
+# Stopping Zade stops this too, so its VRAM is freed (a restart doesn't start it early).
+StopPropagatedFrom=zade.service
 # Build: see README ("GPU speech recognition"). Zade starts this when it listens and stops it after
 # stt.keep_alive_s idle; it falls back to its CPU model when this isn't running.
 

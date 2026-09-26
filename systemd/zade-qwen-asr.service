@@ -1,5 +1,7 @@
 [Unit]
 Description=Zade speech recognition (Qwen3-ASR-0.6B via llama.cpp on the GPU through Vulkan, ~1.5 GB VRAM)
+# Stopping Zade stops this too, so its VRAM is freed (a restart doesn't start it early).
+StopPropagatedFrom=zade.service
 # Build: see README ("Qwen3-ASR"). Zade starts this when it listens and stops it after stt.keep_alive_s
 # idle; it falls back to its CPU model when this isn't running.
 
