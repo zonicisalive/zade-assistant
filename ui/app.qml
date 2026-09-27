@@ -756,6 +756,13 @@ ShellRoot {
                                 Button { text: parent.chosen ? "Remove \u201c" + parent.chosen[1] + "\u201d" : ""; danger: true
                                          onClicked: root.removeWakeWord(parent.chosen[0]) } }
                             Divider {}
+                            Row_ { label: "Longest request"; hint: "How long one request may be. With no limit Zade listens until you stop talking (it still stops after 3 minutes of nonstop sound)."
+                                RowLayout { spacing: 8
+                                    Repeater { model: [[15, "15 s"], [30, "30 s"], [60, "1 min"], [0, "Until I stop"]]
+                                        Chip { required property var modelData; text: modelData[1]
+                                               selected: root.settings && Number(root.settings.audio.max_s) === modelData[0]
+                                               onClicked: root.setSetting("audio.max_s", modelData[0]) } } } }
+                            Divider {}
                             Row_ { label: "Speech recognition"; hint: "GPU models load only while Zade listens. Qwen3 is the most accurate with Indian accents (~1.5 GB VRAM); Whisper (GPU) ~1.1 GB. If a GPU model isn't available, Small is used."
                                 RowLayout { spacing: 8
                                     Repeater { model: [["base.en", "Base"], ["small.en", "Small"], ["gpu", "Whisper (GPU)"], ["qwen", "Qwen3 (GPU)"]]

@@ -6,6 +6,6 @@ StopPropagatedFrom=zade.service
 # idle; it falls back to its CPU model when this isn't running.
 
 [Service]
-ExecStart=%h/.local/share/zade/llama.cpp/build/bin/llama-server -m %h/.local/share/zade/qwen3-asr/Qwen3-ASR-0.6B-Q8_0.gguf --mmproj %h/.local/share/zade/qwen3-asr/mmproj-Qwen3-ASR-0.6B-Q8_0.gguf --host 127.0.0.1 --port 8182 -ngl 99 -c 1024 -np 1
+ExecStart=%h/.local/share/zade/llama.cpp/build/bin/llama-server -m %h/.local/share/zade/qwen3-asr/Qwen3-ASR-0.6B-Q8_0.gguf --mmproj %h/.local/share/zade/qwen3-asr/mmproj-Qwen3-ASR-0.6B-Q8_0.gguf --host 127.0.0.1 --port 8182 -ngl 99 -c 6144 -np 1
 Restart=on-failure
 RestartSec=5

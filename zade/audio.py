@@ -16,6 +16,14 @@ def rms(frame):
     return float(np.sqrt(np.mean(frame.astype(np.float32) ** 2)))
 
 
+SAFETY_S = 180  # with no limit set, a recording still stops after 3 minutes, so a TV can't hold Zade forever
+
+
+def limit_s(a):
+    """The longest one request may be: audio.max_s, or with 0 (no limit) only the safety stop."""
+    return a["max_s"] if a.get("max_s") else SAFETY_S
+
+
 def decide(levels, thr, silence_s, max_s, start_timeout_s, end_ratio=0.25):
     # ponytail: energy endpointing; swap for Silero VAD if noise keeps recordings open.
     n = len(levels)
@@ -134,10 +142,10 @@ def record(stream, cfg, start_timeout_s=None, released=None, cancelled=None, on_
         if released is not None:
             if cancelled is not None and cancelled():
                 return None
-            if released() or len(frames) >= round(a["max_s"] / FRAME_S):
+            if released() or len(frames) >= round(limit_s(a) / FRAME_S):
                 return np.concatenate(frames)
             continue
-        d = decide(levels, thr, a["silence_s"], a["max_s"], start_timeout_s or a["start_timeout_s"],
+        d = decide(levels, thr, a["silence_s"], limit_s(a), start_timeout_s or a["start_timeout_s"],
                    a.get("end_ratio", 0.25))
         if d == "abort":
             return None
