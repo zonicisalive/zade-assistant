@@ -129,6 +129,8 @@ class Ctx:
     alerts: list = field(default_factory=list)  # due reminders, spoken by the main loop when idle
     discord_events: list = field(default_factory=list)  # new DMs, mentions and calls to announce
     replay: object = None  # the replay buffer (replay.Replay) while clips are on
+    replay_failed: tuple | None = None  # the clips settings the replay buffer couldn't start with
+    replay_check_at: float = 0.0  # when to next look for replay recorders that stopped
     history: list = field(default_factory=list)  # (time, user text, reply) for follow-ups
     turn: list = field(default_factory=list)  # actions done so far in the current request
     tried: bool = False  # the model tried an action this request (even one that failed)
@@ -309,25 +311,34 @@ def needs_confirm(name, level, args=None):
     return False
 
 
-def sync_replay(ctx):
-    """Start, restart or stop the replay buffer to match the clips settings (they apply live)."""
+def sync_replay(ctx, now=None):
+    """Start, restart or stop the replay buffer to match the clips settings (they apply live), and every
+    30 s restart any of its recorders that stopped. A start that failed waits for the settings to change."""
     from . import replay
 
+    now = time.monotonic() if now is None else now
     c = ctx.cfg.get("clips", {})
     want = (max(5, min(120, int(c.get("seconds", 30)))), c.get("sources", "both"), bool(c.get("screen")),
             bool(c.get("hide_from_shell"))) if c.get("enabled") else None
     have = (ctx.replay.seconds, ctx.replay.sources, ctx.replay.screen_on, ctx.replay.hidden) if ctx.replay else None
     if want == have:
+        if ctx.replay and now >= ctx.replay_check_at:
+            ctx.replay_check_at = now + 30
+            try:
+                if dead := ctx.replay.heal():
+                    log.warning("replay buffer: restarted %s, it had stopped", " and ".join(dead))
+            except OSError as e:
+                log.warning("replay buffer: %s", e)
         return
     if ctx.replay:
         ctx.replay.stop()
         ctx.replay = None
-    if want:
+    if want and want != ctx.replay_failed:
         try:
-            ctx.replay = replay.Replay(*want)
-            atexit.register(lambda r=ctx.replay: r.stop())  # on exit or restart: stop recorders, free the RAM
-        except OSError as e:  # parec missing
+            ctx.replay, ctx.replay_failed = replay.Replay(*want), None
+        except OSError as e:  # parec, ffmpeg or wf-recorder missing, /dev/shm full
             log.warning("replay buffer off: %s", e)
+            ctx.replay_failed = want
 
 
 def pump_discord(ctx):
@@ -495,6 +506,8 @@ def dispatch(ctx, action, from_model=False):
             return vision.look(a.get("question") or "What's on the screen?", ctx.cfg), True
         if name == "clip":
             if not ctx.replay:
+                if ctx.replay_failed:
+                    return "The replay buffer couldn't start. The log says why.", False
                 return "The replay buffer is off. Turn it on in Settings, under Sounds.", False
             try:
                 folder = ctx.replay.save(a.get("seconds"))
@@ -810,6 +823,7 @@ def main():
         return actions.is_yes(answer)
 
     ctx = Ctx(cfg, conn, say, confirm, predict=laya_predictor(cfg))
+    atexit.register(lambda: ctx.replay and ctx.replay.stop())  # on exit or restart: stop recorders, free the RAM
     ctx.show = ui.set
     ctx.app_words = actions.app_names()  # your installed apps and games, so Whisper expects their names
     overlay = ui.start(cfg)

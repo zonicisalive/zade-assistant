@@ -628,3 +628,39 @@ def test_send_the_screenshot_attaches_it(monkeypatch, tmp_path):
     assert out == ("Sent the screenshot to DEXORTO.", True)
     assert asked == ["Send your screenshot from just now to DEXORTO on Discord?"]
     assert calls[-1] == ("send_file", {"channel_id": "9", "path": str(tmp_path / "shot.png")})
+
+
+def test_replay_start_failure_is_not_retried_and_dead_recorders_restart(monkeypatch):
+    from zade import replay
+
+    starts, healed = [], []
+
+    class Broken:
+        def __init__(self, *a):
+            starts.append(a)
+            raise OSError("ffmpeg missing")
+
+    monkeypatch.setattr(replay, "Replay", Broken)
+    ctx = make([])
+    ctx.cfg["clips"].update(enabled=True, seconds=30, sources="both", screen=True)
+    for t in range(5):
+        z.sync_replay(ctx, now=t)
+    assert len(starts) == 1 and ctx.replay is None
+    assert z.dispatch(ctx, {"name": "clip", "args": {}})[0].startswith("The replay buffer couldn't start")
+
+    class Fine:
+        def __init__(self, *a):
+            self.seconds, self.sources, self.screen_on, self.hidden = a
+
+        def heal(self):
+            healed.append(1)
+            return ["screen"]
+
+        def stop(self):
+            pass
+
+    monkeypatch.setattr(replay, "Replay", Fine)
+    ctx.cfg["clips"]["seconds"] = 60  # the settings changed: try again
+    for t in range(0, 70, 1):
+        z.sync_replay(ctx, now=100 + t)
+    assert isinstance(ctx.replay, Fine) and len(healed) == 3  # checked every 30 s, not every poll

@@ -9,6 +9,7 @@ Zade's service has MemorySwapMax=0, so none of it is ever swapped out to the dis
 """
 
 import collections
+import concurrent.futures
 import datetime
 import logging
 import pathlib
@@ -52,8 +53,21 @@ class Ring:
         a = np.frombuffer(raw, np.int16).reshape(-1, self.channels)[-seconds * RATE:]
         return np.repeat(a, 2, axis=1) if self.channels == 1 else a
 
+    def alive(self):
+        return self.proc.poll() is None
+
     def stop(self):
-        self.proc.terminate()
+        _end(self.proc)
+
+
+def _end(proc):
+    """Stop a recorder and reap it: one that's never waited for stays behind as a zombie."""
+    proc.terminate()
+    try:
+        proc.wait(2)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+        proc.wait()
 
 
 def gpu_device():
@@ -106,14 +120,24 @@ class Screen:
         rec = [binary, "-c", "h264_vaapi", "-F", "scale_vaapi=format=nv12", "-r", "60", "-m", "mpegts", "-f", "/dev/stdout"]
         if device := gpu_device():
             rec[1:1] = ["-d", device]
-        if output := screen_output():
+        if output := screen_output():  # the monitor focused now: a restart after it went off picks again
             rec[1:1] = ["-o", output]
-        self.rec = subprocess.Popen(rec, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
-        self.seg = subprocess.Popen(
-            ["ffmpeg", "-loglevel", "error", "-f", "mpegts", "-i", "-", "-c", "copy", "-f", "segment",
-             "-segment_time", str(self.CHUNK), "-segment_wrap", str(seconds // self.CHUNK + 3), "-reset_timestamps", "1",
-             str(self.dir / "seg%03d.ts")], stdin=self.rec.stdout, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+        self.rec = self.seg = None
+        try:
+            self.rec = subprocess.Popen(rec, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+            # The chunks keep their timestamps (no -reset_timestamps): joined, they're one timeline, so
+            # -sseof in save() can cut exactly the last seconds.
+            self.seg = subprocess.Popen(
+                ["ffmpeg", "-loglevel", "error", "-f", "mpegts", "-i", "-", "-c", "copy", "-f", "segment",
+                 "-segment_time", str(self.CHUNK), "-segment_wrap", str(seconds // self.CHUNK + 3),
+                 str(self.dir / "seg%03d.ts")], stdin=self.rec.stdout, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+        except OSError:  # ffmpeg missing: don't leave the recorder running
+            self.stop()
+            raise
         self.rec.stdout.close()  # ffmpeg owns the pipe now
+
+    def alive(self):
+        return self.rec.poll() is None and self.seg.poll() is None
 
     def save(self, dest, seconds):
         """The newest `seconds` of screen into `dest` (MP4): the picture only, the sound is in its own files."""
@@ -129,7 +153,8 @@ class Screen:
 
     def stop(self):
         for proc in (self.rec, self.seg):
-            proc.terminate()
+            if proc:
+                _end(proc)
         shutil.rmtree(self.dir, ignore_errors=True)
 
 
@@ -142,39 +167,67 @@ class Replay:
     def __init__(self, seconds=30, sources="both", screen=False, hidden=False):
         self.seconds, self.sources, self.screen_on, self.hidden = seconds, sources, screen, hidden
         names = ["system", "mic"] if sources == "both" else [sources]
-        self.rings = {n: Ring(*SOURCES[n], seconds) for n in names if n in SOURCES}
-        self.screen = None
-        if screen:
-            if binary := recorder(hidden):
-                self.screen = Screen(seconds, binary)
-            else:
-                log.warning("screen replay off: wf-recorder isn't installed")
+        self.rings, self.screen, self.binary = {}, None, None
+        try:  # a part that fails to start (ffmpeg missing, /dev/shm full) stops the ones already running
+            for n in names:
+                if n in SOURCES:
+                    self.rings[n] = Ring(*SOURCES[n], seconds)
+            if screen:
+                self.binary = recorder(hidden)
+                if self.binary:
+                    self.screen = Screen(seconds, self.binary)
+                else:
+                    log.warning("screen replay off: wf-recorder isn't installed")
+        except BaseException:
+            self.stop()
+            raise
+
+    def heal(self):
+        """Restart the recorders that stopped (the audio server restarted, the monitor went off); the others
+        keep what they have. Returns the names of the restarted ones."""
+        dead = [n for n, r in self.rings.items() if not r.alive()]
+        for n in dead:
+            self.rings[n].stop()
+            self.rings[n] = Ring(*SOURCES[n], self.seconds)
+        if self.screen and not self.screen.alive():
+            dead.append("screen")
+            self.screen.stop()
+            self.screen = Screen(self.seconds, self.binary)
+        return dead
 
     def save(self, seconds=None, folder=FOLDER):
         """Save the newest `seconds` (at most what's kept) into a new folder: "mic and sound.mp3" (mixed),
         "sound.mp3" and "screen.mp4", as far as each is recorded. Returns the folder."""
         seconds = min(int(seconds or self.seconds), self.seconds)
-        parts = {n: r.last(seconds) for n, r in self.rings.items()}
-        n = min((len(p) for p in parts.values()), default=0)
-        if n < RATE // 2 and not self.screen:
+        # A stopped recorder's sound is old (mixed by its end, it wouldn't line up), and one with nothing
+        # yet would cut every file to nothing: leave both out.
+        parts = {n: p for n, r in self.rings.items() if r.alive() and len(p := r.last(seconds)) >= RATE // 2}
+        if not parts and not self.screen:
             raise RuntimeError("There's nothing recorded yet.")
         out = folder / f"{datetime.datetime.now():%Y-%m-%d %H-%M-%S}"
         out.mkdir(parents=True, exist_ok=True)
-        mix = None
-        if n >= RATE // 2:
-            mix = np.clip(sum(p[-n:].astype(np.int32) for p in parts.values()), -32768, 32767).astype(np.int16)
-        if self.screen:
+
+        def video():
             try:
                 self.screen.save(out / "screen.mp4", seconds)
             except (RuntimeError, subprocess.CalledProcessError) as e:
                 log.warning("screen replay: %s", e)
-        if mix is not None:
-            if len(parts) > 1:
-                mp3(mix, out / "mic and sound.mp3")
-            if "system" in parts:
-                mp3(parts["system"][-n:], out / "sound.mp3")
-            elif "mic" in parts:
-                mp3(parts["mic"][-n:], out / "mic.mp3")
+
+        # The encoders run side by side: Zade doesn't hear the wake word while a clip is saved.
+        with concurrent.futures.ThreadPoolExecutor() as pool:
+            jobs = [pool.submit(video)] if self.screen else []
+            if parts:
+                n = min(len(p) for p in parts.values())
+                if len(parts) > 1:
+                    mix = np.clip(sum(p[-n:].astype(np.int32) for p in parts.values()), -32768, 32767).astype(np.int16)
+                    jobs.append(pool.submit(mp3, mix, out / "mic and sound.mp3"))
+                name = "system" if "system" in parts else "mic"
+                jobs.append(pool.submit(mp3, parts[name][-n:], out / ("sound.mp3" if name == "system" else "mic.mp3")))
+            for job in jobs:
+                job.result()  # an MP3 that failed raises here
+        if not any(out.iterdir()):
+            out.rmdir()
+            raise RuntimeError("The recorders have stopped, so there was nothing to save.")
         log.info("replay: saved %s", out)
         return out
 

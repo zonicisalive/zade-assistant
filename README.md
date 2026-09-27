@@ -9,6 +9,7 @@ fork it and change it however they wish; see [License](#license).
 
 ```bash
 sudo pacman -S --needed portaudio playerctl wireplumber gtk3 uv   # plus Ollama for the brain
+sudo pacman -S --needed ffmpeg wf-recorder libpulse   # the replay buffer ("clip that"): sound and screen
 uv python install 3.11 && CC=gcc uv sync   # CC=gcc: evdev builds from source
 mkdir -p ~/.local/share/zade/voices ~/.config/zade
 uv run python -m piper.download_voices en_US-lessac-medium --data-dir ~/.local/share/zade/voices
