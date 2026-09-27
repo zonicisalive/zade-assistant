@@ -75,7 +75,8 @@ TOOLS = [
        target={"type": "string", "description": "person, or channel with its server as said: \"staff-vc in BITNADE\""},
        text={"type": "string", "description": "reply/edit text, or status: online, idle, dnd, invisible"},
        emoji={"type": "string", "description": "emoji character"}, count={"type": "integer"}),
-    _t("send_message", "Message a person on Discord.", ["to", "text"], to=S, text=S),
+    _t("send_message", "Message someone on Discord. to \"the current chat\" = the open chat; text \"the screenshot\" "
+       "sends the latest screenshot.", ["to", "text"], to=S, text=S),
     _t("type_text", "Type text into the focused window.", ["text"], text=S),
     _t("brightness", "Screen brightness (dim/brighten): delta % or set 0-100.", set={"type": "integer"}, delta={"type": "integer"}),
     _t("screenshot", "Take a screenshot."),

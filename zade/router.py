@@ -194,6 +194,9 @@ def parse_message(text):
                          r"(?:discord (?:chat|channel|dm)|(?:chat|channel|dm)(?: (?:on|in|of) discord)?)"
                          r"|(?:say|send|type|write|post) (.+?) here (?:on|in) discord", text):
         return "the current chat", m[1] or m[2]
+    # "send the latest screenshot to discord", "post gg on discord": no one named, so the open chat
+    if m := re.fullmatch(r"(?:send|share|post|drop) (.+?) (?:to|on|in|into) discord", text):
+        return "the current chat", m[1]
     return None
 
 
