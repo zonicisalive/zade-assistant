@@ -155,6 +155,12 @@ def candidates(cfg, vram=vram_free_gb, resident=resident_on_gpu):
 ASKED_TO_THINK = re.compile(r"\b(?:think|thinking|reason (?:it|this) out|step by step|carefully|soch(?:\s?ke|\s?kar)?)\b", re.I)
 
 
+# Measured on six trick questions with qwen3:8b: still 6 of 6 right, with ~40% less thinking (4.3 s instead
+# of 6.9 s on average, 6.7 s instead of 12.3 s for the slowest).
+THINK_BRIEFLY = ("\nThink briefly: only the few steps the question really needs, check the result once, then answer. "
+                 "Don't restate the question or explore alternatives you won't use.")
+
+
 def should_think(text, cfg):
     """Whether this request gets thinking (llm.thinking: off | ask | auto | always)."""
     mode = cfg["llm"].get("thinking", "off")
@@ -197,8 +203,8 @@ def ask(text, facts, cfg, run_tool, history=(), vram=vram_free_gb, resident=resi
     for name, extra in candidates(cfg, vram, resident):
         try:
             think = should_think(text, cfg) and extra.get("num_gpu") != 0  # not on the slow CPU fallback
-            reply = providers.chat(name, system, text, TOOLS, tracked, cfg, extra, history,
-                                   **({"think": True} if think else {}))
+            reply = providers.chat(name, system + (THINK_BRIEFLY if think else ""), text, TOOLS, tracked, cfg, extra,
+                                   history, **({"think": True} if think else {}))
             if leaked := leaked_call(reply):  # the call written out as text instead of made: make it (confirmations apply)
                 result = tracked(*leaked)
                 return result if result and result != "done" else "Done."

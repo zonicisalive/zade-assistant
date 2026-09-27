@@ -102,7 +102,7 @@ def _anthropic(system, text, tools, run_tool, cfg, extra, history, think=False):
         if think:
             kw["thinking"] = {"type": "enabled", "budget_tokens": 2048}
     elif think or pc.get("effort"):
-        kw["output_config"] = {"effort": "high" if think else pc["effort"]}
+        kw["output_config"] = {"effort": "medium" if think else pc["effort"]}  # enough to get it right, not long
     if pc.get("fallbacks"):
         kw |= {"betas": ["server-side-fallback-2026-07-01"], "fallbacks": pc["fallbacks"]}
     specs = [{"name": t["name"], "description": t["description"], "input_schema": t["parameters"]} for t in tools]
@@ -133,7 +133,7 @@ def _openai(system, text, tools, run_tool, cfg, extra, history, think=False):
     specs = [{"type": "function", "function": t} for t in tools]
     msgs = [{"role": "system", "content": system}, *_history(history), {"role": "user", "content": text}]
     for _ in range(MAX_ROUNDS):
-        body = {**(_private(client) or {}), **({"reasoning_effort": "high"} if think else {})}
+        body = {**(_private(client) or {}), **({"reasoning_effort": "medium"} if think else {})}
         m = client.chat.completions.create(model=pc["model"], messages=msgs, tools=specs, extra_body=body or None
                                            ).choices[0].message
         if not m.tool_calls:
