@@ -176,6 +176,7 @@ def test_user_app_names_for_hotwords(tmp_path):
 
 def test_closing_a_steam_game_never_kills_steam(monkeypatch):
     calls = _calls(monkeypatch)
+    monkeypatch.setattr(actions, "_output", lambda cmd: json.dumps([{"id": 3, "app_id": "steam"}]))  # Steam's own window
     monkeypatch.setattr(actions, "find_app", lambda name: ("MECCHA CHAMELEON", "steam"))
     with pytest.raises(actions.Failed, match="Steam"):
         actions.run({"name": "close_app", "args": {"name": "meccha chameleon"}}, lambda q: True)
@@ -214,6 +215,7 @@ def test_words_inside_app_ids_do_not_match(tmp_path):
 
 def test_never_pkill_generic_launchers(monkeypatch):
     calls = _calls(monkeypatch)
+    monkeypatch.setattr(actions, "_output", lambda cmd: "[]")
     for exe in ["sh", "bash", "env", "flatpak", "python3", "gtk-launch"]:
         monkeypatch.setattr(actions, "find_app", lambda name, e=exe: ("some-app", e))
         with pytest.raises(actions.Failed, match="close this window"):
@@ -226,6 +228,30 @@ def test_a_long_phrase_does_not_match_an_app_inside_it(tmp_path):
     assert actions.find_app("discord whatsapp and telegram", [tmp_path]) is None
     assert actions.find_app("discord", [tmp_path]) == ("discord", "discord")
     assert actions.find_app("discrd", [tmp_path]) == ("discord", "discord")  # small mishearings still match
+
+
+def test_an_app_started_by_a_launcher_closes_by_its_window(monkeypatch):
+    calls = _calls(monkeypatch)
+    monkeypatch.setattr(actions, "_output", lambda cmd: json.dumps([{"id": 4, "app_id": "Spotify"}, {"id": 5, "app_id": "sh"}]))
+    monkeypatch.setattr(actions, "find_app", lambda name: ("spotify", "sh"))
+    actions.run({"name": "close_app", "args": {"name": "spotify"}}, lambda q: True)
+    assert calls == [["niri", "msg", "action", "close-window", "--id", "4"]]
+
+
+def test_an_executable_other_apps_share_does_not_pick_their_windows(tmp_path, monkeypatch):
+    (tmp_path / "thunar.desktop").write_text("[Desktop Entry]\nName=Thunar\nExec=thunar %F\n")
+    (tmp_path / "thunar-bulk-rename.desktop").write_text("[Desktop Entry]\nName=Bulk Rename\nExec=thunar --bulk-rename\n")
+    monkeypatch.setattr(actions, "APP_DIRS", [tmp_path])
+    monkeypatch.setattr(actions, "_output", lambda cmd: json.dumps([{"id": 6, "app_id": "thunar"}]))
+    assert actions._app_windows(("thunar-bulk-rename", "thunar")) == []
+    assert [w["id"] for w in actions._app_windows(("thunar", "thunar"))] == [6]
+
+
+def test_pronouns_and_letters_inside_names_are_not_apps(tmp_path):
+    (tmp_path / "kitty.desktop").write_text("[Desktop Entry]\nName=kitty\nExec=kitty\n")
+    (tmp_path / "writer.desktop").write_text("[Desktop Entry]\nName=LibreOffice Writer\nExec=libreoffice --writer\n")
+    assert actions.find_app("it", [tmp_path]) is None
+    assert actions.find_app("writer", [tmp_path]) == ("writer", "libreoffice")
 
 
 def test_system_components_can_never_be_closed(monkeypatch):

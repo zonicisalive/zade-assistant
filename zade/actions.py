@@ -94,11 +94,14 @@ def find_app(name, dirs=None):
     if name.lower().strip() in BROWSER_WORDS:
         name = _default_browser().removesuffix(".desktop") or name
     apps = _apps(dirs or APP_DIRS)
-    m = process.extractOne(name.lower(), list(apps), scorer=fuzz.WRatio, score_cutoff=85)
-    # A short app name inside a long request ("discord" in "discord whatsapp and telegram") is not a match.
-    if m and len(name) > len(m[0]) * 1.6:
-        return None
-    return apps[m[0]] if m else None
+    q = name.lower()
+    for m in process.extract(q, list(apps), scorer=fuzz.WRatio, score_cutoff=85, limit=5):
+        # A short app name inside a long request ("discord" in "discord whatsapp and telegram") is not a
+        # match, nor are a few letters inside a name ("it" scores 90 against "kitty"): it must be spelled
+        # close to the name, or be whole words of it ("writer" for "libreoffice writer").
+        if len(name) <= len(m[0]) * 1.6 and (fuzz.ratio(q, m[0]) >= 75 or set(q.split()) <= set(m[0].split())):
+            return apps[m[0]]
+    return None
 
 
 def closest_app(name, dirs=None):
@@ -169,9 +172,13 @@ def _output(cmd):
 
 
 def _app_windows(app):
-    """The app's open windows (niri), matched by window app id against its desktop id and executable."""
+    """The app's open windows (niri), matched by window app id against its desktop id, and its executable
+    unless that's a launcher or other apps share it (Thunar's Bulk Rename runs thunar: closing it must not
+    close every Thunar window; every Steam game runs steam)."""
     desktop_id, exe = app
-    names = {desktop_id.lower(), desktop_id.lower().rsplit(".", 1)[-1], exe.lower()}
+    names = {desktop_id.lower(), desktop_id.lower().rsplit(".", 1)[-1]}
+    if exe not in WRAPPERS | {"steam"} and sum(e[1] == exe for e in set(_apps(APP_DIRS).values())) <= 1:
+        names.add(exe.lower())
     try:
         windows = json.loads(_output(["niri", "msg", "-j", "windows"]) or "[]")
     except (OSError, ValueError, subprocess.SubprocessError):
@@ -197,6 +204,10 @@ def _close_app(app, name):
         _call(["niri", "msg", "action", "close-window", "--id", str(w["id"])])
     if windows:
         return
+    if app[1] == "steam":  # a Steam game's launcher is Steam itself; pkill would close all of Steam
+        raise Failed(f"I can't close Steam games yet. Close {name} from the game.")
+    if app[1] in WRAPPERS:  # e.g. Spotify starts via "sh": pkill would kill every shell
+        raise Failed(f"I can't close {name} safely by name. Focus it and say close this window.")
     if len(app[1]) > 15 or subprocess.run(["pkill", "-x", app[1]], capture_output=True).returncode != 0:
         raise Failed(f"{name} doesn't seem to be open.")
 
@@ -462,10 +473,6 @@ def run(action, confirm):
                 _spawn(["gtk-launch", app[0]])
         elif app[1] in PROTECTED or any(p in app[1].lower() for p in ("niri", "quickshell", "portal", "pipewire")):
             raise Failed(f"I won't close {a['name']}, it keeps your desktop running.")
-        elif app[1] == "steam":  # a Steam game's launcher is Steam itself; pkill would close all of Steam
-            raise Failed(f"I can't close Steam games yet. Close {a['name']} from the game.")
-        elif app[1] in WRAPPERS:  # e.g. Spotify starts via "sh": pkill would kill every shell
-            raise Failed(f"I can't close {a['name']} safely by name. Focus it and say close this window.")
         else:
             _close_app(app, a["name"])
         return ""
