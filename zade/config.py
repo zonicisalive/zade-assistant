@@ -39,6 +39,10 @@ DEFAULTS = {
         # Longest reply the local model may write. Spoken answers are short; without a cap a model that
         # starts looping keeps generating until its context is full and Zade hangs.
         "max_tokens": 400,
+        # Thinking before answering (slower, better on hard questions): off | ask (when you say "think...") |
+        # auto (also any request of think_min_words or more) | always. think_model: the Ollama model used for
+        # it ("" = the main model, which must support thinking; qwen3 models do, qwen2.5 doesn't).
+        "thinking": "ask", "think_model": "", "think_min_words": 25, "think_tokens": 2048,
         "keep_alive": "30s",
         "vram_min_free_gb": 5.0,
         "fallback": "cpu",
@@ -94,7 +98,8 @@ DEFAULTS = {
 
 # Settings the running Zade picks up without a restart (it re-reads config.toml when it changes).
 LIVE_SECTIONS = ("ui", "sound", "quiet", "safety", "persona", "history", "web", "music", "weather")
-LIVE_KEYS = ("llm.personality", "llm.keep_alive", "stt.keep_alive_s")
+LIVE_KEYS = ("llm.personality", "llm.keep_alive", "stt.keep_alive_s", "llm.thinking", "llm.think_model",
+             "llm.think_min_words")
 
 
 def is_live(key):

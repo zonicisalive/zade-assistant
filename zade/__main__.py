@@ -540,6 +540,8 @@ def handle(ctx, raw):
         # the words as heard: normalizing drops "can you" and the like for matching commands, which turns
         # "What can you do?" into "what do"
         said = " ".join((raw or "").split()) or text
+        if brain.should_think(said, ctx.cfg):  # thinking takes a while: say so, instead of a long silence
+            ctx.say("Let me think.")
         answer = ctx.ask(said, memory.facts(ctx.conn), ctx.cfg, run_tool, recent(ctx))
         log.info("model said %r", answer)
         emotion, reply = split_emotion(answer)

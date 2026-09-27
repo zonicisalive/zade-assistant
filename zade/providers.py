@@ -1,8 +1,11 @@
 import json
+import logging
 import os
 
 import httpx
 import ollama
+
+log = logging.getLogger("zade")
 
 MAX_ROUNDS = 4
 TOO_MANY = "That took too many steps, so I stopped."
@@ -50,15 +53,34 @@ def _history(history):
     return msgs
 
 
-def _ollama(system, text, tools, run_tool, cfg, extra, history):
+_thinks = {}
+
+
+def can_think(client, model):
+    """Whether an Ollama model can think (qwen3 can, qwen2.5 can't), asked once per model."""
+    if model not in _thinks:
+        try:
+            _thinks[model] = "thinking" in (client.show(model).capabilities or [])
+        except Exception:
+            _thinks[model] = False
+    return _thinks[model]
+
+
+def _ollama(system, text, tools, run_tool, cfg, extra, history, think=False):
     llm = cfg["llm"]
     client = _client("ollama", cfg)
+    model = (llm.get("think_model") or llm["model"]) if think else llm["model"]
+    if think and not can_think(client, model):
+        log.info("thinking skipped: %s can't think (set a thinking model, e.g. qwen3:8b)", model)
+        model, think = llm["model"], False
+    # thinking is written before the answer and counts against the cap: give it room
+    predict = max(llm.get("max_tokens", 400), llm.get("think_tokens", 2048)) if think else llm.get("max_tokens", 400)
     msgs = [{"role": "system", "content": system}, *_history(history), {"role": "user", "content": text}]
     specs = [{"type": "function", "function": t} for t in tools]
     for _ in range(MAX_ROUNDS):
         r = client.chat(
-            model=llm["model"], messages=msgs, tools=specs, think=False,
-            options={"num_ctx": llm["num_ctx"], "num_predict": llm.get("max_tokens", 400), **extra},
+            model=model, messages=msgs, tools=specs, think=think,
+            options={"num_ctx": llm["num_ctx"], "num_predict": predict, **extra},
             keep_alive=llm["keep_alive"],
         )
         if not r.message.tool_calls:
@@ -70,12 +92,17 @@ def _ollama(system, text, tools, run_tool, cfg, extra, history):
     return TOO_MANY
 
 
-def _anthropic(system, text, tools, run_tool, cfg, extra, history):
+def _anthropic(system, text, tools, run_tool, cfg, extra, history, think=False):
     pc = cfg["providers"]["anthropic"]
     client = _client("anthropic", cfg)
     kw = {}
-    if pc.get("effort"):
-        kw["output_config"] = {"effort": pc["effort"]}
+    # Current Claude models think adaptively on their own; effort sets how much (turning thinking off makes
+    # them write tool calls as text). Haiku 4.5 thinks only with a budget.
+    if "haiku" in pc["model"]:
+        if think:
+            kw["thinking"] = {"type": "enabled", "budget_tokens": 2048}
+    elif think or pc.get("effort"):
+        kw["output_config"] = {"effort": "high" if think else pc["effort"]}
     if pc.get("fallbacks"):
         kw |= {"betas": ["server-side-fallback-2026-07-01"], "fallbacks": pc["fallbacks"]}
     specs = [{"name": t["name"], "description": t["description"], "input_schema": t["parameters"]} for t in tools]
@@ -100,13 +127,14 @@ def _private(client):
     return {"provider": {"zdr": True, "data_collection": "deny"}} if "openrouter.ai" in str(getattr(client, "base_url", "")) else None
 
 
-def _openai(system, text, tools, run_tool, cfg, extra, history):
+def _openai(system, text, tools, run_tool, cfg, extra, history, think=False):
     pc = cfg["providers"]["openai"]
     client = _client("openai", cfg)
     specs = [{"type": "function", "function": t} for t in tools]
     msgs = [{"role": "system", "content": system}, *_history(history), {"role": "user", "content": text}]
     for _ in range(MAX_ROUNDS):
-        m = client.chat.completions.create(model=pc["model"], messages=msgs, tools=specs, extra_body=_private(client)
+        body = {**(_private(client) or {}), **({"reasoning_effort": "high"} if think else {})}
+        m = client.chat.completions.create(model=pc["model"], messages=msgs, tools=specs, extra_body=body or None
                                            ).choices[0].message
         if not m.tool_calls:
             return (m.content or "").strip()
@@ -126,11 +154,11 @@ def _openai(system, text, tools, run_tool, cfg, extra, history):
     return TOO_MANY
 
 
-def chat(name, system, text, tools, run_tool, cfg, extra, history=()):
+def chat(name, system, text, tools, run_tool, cfg, extra, history=(), think=False):
     fn = {"ollama": _ollama, "anthropic": _anthropic, "openai": _openai}.get(name)
     if not fn:
         raise ProviderError(f"unknown provider {name}")
     try:
-        return fn(system, text, tools, run_tool, cfg, extra, history)
+        return fn(system, text, tools, run_tool, cfg, extra, history, think)
     except _errors(name) as e:
         raise ProviderError(f"{name}: {e}") from e

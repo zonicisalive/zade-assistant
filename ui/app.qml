@@ -866,6 +866,17 @@ ShellRoot {
                                 Field { Layout.preferredWidth: 220; text: root.settings ? root.settings.llm.model : ""
                                         onEdited: root.setSetting("llm.model", text) } }
                             Divider {}
+                            Row_ { label: "Thinking"; hint: "Thinks before answering: slower, better on hard questions. \u201cWhen I ask\u201d: say \u201cthink\u201d, \u201cstep by step\u201d or \u201ccarefully\u201d. \u201cLong questions\u201d: also any request of 25 words or more."
+                                RowLayout { spacing: 8
+                                    Repeater { model: [["off", "Off"], ["ask", "When I ask"], ["auto", "Long questions"], ["always", "Always"]]
+                                        Chip { required property var modelData; text: modelData[1]
+                                               selected: root.settings && root.settings.llm.thinking === modelData[0]
+                                               onClicked: root.setSetting("llm.thinking", modelData[0]) } } } }
+                            Row_ { label: "Thinking model"; hint: "The local model that thinks (qwen3 models can; qwen2.5 can't). Empty uses the model above. Claude and OpenAI-compatible brains think on their own."
+                                visible: root.settings && root.settings.llm.thinking !== "off"
+                                Field { Layout.preferredWidth: 220; placeholder: "e.g. qwen3:8b"; text: root.settings ? root.settings.llm.think_model : ""
+                                        onEdited: root.setSetting("llm.think_model", text) } }
+                            Divider {}
                             Row_ { label: "Vision model"; hint: "Used for “what's on my screen”."
                                 Field { Layout.preferredWidth: 220; text: root.settings ? root.settings.vision.model : ""
                                         onEdited: root.setSetting("vision.model", text) } }

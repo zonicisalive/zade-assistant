@@ -151,6 +151,21 @@ def candidates(cfg, vram=vram_free_gb, resident=resident_on_gpu):
     return out
 
 
+# Asking for it: "think carefully", "think about...", "step by step", "soch ke batao"
+ASKED_TO_THINK = re.compile(r"\b(?:think|thinking|reason (?:it|this) out|step by step|carefully|soch(?:\s?ke|\s?kar)?)\b", re.I)
+
+
+def should_think(text, cfg):
+    """Whether this request gets thinking (llm.thinking: off | ask | auto | always)."""
+    mode = cfg["llm"].get("thinking", "off")
+    if mode == "always":
+        return True
+    if mode not in ("ask", "auto"):
+        return False
+    return bool(ASKED_TO_THINK.search(text)) or \
+        (mode == "auto" and len(text.split()) >= cfg["llm"].get("think_min_words", 25))
+
+
 def ask(text, facts, cfg, run_tool, history=(), vram=vram_free_gb, resident=resident_on_gpu):
     now = datetime.datetime.now().astimezone()
     system = SYSTEM.replace("{name}", cfg["persona"]["name"] or "Zade") + (
@@ -181,7 +196,9 @@ def ask(text, facts, cfg, run_tool, history=(), vram=vram_free_gb, resident=resi
 
     for name, extra in candidates(cfg, vram, resident):
         try:
-            reply = providers.chat(name, system, text, TOOLS, tracked, cfg, extra, history)
+            think = should_think(text, cfg) and extra.get("num_gpu") != 0  # not on the slow CPU fallback
+            reply = providers.chat(name, system, text, TOOLS, tracked, cfg, extra, history,
+                                   **({"think": True} if think else {}))
             if leaked := leaked_call(reply):  # the call written out as text instead of made: make it (confirmations apply)
                 result = tracked(*leaked)
                 return result if result and result != "done" else "Done."

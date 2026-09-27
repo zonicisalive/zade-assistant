@@ -178,3 +178,36 @@ def test_the_leaked_call_runs_through_the_normal_path(monkeypatch):
     monkeypatch.setattr(brain, "candidates", lambda cfg, vram, resident: [("ollama", {})])
     out = brain.ask("send hi to dexorto", [], copy.deepcopy(config.DEFAULTS), lambda n, a: ran.append((n, a)) or "Sent to DEXORTO.")
     assert ran == [("send_message", {"to": "dexorto", "text": "hi"})] and out == "Sent to DEXORTO."
+
+
+def test_when_to_think():
+    cfg = copy.deepcopy(config.DEFAULTS)
+    long_q = " ".join(["word"] * 30)
+    for mode, cases in {"off": [("think about it", False), (long_q, False)],
+                        "ask": [("think carefully: is 91 prime?", True), ("what time is it", False), (long_q, False)],
+                        "auto": [("explain it step by step", True), (long_q, True), ("open discord", False)],
+                        "always": [("open discord", True)]}.items():
+        cfg["llm"]["thinking"] = mode
+        for text, want in cases:
+            assert brain.should_think(text, cfg) is want, (mode, text)
+
+
+def test_thinking_uses_the_thinking_model_or_skips(monkeypatch):
+    seen = []
+
+    class Client:
+        def show(self, model):
+            return type("S", (), {"capabilities": ["thinking"] if model.startswith("qwen3") else []})()
+
+        def chat(self, **kw):
+            seen.append((kw["model"], kw["think"], kw["options"]["num_predict"]))
+            return type("R", (), {"message": type("M", (), {"tool_calls": None, "content": "Yes."})()})()
+
+    monkeypatch.setattr(providers, "_client", lambda name, cfg: Client())
+    monkeypatch.setattr(providers, "_thinks", {})
+    cfg = copy.deepcopy(config.DEFAULTS)
+    cfg["llm"].update(model="qwen2.5:7b-instruct", think_model="qwen3:8b")
+    providers._ollama("sys", "q", [], None, cfg, {}, (), think=True)
+    cfg["llm"]["think_model"] = ""  # the main model can't think: answer without it
+    providers._ollama("sys", "q", [], None, cfg, {}, (), think=True)
+    assert seen == [("qwen3:8b", True, 2048), ("qwen2.5:7b-instruct", False, 400)]
