@@ -193,6 +193,37 @@ def _app_windows(app):
     return [w for w in windows if (w.get("app_id") or "").lower() in names]
 
 
+# What a screenshot is of, besides an app's name: the whole screen, or the focused window ("is/ye": Hindi "this")
+SCREEN_WORDS = {"", "screen", "whole screen", "full screen", "entire screen", "display", "monitor", "desktop"}
+THIS_WINDOW = {"this", "this one", "current", "focused", "active", "window", "is", "iss", "ye", "yeh"}
+
+
+def shot_target(said):
+    """ "the firefox window" -> "firefox", "my screen" -> "screen", "this window" -> "this"."""
+    return re.sub(r"^(?:the|my) | (?:window|app)$", "", " ".join(said.lower().split()))
+
+
+def screenshot(app=""):
+    """The screen; with app, only that app's window (the one used last, if it has several), wherever it is:
+    niri draws the window on its own, so nothing is moved or focused. Saved where niri saves screenshots
+    (screenshot-path), and copied to the clipboard."""
+    target = shot_target(app)
+    if target in SCREEN_WORDS:
+        _call(["niri", "msg", "action", "screenshot-screen"])
+        return "Screenshot saved."
+    if target in THIS_WINDOW:
+        _call(["niri", "msg", "action", "screenshot-window"])
+        return "Screenshot of this window saved."
+    found = find_app(target)
+    windows = _app_windows(found) if found else []
+    if not windows:
+        raise Failed(f"{app} has no open window." if found else f"I couldn't find {app}.")
+    stamp = lambda w: (bool(w.get("is_focused")), (w.get("focus_timestamp") or {}).get("secs", 0),
+                       (w.get("focus_timestamp") or {}).get("nanos", 0))
+    _call(["niri", "msg", "action", "screenshot-window", "--id", str(max(windows, key=stamp)["id"])])
+    return f"Screenshot of {target} saved."
+
+
 def _focus_open_window(app):
     """Focus the app's window if it's already open (niri). Relaunching a running Electron app like
     Discord takes seconds: it starts, finds the running copy, hands over and quits."""
@@ -571,8 +602,7 @@ def run(action, confirm):
             _call(["wtype", *wtype_args(c)])
         return ""
     if name == "screenshot":
-        _call(["niri", "msg", "action", "screenshot-screen"])
-        return "Screenshot saved."
+        return screenshot(a.get("app") or "")
     if name == "power":
         if a.get("action") not in POWER:
             raise Failed(f"Unknown power action {a.get('action')}.")

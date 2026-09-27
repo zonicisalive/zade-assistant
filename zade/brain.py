@@ -81,7 +81,7 @@ TOOLS = [
        "sends the latest screenshot.", ["to", "text"], to=S, text=S),
     _t("type_text", "Type text into the focused window.", ["text"], text=S),
     _t("brightness", "Screen brightness (dim/brighten): delta % or set 0-100.", set={"type": "integer"}, delta={"type": "integer"}),
-    _t("screenshot", "Take a screenshot."),
+    _t("screenshot", "Take a screenshot; app: only that app's window (\"this window\" = the focused one).", app=S),
     _t("clip", "Save the last seconds of what the user heard and said (replay buffer) as a clip.",
        seconds={"type": "integer"}),
     _t("play_music", "Play a song, artist or album. provider/device only if named.", ["query"],

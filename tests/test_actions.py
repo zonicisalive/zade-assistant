@@ -137,6 +137,25 @@ def test_clipboard_and_typing(monkeypatch):
     assert calls == [["wtype", "--", "hello world"]]
 
 
+def test_screenshot_of_one_app_takes_its_window_used_last(monkeypatch):
+    calls = _calls(monkeypatch)
+    monkeypatch.setattr(actions, "find_app", lambda name: ("firefox", "firefox") if name == "firefox" else None)
+    monkeypatch.setattr(actions, "_output", lambda cmd: json.dumps([
+        {"id": 3, "app_id": "firefox", "is_focused": False, "focus_timestamp": {"secs": 50, "nanos": 0}},
+        {"id": 8, "app_id": "firefox", "is_focused": False, "focus_timestamp": {"secs": 90, "nanos": 0}},
+        {"id": 9, "app_id": "kitty", "is_focused": True, "focus_timestamp": {"secs": 99, "nanos": 0}}]))
+    assert actions.screenshot("the Firefox window") == "Screenshot of firefox saved."
+    assert actions.screenshot("this window") == "Screenshot of this window saved."
+    assert actions.screenshot("") == "Screenshot saved."
+    assert calls == [["niri", "msg", "action", "screenshot-window", "--id", "8"],
+                     ["niri", "msg", "action", "screenshot-window"], ["niri", "msg", "action", "screenshot-screen"]]
+    with pytest.raises(actions.Failed, match="couldn't find"):
+        actions.screenshot("banana")
+    monkeypatch.setattr(actions, "_output", lambda cmd: "[]")
+    with pytest.raises(actions.Failed, match="no open window"):
+        actions.screenshot("firefox")
+
+
 def test_brightness_and_screenshot(monkeypatch):
     calls = _calls(monkeypatch)
     actions.run({"name": "brightness", "args": {"set": 150}}, lambda q: True)

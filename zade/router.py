@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 
 from rapidfuzz import fuzz, process
 
-from .actions import SITES
+from .actions import SCREEN_WORDS, SITES, THIS_WINDOW, shot_target
 
 log = logging.getLogger("zade")
 
@@ -383,6 +383,16 @@ def parse_pattern(text, find_app):
         return {"name": "lock_screen", "args": {}}
     if re.fullmatch(r"(?:take a |take )?screenshot", text):
         return {"name": "screenshot", "args": {}}
+    # "screenshot discord", "take a screenshot of the firefox window", "discord ka ss lo": only that app's
+    # window; "screenshot this window": the focused one; "screenshot the screen": all of it
+    if m := re.fullmatch(r"(?:take |grab |get )?(?:a )?(?:screenshot|screen shot|ss) (?:of )?(.+)"
+                         r"|(.+?) (?:ka|ki) (?:screenshot|screen shot|ss)(?: (?:lo|le|lelo|le lo|lena|kar|karo|kar do|chahiye))?",
+                         text):
+        target = shot_target(m[1] or m[2])
+        if target in SCREEN_WORDS:
+            return {"name": "screenshot", "args": {}}
+        if target in THIS_WINDOW or find_app(target):
+            return {"name": "screenshot", "args": {"app": target}}
     if m := re.fullmatch(r"(?:close|quit|kill|exit) (?:the )?(.+?)(?: app)?", text):
         return {"name": "close_app", "args": {"name": m[1]}} if find_app(m[1]) else None
     if m := re.fullmatch(r"(?:(set|increase|decrease|raise|lower|reduce|boost|drop|turn|bring|put|make)(?: (up|down))? )?"

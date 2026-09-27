@@ -113,6 +113,13 @@ def test_new_fast_patterns():
     assert P("what's the weather", find) == {"name": "weather", "args": {}}
     assert P("weather tomorrow", find) == {"name": "weather", "args": {"day": 1}}
     assert P("take a screenshot", find) == {"name": "screenshot", "args": {}}
+    shot = lambda app: {"name": "screenshot", "args": {"app": app}}
+    assert P("screenshot firefox", find) == shot("firefox")
+    assert P("take a screenshot of the firefox window", find) == shot("firefox")
+    assert P("firefox ka screenshot lo", find) == shot("firefox") and P("firefox ka ss le", find) == shot("firefox")
+    assert P("screenshot this window", find) == shot("this") and P("screenshot the current window", find) == shot("current")
+    assert P("take a screenshot of my screen", find) == {"name": "screenshot", "args": {}}
+    assert P("screenshot banana", find) is None  # not an app: the model decides
 
 
 def test_type_pattern():
