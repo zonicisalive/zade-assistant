@@ -85,7 +85,8 @@ TOOLS = [
                                                       "edit", "delete", "set_status"]},
        emoji={"type": "string", "description": "for react: the emoji character, e.g. \U0001f525"},
        text={"type": "string", "description": "for reply/edit: the text; for set_status: online, idle, dnd or invisible"},
-       target={"type": "string", "description": "a person, or a channel (\"general in bitnade\")"},
+       target={"type": "string", "description": "a person, or a channel with its server whenever the user names "
+                                                "one, capitals as said: \"staff-vc in BITNADE\""},
        count={"type": "integer", "description": "how many messages to read (default 5)"}),
     _t("send_message", "Send a message to a person on Discord (opens Discord, finds them, types it, sends it). "
                      "The user confirms first.", ["to", "text"], to={"type": "string", "description": "their name"},

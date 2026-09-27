@@ -132,9 +132,12 @@ def parse_discord(text):
     if re.fullmatch(rf"(?:leave|disconnect(?: from)?|exit|quit|hang up(?: on)?|end|drop(?: out of)?) {_VC}{_DC}"
                     rf"|hang up|disconnect me{_DC}|(?:vc|call) (?:se )?(?:nikal|nikalo|chhodo|leave karo)", t):
         return {"action": "leave"}
-    if m := re.fullmatch(rf"(?:join|connect to|go to|hop in|hop into|get in|get into|enter) (?:the )?(.+?) "
-                         rf"(?:vc|voice(?: channel| chat)?){_DC}|(?:join|connect to) (?:vc|voice) (.+?){_DC}", t):
-        return {"action": "join", "target": m[1] or m[2]}
+    # "join the gaming vc", "join a staff-vc channel in BITNADE (not bitnade server)": the server stays in the
+    # target, and a trailing "not ..." only says which one it isn't
+    if m := re.fullmatch(rf"(?:join|connect to|go to|hop in|hop into|get in|get into|enter) (?:the |a )?(.+?) "
+                         rf"(?:vc|voice(?: channel| chat)?|channel)(?: (?:in|on|of) (.+?))?(?: server)?(?: not .+)?{_DC}"
+                         rf"|(?:join|connect to) (?:vc|voice) (.+?){_DC}", t):
+        return {"action": "join", "target": (m[1] or m[3]) + (f" in {m[2]}" if m[2] else "")}
     if m := re.fullmatch(r"(?:call|ring|voice call|phone) (.+?) (?:on|in) discord|discord call (.+)", text):
         return {"action": "call", "target": m[1] or m[2]}
     if m := re.fullmatch(r"(?:open|show|go to|switch to|take me to)(?: my)?(?: (?:dm|dms|chat|messages|channel))?"

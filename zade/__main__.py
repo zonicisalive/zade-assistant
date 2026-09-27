@@ -64,10 +64,12 @@ def plain(text):
 
 
 def as_said(part, raw):
-    """ `part` of the normalized text as it was said or typed: "staff vc in bitnade" -> "staff-vc in BITNADE"."""
-    words = part.split()
-    m = re.search(r"\W+".join(map(re.escape, words)), raw or "", re.I) if words else None
-    return m[0] if m else part
+    """ `part` of the normalized text with each word's capitals as said or typed: "staff vc in bitnade" ->
+    "staff vc in BITNADE" (BITNADE and Bitnade can be different servers)."""
+    said = {}
+    for w in re.findall(r"[\w']+", raw or ""):
+        said.setdefault(w.lower(), w)
+    return " ".join(said.get(w, w) for w in part.split())
 
 
 def after_stop(raw):
@@ -537,6 +539,7 @@ def handle(ctx, raw):
         executed, called = [], []
 
         def run_tool(name, args):
+            log.info("model tool %s %s", name, args)
             if name not in MEMORY_TOOLS:
                 ctx.tried = True
             out, ok = dispatch(ctx, {"name": name, "args": args}, from_model=True)

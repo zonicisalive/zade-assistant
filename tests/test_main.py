@@ -549,5 +549,5 @@ def test_discord_replies_edits_and_deletes_ask_first(monkeypatch):
 
 
 def test_names_keep_the_capitals_as_said():
-    assert z.as_said("staff vc in bitnade", "Join the staff-vc in BITNADE voice channel please") == "staff-vc in BITNADE"
+    assert z.as_said("staff vc in bitnade", "join a staff-vc channel in BITNADE not bitnade server") == "staff vc in BITNADE"
     assert z.as_said("gaming", "join GAMING vc") == "GAMING"

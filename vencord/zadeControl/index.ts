@@ -196,6 +196,13 @@ const tools: Record<string, (a: Args) => Promise<Result> | Result> = {
             if (withIt.length > 1) return { ok: false, error: `More than one server matches ${server}: ${withIt.map(g => g.name).join(", ")}. Say its exact name.` };
             channels = channels.filter(c => c.guild_id === (withIt[0] ?? guilds[0]).id);
         }
+        if (!server) { // no server named: the one on screen if it has it, else ask rather than guess between servers
+            const here = best(channels.filter(c => c.guild_id === SelectedGuildStore.getGuildId()), c => [c.name], channelName);
+            const places = new Set(channels.filter(c => best([c], x => [x.name], channelName)).map(c => c.guild_id));
+            if (!here && places.size > 1)
+                return { ok: false, error: `${channelName} is in ${[...places].map(id => GuildStore.getGuild(id)?.name).join(", ")}. Which server?` };
+            if (here) channels = [here];
+        }
         const channel = best(channels, c => [c.name], channelName);
         if (!channel) return { ok: false, error: `I couldn't find a voice channel called ${channelName}${server ? " in " + server : ""}.` };
         selectVoiceChannel(channel.id);

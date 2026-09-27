@@ -317,3 +317,11 @@ def test_discord_reactions_replies_and_status():
     assert D("set my discord status to do not disturb") == {"action": "set_status", "text": "do not disturb"}
     assert D("go invisible on discord") == {"action": "set_status", "text": "invisible"}
     assert D("turn on do not disturb") is None      # Zade's own do not disturb stays Zade's
+
+
+def test_joining_a_voice_channel_keeps_the_server():
+    D = lambda t: router.parse_discord(router.normalize(t))
+    assert D("open discord and join a staff-vc channel in BITNADE not bitnade server") is None  # a compound: split first
+    assert D("join a staff-vc channel in BITNADE not bitnade server") == {"action": "join", "target": "staff vc in bitnade"}
+    assert D("join the gaming vc") == {"action": "join", "target": "gaming"}
+    assert D("join staff vc voice channel in bitnade") == {"action": "join", "target": "staff vc in bitnade"}
