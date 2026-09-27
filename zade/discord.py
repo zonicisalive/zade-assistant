@@ -41,7 +41,11 @@ def call(tool, timeout=10, **args):
     except (urllib.error.URLError, OSError, ValueError) as e:
         raise Unavailable(str(e)) from None
     if not out.get("ok"):
-        raise Failed(out.get("error") or "Discord couldn't do that.")
+        import re
+
+        # errors from the plugin's native side come wrapped: "Error invoking remote method '...': Error: ..."
+        raise Failed(re.sub(r"^Error invoking remote method '[^']*': (?:Error: )?", "", out.get("error") or "")
+                     or "Discord couldn't do that.")
     return out
 
 
