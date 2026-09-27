@@ -661,7 +661,9 @@ def main():
         say(question)
         if barge:  # interrupted instead of answering: treat as no
             return False
-        return actions.is_yes(hear(5.0, keep_reply=True) or "")
+        answer = hear(5.0, keep_reply=True) or ""
+        log.info("asked %r, heard %r", question.split("\n")[0], answer)
+        return actions.is_yes(answer)
 
     ctx = Ctx(cfg, conn, say, confirm, predict=laya_predictor(cfg))
     ctx.show = ui.set

@@ -18,9 +18,14 @@ APP_DIRS = [
 ]
 ROOT = re.compile(r"\b(sudo|su|pkexec|doas|run0|systemd-run|machinectl|runuser|setpriv|chroot|nsenter)\b",
                   re.IGNORECASE)
-START = {"yes", "yeah", "yep", "yup", "sure", "ok", "okay", "do", "run", "go"}
-ALLOWED = START | {"it", "ahead", "please", "zade"}
-NO = {"no", "nope", "don't", "dont", "cancel", "stop", "wait"}
+# A spoken yes: it starts with one of these and says nothing else ("yes, send it", "go ahead", "haan bhej do").
+START = {"yes", "yeah", "yea", "yep", "yup", "ya", "sure", "ok", "okay", "alright", "do", "run", "go", "send",
+         "confirm", "confirmed", "correct", "right", "absolutely", "definitely", "please", "affirmative",
+         "haan", "han", "haa", "ha", "hanji", "ji", "bilkul", "theek", "thik", "chalo", "kar", "karo", "bhej", "bhejo"}
+ALLOWED = START | {"it", "ahead", "zade", "that", "that's", "thats", "fine", "is", "now", "do", "send", "the", "message",
+                   "sure", "yes", "hai", "h", "de", "do", "dijiye", "na", "bro", "bhai", "yaar", "of", "course", "go"}
+NO = {"no", "nope", "nah", "don't", "dont", "not", "cancel", "stop", "wait", "never", "nahi", "nahin", "mat", "ruko",
+      "ruk", "rehne", "wrong"}
 MEDIA = {"play-pause", "play", "pause", "next", "previous"}
 TIMEOUT_S = 30
 # Never closed by Zade, whoever asks: closing these ends the desktop session or breaks audio/apps.

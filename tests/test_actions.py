@@ -358,3 +358,12 @@ def test_close_app_closes_its_windows_and_reports_a_miss(monkeypatch):
 def test_a_missing_program_is_a_failure_not_a_crash():
     with pytest.raises(actions.Failed, match="isn't installed"):
         actions._call(["zade-no-such-program-xyz", "--help"])
+
+
+def test_natural_yes_and_no():
+    for said in ["Yes.", "Yes, send it.", "Yeah go ahead", "Sure, do it", "Send it", "Okay send the message",
+                 "Haan bhej do", "Haan ji", "Bilkul", "Confirm", "Yes please"]:
+        assert actions.is_yes(said), said
+    for said in ["No.", "Don't send it", "Nahi", "Mat bhejo", "Wait", "Yes, wait no", "Send it to Neel instead", "",
+                 "Hello there", "Open Discord"]:
+        assert not actions.is_yes(said), said
