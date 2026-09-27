@@ -64,11 +64,12 @@ def _voice_line(s):
 
 
 def clean_name(name):
-    """Spelled-out letters joined ("D E X O R T O" -> "dexorto"); nothing else is changed. Extra words
+    """Spelled-out letters joined ("D E X O R T O" -> "DEXORTO"); nothing else is changed. Extra words
     ("dexorto user") are the plugin's job: it tries the whole phrase first, then its longest word."""
     import re
 
-    return re.sub(r"\b[a-z](?: [a-z]\b)+", lambda m: m[0].replace(" ", ""), " ".join(name.lower().split()))
+    # capitals are kept: "BITNADE" and "bitnade" can be two different servers
+    return re.sub(r"\b[a-zA-Z](?: [a-zA-Z]\b)+", lambda m: m[0].replace(" ", ""), " ".join(name.split()))
 
 
 def emoji(name):

@@ -25,8 +25,9 @@ def test_without_the_plugin_it_says_so():
 
 
 def test_spoken_names_are_cleaned_up():
-    assert discord.clean_name("D E X O R T O user") == "dexorto user"   # letters joined, words kept
+    assert discord.clean_name("D E X O R T O user") == "DEXORTO user"   # letters joined, words and capitals kept
     assert discord.clean_name("the dexorto guy") == "the dexorto guy"
+    assert discord.clean_name("staff-vc in BITNADE") == "staff-vc in BITNADE"
     assert discord.clean_name("general in bitnade") == "general in bitnade"
 
 

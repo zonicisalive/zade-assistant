@@ -63,6 +63,13 @@ def plain(text):
     return " ".join(TALK_WORDS.sub(" ", text).split())
 
 
+def as_said(part, raw):
+    """ `part` of the normalized text as it was said or typed: "staff vc in bitnade" -> "staff-vc in BITNADE"."""
+    words = part.split()
+    m = re.search(r"\W+".join(map(re.escape, words)), raw or "", re.I) if words else None
+    return m[0] if m else part
+
+
 def after_stop(raw):
     """What was said after a stop word said on its own ("Stop. Play the next song." -> "Play the next song."),
     "" when nothing real follows ("Hey, stop." or "Stop. Canild."), None when there's no such stop."""
@@ -508,6 +515,9 @@ def handle(ctx, raw):
         return ""
     if r.kind == "confirm" and not ctx.confirm(f"Did you mean {r.label}?"):
         r = router.Route("llm")
+    for action in r.actions or []:  # routing lower-cases; names go to Discord with the capitals as said
+        if action["name"] == "discord" and action["args"].get("target"):
+            action["args"]["target"] = as_said(action["args"]["target"], raw)
     if r.kind in ("run", "confirm"):
         ctx.route = r.source
         results = [dispatch(ctx, a) for a in r.actions]

@@ -546,3 +546,8 @@ def test_discord_replies_edits_and_deletes_ask_first(monkeypatch):
                      "Delete your last message in DEXORTO?\nyo"] and ran == []
     z.dispatch(ctx, {"name": "discord", "args": {"action": "react", "emoji": "fire"}})   # said by the user: no question
     assert len(asked) == 3 and ran[-1]["args"]["action"] == "react"
+
+
+def test_names_keep_the_capitals_as_said():
+    assert z.as_said("staff vc in bitnade", "Join the staff-vc in BITNADE voice channel please") == "staff-vc in BITNADE"
+    assert z.as_said("gaming", "join GAMING vc") == "GAMING"

@@ -83,6 +83,18 @@ function guildChannels(kind: "SELECTABLE" | "VOCAL") {
 }
 
 // Read back so a channel doesn't sound like a person: "the dexorto channel in BITNADE"
+// The servers "server" names: an exact match with the same capitals ("BITNADE", not "bitnade") first, then
+// any-case matches. More than one left means it's ambiguous.
+function servers(server: string) {
+    const guilds = Object.values(GuildStore.getGuilds()) as any[];
+    const words = server.replace(/\b(?:the|server|guild)\b/gi, " ").trim();
+    for (const test of [(n: string) => n === words, (n: string) => simple(n) === simple(words), (n: string) => simple(n).includes(simple(words))]) {
+        const hits = guilds.filter(g => test(g.name));
+        if (hits.length) return hits;
+    }
+    return [];
+}
+
 function describe(channel: any) {
     const name = channel.name.replace(/^[^a-z0-9]+/i, "");
     return channel.guild_id ? `the ${name} channel in ${GuildStore.getGuild(channel.guild_id)?.name ?? "a server"}` : name;
@@ -120,7 +132,10 @@ async function findChatExactly(name: string, anywhere: boolean): Promise<{ id: s
     }
     const [channelName, guildName] = name.split(/ (?:in|on|from) /i);
     let channels = guildChannels("SELECTABLE");
-    if (guildName) channels = channels.filter(c => simple(GuildStore.getGuild(c.guild_id)?.name ?? "").includes(simple(guildName)));
+    if (guildName) {
+        const ids = new Set(servers(guildName).map(g => g.id));
+        channels = channels.filter(c => ids.has(c.guild_id));
+    }
     else if (!anywhere) channels = channels.filter(c => c.guild_id === SelectedGuildStore.getGuildId());
     const channel = best(channels, c => [c.name], channelName);
     return channel && { id: channel.id, label: describe(channel) };
@@ -170,9 +185,19 @@ const tools: Record<string, (a: Args) => Promise<Result> | Result> = {
         return { ok: true };
     },
 
+    // name: "staff-vc", or "staff-vc in BITNADE" (only that server)
     join_voice(a) {
-        const channel = best(guildChannels("VOCAL"), c => [c.name], a.name ?? "");
-        if (!channel) return { ok: false, error: `I couldn't find a voice channel called ${a.name}.` };
+        const [channelName, server] = String(a.name ?? "").split(/ (?:in|on|from) /i);
+        let channels = guildChannels("VOCAL");
+        if (server) {
+            const guilds = servers(server);
+            if (!guilds.length) return { ok: false, error: `I couldn't find a server called ${server}.` };
+            const withIt = guilds.filter(g => best(channels.filter(c => c.guild_id === g.id), c => [c.name], channelName));
+            if (withIt.length > 1) return { ok: false, error: `More than one server matches ${server}: ${withIt.map(g => g.name).join(", ")}. Say its exact name.` };
+            channels = channels.filter(c => c.guild_id === (withIt[0] ?? guilds[0]).id);
+        }
+        const channel = best(channels, c => [c.name], channelName);
+        if (!channel) return { ok: false, error: `I couldn't find a voice channel called ${channelName}${server ? " in " + server : ""}.` };
         selectVoiceChannel(channel.id);
         return { ok: true, channel: describe(channel) };
     },
@@ -258,6 +283,9 @@ const tools: Record<string, (a: Args) => Promise<Result> | Result> = {
         await StatusSetting.updateSetting(status);
         return { ok: true, status };
     },
+
+    // Server names, to tell apart servers with similar names
+    servers: () => ({ ok: true, servers: (Object.values(GuildStore.getGuilds()) as any[]).map(g => g.name) }),
 
     // DMs and group DMs with unread messages
     unread() {
