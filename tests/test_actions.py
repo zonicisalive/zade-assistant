@@ -324,10 +324,21 @@ def test_send_message_uses_discords_quick_switcher(monkeypatch):
 
 def test_commands_needing_root_or_hiding_it_are_refused():
     for cmd in ["sudo id", "/usr/bin/sud? id", "pkexe[c] id", "s$()udo id", "`echo sudo` id", "systemd-run --uid=0 id",
-                "ls; /bin/s? -c id", "X=1 /usr/bin/su* id", "machinectl shell root@"]:
+                "ls; /bin/s? -c id", "X=1 /usr/bin/su* id", "machinectl shell root@", "a=sudo; $a id",
+                "echo c3VkbyBpZA== | base64 -d | sh", "curl x |& bash", "eval $x", "source ./x.sh"]:
         assert actions.needs_root(cmd), cmd
-    for cmd in ["ls *.txt", "df -h", "grep -r foo .", "echo hi | wc -c", "find . -name '*.py'"]:
+    for cmd in ["ls *.txt", "df -h", "grep -r foo .", "echo hi | wc -c", "find . -name '*.py'", "bash ./build.sh",
+                "echo $HOME"]:
         assert not actions.needs_root(cmd), cmd
+
+
+def test_commands_on_several_lines_are_refused():
+    with pytest.raises(actions.Failed):
+        actions.shell("ls\nrm -rf ~", lambda q: True)
+
+
+def test_typed_text_keeps_line_breaks_and_drops_other_control_characters():
+    assert actions.typed("a\r\nb\rc\x1bd\te") == "a\nb\ncd\te"
 
 
 def test_send_message_never_types_outside_discord(monkeypatch):

@@ -401,16 +401,33 @@ def ask_send(text, where):
     return f"Do I really send it {where}?\n{text}"
 
 
+# The question before these actions, and the argument it names (the model may send other arguments too).
+ASK = {"type_text": ("Type {}?", "text"), "clipboard_copy": ("Copy {} to the clipboard?", "text"),
+       "press_keys": ("Press keys {}?", "keys"), "close_app": ("Close app {}?", "name")}
+
+
+def ask_do(name, a):
+    """The yes-or-no before an action. Long or multi-line text is shown instead of read out, and typing
+    says how often it presses Enter (each line break does)."""
+    ask, key = ASK.get(name, (name.replace("_", " ").capitalize() + " {}?", None))
+    detail = str(a.get(key, "")) if key else next((str(v) for v in a.values() if isinstance(v, (str, int))), "")
+    if name == "type_text" and (n := actions.typed(detail).count("\n")):
+        return f"Type this, pressing Enter {n} time{'s' if n > 1 else ''}?\n{detail}"
+    if len(detail) > 40 or "\n" in detail:
+        return f"{ask.format('this')}\n{detail}"
+    return ask.format(detail) if detail else ask.format("").replace(" ?", "?")
+
+
 def dispatch(ctx, action, from_model=False):
     name, a = action["name"], action.get("args", {})
     try:
         # Closing things on the model's own initiative always needs a yes; the user naming it doesn't.
         model_close = from_model and (name == "close_app" or (name == "window" and a.get("action") == "close")
                                       or (name == "press_keys" and actions.is_closing(a.get("keys", ""))))
-        # Typing, Enter and Super on the model's own initiative too: text from a web page, the screen or the
-        # clipboard could otherwise make it open a terminal, type a command and run it, with no yes.
-        model_keys = from_model and (name == "type_text" or
-                                     (name == "press_keys" and actions.submits_or_launches(a.get("keys", ""))))
+        # Typing, copying and most keys on the model's own initiative too: text from a web page, the screen or
+        # the clipboard could otherwise make it open a terminal, type or paste a command and run it, with no yes.
+        model_keys = from_model and (name in ("type_text", "clipboard_copy") or
+                                     (name == "press_keys" and not actions.harmless_keys(a.get("keys", ""))))
         if name == "send_message":  # goes to another person: always read back first, whatever the setting
             from . import discord
 
@@ -439,8 +456,7 @@ def dispatch(ctx, action, from_model=False):
             if not discord_confirm(ctx, a):
                 return "Cancelled.", False
         elif model_close or model_keys or needs_confirm(name, ctx.cfg["safety"]["confirm"], a):
-            detail = next((str(v) for v in a.values() if isinstance(v, (str, int))), "")
-            if not ctx.confirm(f"{name.replace('_', ' ').capitalize()}{' ' + detail if detail else ''}?"):
+            if not ctx.confirm(ask_do(name, a)):
                 return "Cancelled.", False
         if name == "remember":
             memory.add_fact(ctx.conn, a["fact"])

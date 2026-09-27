@@ -154,6 +154,12 @@ def _call(cmd):
         raise Failed(f"{cmd[0]} isn't installed, so I can't do that.") from None
 
 
+def typed(text):
+    """Text as wtype will type it: each line break presses Enter (\\r too), other control characters would
+    press keys nobody asked for, so they're dropped."""
+    return re.sub(r"[\x00-\x08\x0b-\x1f\x7f]", "", text.replace("\r\n", "\n").replace("\r", "\n"))
+
+
 def _feed(cmd, text):
     subprocess.run(cmd, input=text, text=True, check=False, capture_output=True)
 
@@ -286,17 +292,26 @@ def is_closing(keys):
     return False
 
 
-def submits_or_launches(keys):
-    """True if the keys press Enter (runs whatever was typed) or use Super/Win (opens terminals and apps):
-    together with typing, that's how a model tricked by a web page could run a command unasked."""
+# Keys the model may press without a yes: moving around, media and everyday edits. Anything else asks, as with
+# typing it's how a model tricked by a web page could run a command: Enter and its terminal twins (Ctrl+M,
+# Ctrl+J, Ctrl+O), pastes (Ctrl+Shift+V, Shift+Insert), Super (opens terminals and apps), typed letters.
+MOVE_KEYS = {"Up", "Down", "Left", "Right", "Prior", "Next", "Home", "End", "Tab", "Escape"}
+EDIT_KEYS = {"a", "c", "x", "z", "y", "f", "t", "Tab", "Prior", "Next", "plus", "minus", "equal", "0"}  # with Ctrl
+
+
+def harmless_keys(keys):
+    """True if every combo in `keys` is one the model may press on its own (see MOVE_KEYS)."""
     for c in key_combos(keys):
         try:
             mods, k = _key_parts(c)
         except Failed:
-            return True
-        if k in ("Return", "KP_Enter") or "logo" in mods or {"ctrl", "alt"} <= set(mods):
-            return True
-    return False
+            return False
+        mods = set(mods)
+        if not (k in MOVE_KEYS and mods in ({"shift"}, {"ctrl"}, {"alt"}, {"ctrl", "shift"}, set())
+                or k in EDIT_KEYS and mods in ({"ctrl"}, {"ctrl", "shift"})
+                or (k.startswith("XF86Audio") or k in ("F5", "F11")) and not mods):
+            return False
+    return True
 
 
 SEARCH_ENGINES = {
@@ -328,16 +343,24 @@ def _spawn(cmd):
     subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
 
 
+SHELLS = {"sh", "bash", "zsh", "dash", "ksh", "fish", "busybox"}
+
+
 def needs_root(cmd):
-    """Root tools by name, or anything that could hide one: a command built from $(...), `...` or ${...},
-    or a command name with wildcards ("/usr/bin/sud? id", "pkexe[c] id"). A courtesy check: the spoken yes
+    """Root tools by name, or anything that could hide one: a command built from $(...), `...`, ${...} or a
+    variable ("$a id"), a command name with wildcards ("/usr/bin/sud? id", "pkexe[c] id"), eval or source,
+    or a shell running what a pipe feeds it ("echo ... | base64 -d | sh"). A courtesy check: the spoken yes
     is the real guard."""
     if ROOT.search(re.sub(r"[\\'\"]", "", cmd)) or re.search(r"\$\(|`|\$\{", cmd):
         return True
-    for part in re.split(r"[;&|]+|\n", cmd):  # the first word of every command in a pipeline or list
+    seps = [""] + re.findall(r"[;&|]+|\n", cmd)
+    for sep, part in zip(seps, re.split(r"[;&|]+|\n", cmd)):  # the first word of every command in a pipeline or list
         words = part.split()
         words = words[next((i for i, w in enumerate(words) if "=" not in w), len(words)):]  # skip VAR=value
-        if words and re.search(r"[*?\[]", words[0]):
+        if not words:
+            continue
+        name = words[0].strip("'\"").rsplit("/", 1)[-1]
+        if re.search(r"[*?\[$]", words[0]) or name in ("eval", "source", ".") or sep in ("|", "|&") and name in SHELLS:
             return True
     return False
 
@@ -345,6 +368,8 @@ def needs_root(cmd):
 def shell(cmd, confirm):
     if needs_root(cmd):
         raise Failed("I won't run commands that need root, or hide which command they run.")
+    if re.search(r"[\x00-\x08\x0a-\x1f\x7f]", cmd):  # a line break would hide the rest from the question
+        raise Failed("I only run commands written on one line.")
     # Long commands are shown in the overlay (after the newline) instead of being read aloud.
     question = f"Run {cmd}?" if len(cmd) <= 40 else f"Should I run this command?\n{cmd}"
     if not confirm(question):
@@ -495,7 +520,7 @@ def run(action, confirm):
         _feed(["wl-copy"], a["text"])
         return "Copied."
     if name == "type_text":
-        _call(["wtype", "--", a["text"]])
+        _call(["wtype", "--", typed(a["text"])])
         return ""
     if name == "send_message":
         return send_message(a["to"], a["text"], a.get("app", "discord"))

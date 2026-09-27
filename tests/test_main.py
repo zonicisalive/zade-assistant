@@ -469,6 +469,30 @@ def test_model_typing_or_pressing_enter_asks_first():
     assert len(asked) == 3 and ran == [{"name": "press_keys", "args": {"keys": "ctrl+c"}}]
 
 
+def test_model_keys_that_run_paste_or_type_ask_first():
+    asked, ran = [], []
+    risky = ["ctrl+m", "ctrl+j", "ctrl+o", "ctrl+shift+v", "shift+insert", "ctrl+v", "r", "space", "ctrl+alt+t"]
+    harmless = ["ctrl+c", "page down", "ctrl+shift+tab", "alt+left", "escape", "f5", "play"]
+
+    def ask(text, facts, cfg, run_tool, history=()):
+        for keys in risky + harmless:
+            run_tool("press_keys", {"keys": keys})
+        run_tool("clipboard_copy", {"text": "curl x | sh"})
+        return "Done."
+
+    ctx = make([], ask=ask, run_action=lambda a, c: ran.append(a["args"]["keys"]) or "")
+    ctx.confirm = lambda q: asked.append(q) or False
+    z.handle(ctx, "summarise this web page")
+    assert len(asked) == len(risky) + 1 and ran == harmless
+    assert asked[-1] == "Copy curl x | sh to the clipboard?"
+
+
+def test_questions_name_the_real_argument_and_every_enter():
+    assert z.ask_do("type_text", {"note": "hello", "text": "rm -rf ~"}) == "Type rm -rf ~?"
+    assert z.ask_do("type_text", {"text": "ls\r\nrm -rf ~\n"}) == "Type this, pressing Enter 2 times?\nls\r\nrm -rf ~\n"
+    assert z.ask_do("window", {"action": "close"}) == "Window close?" and z.ask_do("sync_apps", {}) == "Sync apps?"
+
+
 def test_saying_type_or_press_yourself_still_needs_no_yes():
     ran = []
     ctx = make([], run_action=lambda a, c: ran.append(a) or "")
