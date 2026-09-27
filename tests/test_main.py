@@ -502,3 +502,20 @@ def test_teaching_never_saves_an_older_requests_actions():
     ctx.run_action = lambda a, c: (_ for _ in ()).throw(z.actions.Failed("no steam")) if a["name"] == "open_app" else ""
     z.handle(ctx, "when I say gaming open steam")
     assert "gaming" not in memory.shortcuts(ctx.conn)
+
+
+def test_messages_go_through_the_discord_plugin_after_a_yes(monkeypatch):
+    from zade import discord
+
+    calls, asked, ran = [], [], []
+
+    def call(tool, timeout=10, **args):
+        calls.append((tool, args))
+        return {"ok": True, "channel_id": "42", "label": "DEXORTO"} if tool == "find" else {"ok": True}
+
+    monkeypatch.setattr(discord, "call", call)
+    ctx = make([], run_action=lambda a, c: ran.append(a) or "")
+    ctx.confirm = lambda q: asked.append(q) or True
+    assert z.dispatch(ctx, {"name": "send_message", "args": {"to": "dexoto", "text": "hi"}}) == ("Sent to DEXORTO.", True)
+    assert asked == ["Send hi to DEXORTO on Discord?"]                  # the real name, from Discord
+    assert calls[-1] == ("send", {"channel_id": "42", "text": "hi"}) and ran == []  # no key presses

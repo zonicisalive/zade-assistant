@@ -66,6 +66,21 @@ Shell commands are read back and run only after a spoken "yes". Anything contain
    ```
 Without keys, Zade opens Spotify's search instead.
 
+## Discord (optional, needs Vencord built from source)
+
+With the ZadeControl plugin in `vencord/zadeControl`, Zade controls Discord directly instead of pressing keys:
+"mute me on discord", "deafen", "leave the vc", "join the gaming vc", "call dexorto on discord", "open general in
+bitnade on discord", "read the last 3 messages from dexorto", "who messaged me on discord", "who's in the vc", and
+"message dexorto on discord saying I'm late" (always read back for a yes first, with the name as Discord knows it).
+
+```bash
+cp -r ~/Zade/vencord/zadeControl ~/path/to/Vencord/src/userplugins/
+cd ~/path/to/Vencord && pnpm build   # then restart Discord and enable ZadeControl in Settings > Vencord > Plugins
+```
+
+The plugin listens only on 127.0.0.1:47823 and answers only requests carrying the secret token it writes to
+`~/.config/zade/discord-token` (readable only by you). Without it, Zade falls back to typing into Discord.
+
 ## GPU speech recognition (optional, ~0.9 GB VRAM)
 
 The first GPU option I tried: Whisper large-v3-turbo through whisper.cpp's Vulkan backend (works on AMD). It

@@ -466,6 +466,15 @@ def run(action, confirm):
         return ""
     if name == "send_message":
         return send_message(a["to"], a["text"], a.get("app", "discord"))
+    if name == "discord":
+        from . import discord
+
+        try:
+            return discord.run(a)
+        except discord.Unavailable:
+            raise Failed("Discord isn't open, or the ZadeControl plugin is off.") from None
+        except discord.Failed as e:
+            raise Failed(str(e)) from None
     if name == "brightness":
         if "set" in a:
             _call(["ddcutil", "setvcp", "10", str(max(0, min(100, int(a["set"]))))])

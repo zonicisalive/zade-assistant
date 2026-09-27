@@ -84,7 +84,7 @@ def dismissed(text):
 
 
 # Tools whose calls are never learned as shortcuts (memory, one-off content, or risky).
-MEMORY_TOOLS = {"send_message", "snooze", "whoami", "express", "dnd", "look_at_screen", "system_status", "set_reminder", "list_reminders", "cancel_reminder", "sync_apps", "remember", "forget", "list_facts", "make_shortcut", "sleep", "set_timer", "note_add",
+MEMORY_TOOLS = {"send_message", "discord", "snooze", "whoami", "express", "dnd", "look_at_screen", "system_status", "set_reminder", "list_reminders", "cancel_reminder", "sync_apps", "remember", "forget", "list_facts", "make_shortcut", "sleep", "set_timer", "note_add",
                 "notes_read", "web_answer", "clipboard_read", "clipboard_copy", "type_text", "power", "shell"}
 
 
@@ -310,8 +310,20 @@ def dispatch(ctx, action, from_model=False):
         model_keys = from_model and (name == "type_text" or
                                      (name == "press_keys" and actions.submits_or_launches(a.get("keys", ""))))
         if name == "send_message":  # goes to another person: always read back first, whatever the setting
-            if not ctx.confirm(f"Send {a.get('text', '')} to {a.get('to', '')} on {a.get('app') or 'Discord'}?"):
+            from . import discord
+
+            try:  # with the ZadeControl plugin: the person it will really go to, and sent without key presses
+                found = discord.call("find", name=a.get("to", ""))
+            except discord.Unavailable:
+                found = None  # no plugin: Discord's quick switcher, by keyboard
+            except discord.Failed as e:
+                return str(e), False
+            to = found["label"] if found else a.get("to", "")
+            if not ctx.confirm(f"Send {a.get('text', '')} to {to} on Discord?"):
                 return "Cancelled.", False
+            if found:
+                discord.call("send", channel_id=found["channel_id"], text=a.get("text", ""))
+                return f"Sent to {to}.", True
         elif model_close or model_keys or needs_confirm(name, ctx.cfg["safety"]["confirm"], a):
             detail = next((str(v) for v in a.values() if isinstance(v, (str, int))), "")
             if not ctx.confirm(f"{name.replace('_', ' ').capitalize()}{' ' + detail if detail else ''}?"):

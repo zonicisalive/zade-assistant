@@ -109,6 +109,62 @@ _RESUME = (r"(?:you can (?:talk|speak|listen|respond|reply)(?: to me)?(?: now| a
            r"unmute yourself|unsnooze|end (?:the )?snooze|ab bolo|ab bol sakte ho)")
 
 
+# Discord (the ZadeControl plugin). "mute" alone stays the speakers; Discord needs its name, or words only a
+# voice chat has (vc, call, deafen).
+_DC = r"(?: (?:on|in) discord| discord)?"
+_VC = r"(?:(?:the|my|this) )?(?:vc|voice(?: channel| chat| call)?|call|discord call|discord vc)"
+
+
+def parse_discord(text):
+    t = re.sub(r"^(?:discord )", "", text) if text.startswith("discord ") else text
+    said_discord = "discord" in text
+    mic = r"(?:me|my mic|my microphone|mic|microphone|myself)"
+    if re.fullmatch(rf"(?:mute {mic}|turn off my (?:mic|microphone)|mic off|mute){_DC}", t) and said_discord \
+            or re.fullmatch(rf"mute {mic} (?:in|on) {_VC}|mute {mic}|mic (?:band|band karo|off karo)", t):
+        return {"action": "mute"}
+    if re.fullmatch(rf"(?:unmute {mic}|turn on my (?:mic|microphone)|mic on|unmute){_DC}", t) and said_discord \
+            or re.fullmatch(rf"unmute {mic} (?:in|on) {_VC}|unmute {mic}|mic (?:on karo|chalu karo)", t):
+        return {"action": "unmute"}
+    if re.fullmatch(rf"(?:deafen|deaf)(?: me| myself)?{_DC}", t):
+        return {"action": "deafen"}
+    if re.fullmatch(rf"(?:undeafen|undeaf|un deafen)(?: me| myself)?{_DC}", t):
+        return {"action": "undeafen"}
+    if re.fullmatch(rf"(?:leave|disconnect(?: from)?|exit|quit|hang up(?: on)?|end|drop(?: out of)?) {_VC}{_DC}"
+                    rf"|hang up|disconnect me{_DC}|(?:vc|call) (?:se )?(?:nikal|nikalo|chhodo|leave karo)", t):
+        return {"action": "leave"}
+    if m := re.fullmatch(rf"(?:join|connect to|go to|hop in|hop into|get in|get into|enter) (?:the )?(.+?) "
+                         rf"(?:vc|voice(?: channel| chat)?){_DC}|(?:join|connect to) (?:vc|voice) (.+?){_DC}", t):
+        return {"action": "join", "target": m[1] or m[2]}
+    if m := re.fullmatch(r"(?:call|ring|voice call|phone) (.+?) (?:on|in) discord|discord call (.+)", text):
+        return {"action": "call", "target": m[1] or m[2]}
+    if m := re.fullmatch(r"(?:open|show|go to|switch to|take me to)(?: my)?(?: (?:dm|dms|chat|messages|channel))?"
+                         r"(?: with| from| of)? (.+?) (?:on|in) discord", text):
+        return {"action": "open", "target": m[1]}
+    if m := re.fullmatch(r"(?:read|read out|what(?:'s| is| are)|show)(?: me)? (?:the |my )?(?:last |latest |new |recent )?"
+                         r"(?:(\d+) )?(?:messages?|texts?|dms?|chats?)(?: from| of| in| by| with) (.+?)" + _DC, text) \
+            or re.fullmatch(r"what (?:did|has) (.+?) (?:say|send|write|message|text)(?: me)?(?: on discord)?", text):
+        count, target = (m[1], m[2]) if m.re.groups == 2 else (None, m[1])
+        return {"action": "read", "target": target, **({"count": int(count)} if count else {})}
+    if re.fullmatch(r"(?:do i have |any |check |read |show )?(?:my )?(?:unread|new) (?:discord )?(?:messages|dms|texts|pings)"
+                    r"(?: on discord)?|(?:any|check)(?: my)? discord(?: messages| dms)?|who (?:messaged|texted|dmed|pinged) me"
+                    r"(?: on discord)?|kisne message kiya", text):
+        return {"action": "unread"}
+    if re.fullmatch(rf"who(?:'?s| is| all)? (?:in|on) {_VC}|who(?:'?s| is) talking(?: in {_VC})?|am i (?:muted|deafened)"
+                    rf"(?: on discord)?|(?:vc|call) (?:mein|me) kaun (?:hai|h)", t):
+        return {"action": "status"}
+    return None
+
+
+def parse_message(text):
+    """ "message dexorto on discord saying hi", "send hi to dexorto on discord" -> (to, text)."""
+    if m := re.fullmatch(r"(?:send (?:a )?(?:message|msg|text|dm) to|message|msg|text|dm|tell|ping) (.+?) "
+                         r"(?:on|in) discord(?: saying| that| to say|:)? (.+)", text):
+        return m[1], m[2]
+    if m := re.fullmatch(r"(?:send|say) (.+?) to (.+?) (?:on|in) discord", text):
+        return m[2], m[1]
+    return None
+
+
 def parse_snooze(text):
     """"stop for 10 minutes", "don't respond for an hour", "10 minute ke liye chup raho" -> seconds (0 = resume)."""
     if re.fullmatch(_RESUME, text):
@@ -184,6 +240,10 @@ def parse_pattern(text, find_app):
         return {"name": "system_status", "args": {"what": "all"}}
     if re.fullmatch(r"(?:what are|list|read|show)(?: me)? my reminders", text):
         return {"name": "list_reminders", "args": {}}
+    if dc := parse_discord(text):
+        return {"name": "discord", "args": dc}
+    if msg := parse_message(text):
+        return {"name": "send_message", "args": {"to": msg[0], "text": msg[1], "app": "discord"}}
     if (seconds := parse_snooze(text)) is not None:
         return {"name": "snooze", "args": {"seconds": seconds}}
     if m := re.fullmatch(r"(?:(turn on|enable|start) )?(?:do not disturb|quiet mode)(?: (on|off))?|"

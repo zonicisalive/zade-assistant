@@ -75,6 +75,13 @@ TOOLS = [
        "\"enter\", \"f5\"; several separated by commas.", ["keys"], keys=S),
     _t("clipboard_read", "Read the text on the clipboard."),
     _t("clipboard_copy", "Copy text to the clipboard.", ["text"], text=S),
+    _t("discord", "Control Discord: mute or unmute your mic, deafen or undeafen, leave the voice channel, join a "
+       "voice channel (target: its name), call a person, open a chat or channel, read the latest messages of a "
+       "chat (target: a person or channel), list unread messages, or say who is in your voice channel (status).",
+       ["action"], action={"type": "string", "enum": ["mute", "unmute", "deafen", "undeafen", "leave", "join", "call",
+                                                      "open", "read", "unread", "status"]},
+       target={"type": "string", "description": "a person, or a channel (\"general in bitnade\")"},
+       count={"type": "integer", "description": "how many messages to read (default 5)"}),
     _t("send_message", "Send a message to a person on Discord (opens Discord, finds them, types it, sends it). "
                      "The user confirms first.", ["to", "text"], to={"type": "string", "description": "their name"},
        text={"type": "string", "description": "the message, as the user wants it sent"},

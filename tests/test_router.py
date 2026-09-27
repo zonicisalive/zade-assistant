@@ -279,3 +279,21 @@ def test_a_partial_phrase_never_runs_a_shortcut_that_does_more():
     table = {"close discord and steam": [close("discord"), close("steam")], "open my work setup now": [close("x")]}
     assert router.match_shortcut("close discord", table, 90) is None
     assert router.match_shortcut("open my work setup", table, 90) == "open my work setup now"
+
+
+def test_discord_phrases():
+    D = lambda t: router.parse_discord(router.normalize(t))
+    assert D("mute me on discord") == {"action": "mute"} and D("unmute my mic") == {"action": "unmute"}
+    assert D("deafen") == {"action": "deafen"} and D("hang up") == {"action": "leave"} and D("leave the vc") == {"action": "leave"}
+    assert D("join the gaming vc") == {"action": "join", "target": "gaming"}
+    assert D("call dexorto on discord") == {"action": "call", "target": "dexorto"}
+    assert D("open general in bitnade on discord") == {"action": "open", "target": "general in bitnade"}
+    assert D("read the last 3 messages from dexorto") == {"action": "read", "target": "dexorto", "count": 3}
+    assert D("what did dexorto say") == {"action": "read", "target": "dexorto"}
+    assert D("who messaged me on discord") == {"action": "unread"} and D("who's in the vc") == {"action": "status"}
+    for text in ["mute", "mute the sound", "open discord", "call mom", "leave me alone", "play see you again"]:
+        assert D(text) is None, text          # the speakers' mute and other commands stay theirs
+    M = lambda t: router.parse_message(router.normalize(t))
+    assert M("message dexorto on discord saying I'm late") == ("dexorto", "i'm late")
+    assert M("send hi to dexorto on discord") == ("dexorto", "hi")
+    assert router.parse_pattern("mute", lambda n: None) == {"name": "mute", "args": {"on": True}}
