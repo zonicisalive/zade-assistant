@@ -113,10 +113,11 @@ def vram_free_gb(root="/sys/class/drm"):
 
 
 def resident_on_gpu(cfg):
-    """True when our model is already loaded on the GPU (e.g. by warm_up), so its own VRAM use does not count."""
+    """True when our model is already loaded on the GPU (e.g. by warm_up), so its own VRAM use does not count.
+    The thinking model counts too: only one of the two is ever loaded, the other unloaded before it runs."""
+    ours = {cfg["llm"]["model"], cfg["llm"].get("think_model") or cfg["llm"]["model"]}
     try:
-        return any(m.model == cfg["llm"]["model"] and m.size_vram
-                   for m in ollama.Client(host=cfg["llm"]["host"]).ps().models)
+        return any(m.model in ours and m.size_vram for m in ollama.Client(host=cfg["llm"]["host"]).ps().models)
     except (ollama.ResponseError, httpx.HTTPError, ConnectionError):
         return False
 

@@ -145,3 +145,22 @@ def test_silent_turns_are_not_sent_back_to_the_model():
     assert providers._history([("hi", "Hello!"), ("nobody will listen", ""), ("what time is it", "Ten.")]) == [
         {"role": "user", "content": "hi"}, {"role": "assistant", "content": "Hello!"},
         {"role": "user", "content": "what time is it"}, {"role": "assistant", "content": "Ten."}]
+
+
+def test_thinking_that_runs_out_of_room_still_answers(monkeypatch):
+    seq = Seq(NS(message=NS(content="", tool_calls=None), done_reason="length"),
+              NS(message=NS(content="42.", tool_calls=None), done_reason="stop"))
+    monkeypatch.setattr(providers, "_client", lambda name, cfg: NS(chat=seq, show=lambda m: NS(capabilities=["thinking"])))
+    monkeypatch.setattr(providers, "_thinks", {})
+    assert providers.chat("ollama", "sys", "a hard one", [], lambda *a: "", CFG, {}, think=True) == "42."
+    assert [k["think"] for k in seq.kwargs] == [True, False]
+
+
+def test_a_failed_capability_check_is_asked_again(monkeypatch):
+    monkeypatch.setattr(providers, "_thinks", {})
+
+    def busy(model):
+        raise ConnectionError
+
+    assert providers.can_think(NS(show=busy), "qwen3:8b") is False
+    assert providers.can_think(NS(show=lambda m: NS(capabilities=["thinking"])), "qwen3:8b") is True

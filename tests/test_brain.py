@@ -85,6 +85,14 @@ def test_no_fallback_after_a_tool_ran(monkeypatch):
     assert out == "I did part of that, then lost my connection."
 
 
+def test_the_thinking_model_loaded_counts_as_resident(monkeypatch):
+    from types import SimpleNamespace as NS
+
+    c = cfg(think_model="qwen3:8b")
+    monkeypatch.setattr(brain.ollama, "Client", lambda host: NS(ps=lambda: NS(models=[NS(model="qwen3:8b", size_vram=5)])))
+    assert brain.resident_on_gpu(c)
+
+
 def test_resident_model_counts_as_gpu():
     assert brain.candidates(cfg(), lambda: 2.0, lambda c: True) == [("ollama", {}), ("ollama", {"num_gpu": 0})]
     assert brain.candidates(cfg(), lambda: 2.0, lambda c: False) == [("ollama", {"num_gpu": 0})]

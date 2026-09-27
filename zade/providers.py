@@ -58,12 +58,13 @@ _thinks = {}
 
 
 def can_think(client, model):
-    """Whether an Ollama model can think (qwen3 can, qwen2.5 can't), asked once per model."""
+    """Whether an Ollama model can think (qwen3 can, qwen2.5 can't), asked once per model. A failed ask isn't
+    remembered: Ollama may only have been busy, and thinking would be off until Zade restarts."""
     if model not in _thinks:
         try:
             _thinks[model] = "thinking" in (client.show(model).capabilities or [])
         except Exception:
-            _thinks[model] = False
+            return False
     return _thinks[model]
 
 
@@ -97,7 +98,13 @@ def _ollama(system, text, tools, run_tool, cfg, extra, history, think=False):
             keep_alive=llm["keep_alive"],
         )
         if not r.message.tool_calls:
-            return (r.message.content or "").strip()
+            reply = (r.message.content or "").strip()
+            if not reply and think and getattr(r, "done_reason", "") == "length":
+                # the thinking used the whole budget and no answer came: answer now, without thinking more
+                log.info("thinking ran out of room, answering without it")
+                think = False
+                continue
+            return reply
         msgs.append(r.message)
         for tc in r.message.tool_calls:
             out = run_tool(tc.function.name, dict(tc.function.arguments or {}))
