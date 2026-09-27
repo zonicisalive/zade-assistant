@@ -86,16 +86,18 @@ function describe(channel: any) {
 
 // A person's DM, else a text channel, by what was said ("dexorto", "general", "general in bitnade"). If the
 // whole phrase finds nothing ("dexorto user"), its words are tried, longest first.
-async function findChat(name: string): Promise<{ id: string; label: string; } | undefined> {
-    const whole = await findChatExactly(name);
+// anywhere: search channels in every server (to open or read one). For sending, only the server on screen, or
+// the one named, is searched: a message must never go to a same-named channel in some random server.
+async function findChat(name: string, anywhere = true): Promise<{ id: string; label: string; } | undefined> {
+    const whole = await findChatExactly(name, anywhere);
     if (whole || !name.includes(" ")) return whole;
     for (const word of name.split(/\s+/).filter(w => w.length >= 3).sort((a, b) => b.length - a.length)) {
-        const hit = await findChatExactly(word);
+        const hit = await findChatExactly(word, anywhere);
         if (hit) return hit;
     }
 }
 
-async function findChatExactly(name: string): Promise<{ id: string; label: string; } | undefined> {
+async function findChatExactly(name: string, anywhere: boolean): Promise<{ id: string; label: string; } | undefined> {
     // "the current chat", "this channel", "here": what's open on screen (small models misspell it: "current chant")
     if (/^(?:the )?(?:current|this|here|open|opened|same)\b/.test(simple(name))) {
         const channel = ChannelStore.getChannel(SelectedChannelStore.getChannelId());
@@ -115,6 +117,7 @@ async function findChatExactly(name: string): Promise<{ id: string; label: strin
     const [channelName, guildName] = name.split(/ (?:in|on|from) /i);
     let channels = guildChannels("SELECTABLE");
     if (guildName) channels = channels.filter(c => simple(GuildStore.getGuild(c.guild_id)?.name ?? "").includes(simple(guildName)));
+    else if (!anywhere) channels = channels.filter(c => c.guild_id === SelectedGuildStore.getGuildId());
     const channel = best(channels, c => [c.name], channelName);
     return channel && { id: channel.id, label: describe(channel) };
 }
@@ -172,7 +175,7 @@ const tools: Record<string, (a: Args) => Promise<Result> | Result> = {
 
     // Who "name" is, before Zade asks you to confirm a message to them
     async find(a) {
-        const chat = await findChat(a.name ?? "");
+        const chat = await findChat(a.name ?? "", false);
         return chat ? { ok: true, channel_id: chat.id, label: chat.label } : { ok: false, error: `I couldn't find ${a.name} on Discord.` };
     },
 

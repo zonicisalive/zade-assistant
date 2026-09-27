@@ -304,3 +304,4 @@ def test_saying_something_in_the_open_discord_chat():
     assert M("Say hello in Discord chat.") == ("the current chat", "hello")
     assert M("send gg in the chat on discord") == ("the current chat", "gg")
     assert M("say hi to neel on discord") == ("neel", "hi")
+    assert M("Send hello in the chat of Discord.") == ("the current chat", "hello")
