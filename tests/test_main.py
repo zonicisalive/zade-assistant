@@ -402,6 +402,7 @@ def test_claims_must_match_the_tools_that_ran():
         "I couldn't do all of that."
     assert z.tidy("I've sent the message.", ["send_message"]) == "I've sent the message."
     assert z.tidy('Sent "hello" in the Discord chat.') == "I couldn't do that."   # nothing was sent
+    assert z.tidy("Setting Spotify volume to 50%.") == "I couldn't do that."
     assert z.tidy("The screenshot has been sent to the general channel.", ["screenshot"]) == "I couldn't do all of that."
     assert z.tidy("Discord is now open.", ["open_app"]) == "Discord is now open."
 

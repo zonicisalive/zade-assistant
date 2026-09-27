@@ -396,6 +396,32 @@ def send_message(to, text, app="discord"):
     return f"Sent to {to} on Discord."
 
 
+def app_volume(app, set_to=None, delta=None):
+    """One app's volume (its sound streams in PipeWire, like the volume mixer). Spotify playing on another
+    device has no stream here: then Spotify's own volume, through your login."""
+    from rapidfuzz import fuzz
+
+    try:
+        streams = json.loads(_output(["pactl", "-f", "json", "list", "sink-inputs"]) or "[]")
+    except (OSError, ValueError, subprocess.SubprocessError):
+        streams = []
+    q = app.lower().strip()
+    name = lambda s: " ".join(filter(None, (s["properties"].get("application.name"),
+                                             s["properties"].get("application.process.binary")))).lower()
+    hits = [s for s in streams if q in name(s) or fuzz.partial_ratio(q, name(s)) >= 85]
+    if not hits:
+        if "spotify" in q:
+            from . import music
+
+            return music.connect_volume(set_to, delta)
+        raise Failed(f"{app} isn't playing any sound right now.")
+    current = int(next(iter(hits[0]["volume"].values()))["value_percent"].rstrip("%"))
+    target = max(0, min(100, int(set_to) if set_to is not None else current + int(delta or 10)))
+    for s in hits:
+        _call(["pactl", "set-sink-input-volume", str(s["index"]), f"{target}%"])
+    return f"{hits[0]['properties'].get('application.name') or app} is at {target} percent."
+
+
 def run(action, confirm):
     name, a = action["name"], action.get("args", {})
     if name in ("open_app", "close_app"):
@@ -418,6 +444,8 @@ def run(action, confirm):
         else:
             _close_app(app, a["name"])
         return ""
+    if name == "app_volume":
+        return app_volume(a["app"], a.get("set"), a.get("delta"))
     if name == "volume":
         current = round(float(_output(["wpctl", "get-volume", "@DEFAULT_AUDIO_SINK@"]).split()[1]) * 100)
         target = int(a["set"]) if "set" in a else current + int(a.get("delta", 10))

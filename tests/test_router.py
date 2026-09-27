@@ -340,3 +340,13 @@ def test_react_to_the_message_with_an_emoji():
     assert D("React to the last message with a mad emoji.") == {"action": "react", "emoji": "mad"}
     assert D("react to dexorto's message with fire") == {"action": "react", "emoji": "fire", "target": "dexorto"}
     assert D("react fire to dexorto's message") == {"action": "react", "emoji": "fire", "target": "dexorto"}
+
+
+def test_volume_with_number_words_and_per_app():
+    P = lambda t: router.parse_pattern(router.normalize(t), lambda n: None)
+    assert P("set the volume to fifty percent") == {"name": "volume", "args": {"set": 50}}
+    assert P("volume seventy five") == {"name": "volume", "args": {"set": 75}}
+    assert P("Set the volume of Spotify to fifty percent.") == {"name": "app_volume", "args": {"app": "spotify", "set": 50}}
+    assert P("discord volume 30") == {"name": "app_volume", "args": {"app": "discord", "set": 30}}
+    assert P("set firefox volume to a hundred") == {"name": "app_volume", "args": {"app": "firefox", "set": 100}}
+    assert P("set volume to 40") == {"name": "volume", "args": {"set": 40}}   # the speakers, as before

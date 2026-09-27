@@ -367,3 +367,16 @@ def test_natural_yes_and_no():
     for said in ["No.", "Don't send it", "Nahi", "Mat bhejo", "Wait", "Yes, wait no", "Send it to Neel instead", "",
                  "Hello there", "Open Discord"]:
         assert not actions.is_yes(said), said
+
+
+def test_app_volume_sets_only_that_apps_streams(monkeypatch):
+    calls = []
+    streams = [{"index": 3837, "properties": {"application.name": "Spotify"}, "volume": {"front-left": {"value_percent": "87%"}}},
+               {"index": 12739, "properties": {"application.name": "Firefox", "application.process.binary": "firefox"},
+                "volume": {"front-left": {"value_percent": "100%"}}}]
+    monkeypatch.setattr(actions, "_output", lambda cmd: json.dumps(streams))
+    monkeypatch.setattr(actions, "_call", lambda cmd: calls.append(cmd))
+    assert actions.app_volume("spotify", 50) == "Spotify is at 50 percent."
+    assert calls == [["pactl", "set-sink-input-volume", "3837", "50%"]]
+    with pytest.raises(actions.Failed, match="isn't playing"):
+        actions.app_volume("discord", 30)

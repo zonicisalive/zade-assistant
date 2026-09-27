@@ -293,6 +293,21 @@ def play_youtube(query, provider="youtube"):
     return f"I opened {name} search for {query}."
 
 
+def connect_volume(set_to=None, delta=None):
+    """Spotify's own volume (Connect, Premium), for when it plays on another device."""
+    config.load_env(override=True)
+    cid, secret, refresh = (os.environ.get(k) for k in ("SPOTIFY_CLIENT_ID", "SPOTIFY_CLIENT_SECRET", "SPOTIFY_REFRESH_TOKEN"))
+    if not refresh:
+        raise Failed("Spotify isn't playing on this PC, and I'm not logged in to change it elsewhere.")
+    token = _user_token(cid, secret, refresh)
+    active = next((d for d in _devices(token) if d.get("is_active")), None)
+    if not active:
+        raise Failed("Spotify isn't playing anywhere right now.")
+    target = max(0, min(100, int(set_to) if set_to is not None else (active.get("volume_percent") or 50) + int(delta or 10)))
+    _api("PUT", f"/me/player/volume?volume_percent={target}", token)
+    return f"Spotify on {active['name']} is at {target} percent."
+
+
 def _play_liked(cid, secret, refresh, user, devices, chosen, mode, play_on):
     if not refresh:  # without a login Zade can't read them: open the Liked Songs page in the app
         _open("spotify:collection:tracks")

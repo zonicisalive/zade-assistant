@@ -214,6 +214,25 @@ def parse_snooze(text):
     return None
 
 
+_ONES = ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve",
+         "thirteen", "fourteen", "fifteen", "sixteen", "seventeen", "eighteen", "nineteen"]
+_TENS = {"twenty": 20, "thirty": 30, "forty": 40, "fifty": 50, "sixty": 60, "seventy": 70, "eighty": 80, "ninety": 90}
+# a percentage, as digits or words ("50", "fifty", "seventy five", "a hundred")
+NUM = (r"(\d{1,3}|(?:a |one )?hundred|(?:" + "|".join(_TENS) + r")(?:[ -](?:" + "|".join(_ONES[1:10]) + r"))?|"
+       + "|".join(_ONES) + ")")
+
+
+def num(said):
+    """ "fifty" -> 50, "seventy five" -> 75, "a hundred" -> 100, "40" -> 40."""
+    said = said.replace("-", " ")
+    if said.isdigit():
+        return int(said)
+    if said.endswith("hundred"):
+        return 100
+    words = said.split()
+    return _TENS.get(words[0], 0) + (_ONES.index(words[-1]) if words[-1] in _ONES else 0)
+
+
 def _open_one(name, find_app):
     if find_app(name):
         return {"name": "open_app", "args": {"name": name}}
@@ -345,13 +364,20 @@ def parse_pattern(text, find_app):
     if m := re.fullmatch(r"(?:close|quit|kill|exit) (?:the )?(.+?)(?: app)?", text):
         return {"name": "close_app", "args": {"name": m[1]}} if find_app(m[1]) else None
     if m := re.fullmatch(r"(?:(set|increase|decrease|raise|lower|turn)(?: (up|down))? )?(?:the )?volume"
-                         r"(?: (up|down))? (?:(to|by) )?(\d{1,3})(?: percent)?", text):
-        verb, up_down, prep, n = m[1], m[2] or m[3], m[4], int(m[5])
+                         rf"(?: (up|down))? (?:(to|by) )?{NUM}(?: percent)?", text):
+        verb, up_down, prep, n = m[1], m[2] or m[3], m[4], num(m[5])
         direction = 1 if verb in ("increase", "raise") or up_down == "up" else \
             -1 if verb in ("decrease", "lower") or up_down == "down" else 0
         if prep == "to" or not direction:  # "volume 40", "set volume to 40", "raise volume to 70"
             return {"name": "volume", "args": {"set": n}}
         return {"name": "volume", "args": {"delta": direction * n}}  # "volume up 10", "lower volume by 20"
+    # one app's volume, like the volume mixer: "set the volume of spotify to fifty percent", "discord volume 30"
+    app_name = r"([\w'.]+(?: [\w'.]+){0,2}?)"  # up to three words: longer is a sentence ("open firefox then set")
+    if m := re.fullmatch(rf"(?:(?:set|change|put|turn)(?: the)? )?(?:volume (?:of|for) {app_name}|{app_name}(?:'s)? volume)"
+                         rf" (?:to |at )?{NUM}(?: percent)?", text):
+        app = m[1] or m[2]
+        if app not in ("the", "my", "system", "master", "main", "overall") and not re.search(r"\b(?:then|and)\b", app):
+            return {"name": "app_volume", "args": {"app": app, "set": num(m[3])}}
     if m := re.fullmatch(r"(?:turn )?(?:the )?volume (up|down)(?: a bit| a little)?", text):
         return {"name": "volume", "args": {"delta": 10 if m[1] == "up" else -10}}
     if m := re.fullmatch(r"(increase|raise|lower|decrease)(?: the)? volume(?: a bit| a little)?", text):

@@ -43,6 +43,8 @@ TOOLS = [
     _t("open_app", "Open an app.", ["name"], name=S),
     _t("close_app", "Close an app.", ["name"], name=S),
     _t("volume", "Speaker volume: delta % or set 0-100.", delta={"type": "integer"}, set={"type": "integer"}),
+    _t("app_volume", "One app's volume (Spotify, Discord, Firefox): set 0-100 or delta %.", ["app"], app=S,
+       set={"type": "integer"}, delta={"type": "integer"}),
     _t("mute", "Mute or unmute the speakers.", ["action"], action={"type": "string", "enum": ["mute", "unmute"]}),
     _t("media", "Media playback.", ["cmd"], cmd={"type": "string", "enum": ["play-pause", "play", "pause", "next", "previous"]}),
     _t("web_search", "Open a web search in the browser.", ["query"], query=S),

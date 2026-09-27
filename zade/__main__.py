@@ -192,6 +192,9 @@ CLAIMS = [
      {"play_music", "media"}),
     (re.compile(r"\b(?:disconnected|left the (?:call|vc|voice(?: channel)?)|joined the \w+|calling \w+|"
                 r"i(?:'ve| have)? (?:joined|called|muted|unmuted|deafened))\b", re.I), {"discord"}),
+    # "Setting Spotify volume to 50%." with nothing done: any tool at all must have run
+    (re.compile(r"^(?:sure|okay|ok|alright)?[,.!]? ?(?:setting|turning|changing|switching|starting|stopping|"
+                r"muting|unmuting|raising|lowering|increasing|decreasing)\b", re.I), None),
     (re.compile(r"\b(?:is now (?:displayed|showing)|now displayed|i(?:'ve| have)? (?:turned on|turned off|switched))\b",
                 re.I), None),  # any tool will do
 ]
