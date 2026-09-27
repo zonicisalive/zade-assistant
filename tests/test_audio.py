@@ -189,6 +189,10 @@ def test_background_talk_does_not_keep_the_recording_open():
     # a quiet speaker isn't cut off: 900 is their own voice level, so it still counts as talking
     assert audio.decide(lv((0, 0.3), (900, 1.5), (900, 0.9)), **A) == "wait"
 
+    # a long stretch of background talk, with short pauses, can't wear down your level and hold it open
+    talk = [(900, 0.4), (0, 0.24)] * 30
+    assert audio.decide(lv((4000, 2.0), *talk), **{**A, "max_s": 180}) == "stop"
+
 
 def test_open_stream_waits_for_the_microphone(monkeypatch):
     tries = []

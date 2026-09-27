@@ -24,6 +24,9 @@ def limit_s(a):
     return a["max_s"] if a.get("max_s") else SAFETY_S
 
 
+VOICE_FRAMES = 15
+
+
 def decide(levels, thr, silence_s, max_s, start_timeout_s, end_ratio=0.25):
     # ponytail: energy endpointing; swap for Silero VAD if noise keeps recordings open.
     n = len(levels)
@@ -34,8 +37,10 @@ def decide(levels, thr, silence_s, max_s, start_timeout_s, end_ratio=0.25):
         return "stop"
     # Someone talking in the background stays above the room-noise threshold and kept recordings open.
     # The user, close to the mic, is much louder: they have finished once the sound falls well below
-    # their own voice level, whatever the room is doing.
-    voice = float(np.median([levels[i] for i in loud]))
+    # their own voice level, whatever the room is doing. Their level is taken from the start (the first
+    # ~1.2 s of speech, right after the wake word): over a long recording the background talk would drag it
+    # down to the room level, and the recording would stay open until the safety stop.
+    voice = float(np.median([levels[i] for i in loud[:VOICE_FRAMES]]))
     end_thr = max(thr, end_ratio * voice)
     last = max(i for i, level in enumerate(levels) if level > end_thr)
     return "stop" if n - 1 - last >= round(silence_s / FRAME_S) else "wait"
