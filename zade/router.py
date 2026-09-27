@@ -298,6 +298,13 @@ def parse_pattern(text, find_app):
         return {"name": "discord", "args": dc}
     if msg := parse_message(text):
         return {"name": "send_message", "args": {"to": msg[0], "text": msg[1], "app": "discord"}}
+    # the replay buffer: "clip that", "save the last 20 seconds", "save the replay"
+    if re.fullmatch(r"(?:clip|record) (?:that|this|it)|save (?:the |that )?(?:replay|rewind|clip)|clip that please", text):
+        return {"name": "clip", "args": {}}
+    if m := re.fullmatch(rf"(?:save|clip|record) (?:the )?last {NUM} (seconds?|minutes?|minute)"
+                         r"|(?:save|clip|record) (?:the )?last (minute|half minute)", text):
+        seconds = (num(m[1]) * (60 if m[2].startswith("minute") else 1)) if m[1] else (60 if m[3] == "minute" else 30)
+        return {"name": "clip", "args": {"seconds": seconds}}
     if (seconds := parse_snooze(text)) is not None:
         return {"name": "snooze", "args": {"seconds": seconds}}
     if m := re.fullmatch(r"(?:(turn on|enable|start) )?(?:do not disturb|quiet mode)(?: (on|off))?|"

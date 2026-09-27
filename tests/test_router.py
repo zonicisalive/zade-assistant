@@ -350,3 +350,11 @@ def test_volume_with_number_words_and_per_app():
     assert P("discord volume 30") == {"name": "app_volume", "args": {"app": "discord", "set": 30}}
     assert P("set firefox volume to a hundred") == {"name": "app_volume", "args": {"app": "firefox", "set": 100}}
     assert P("set volume to 40") == {"name": "volume", "args": {"set": 40}}   # the speakers, as before
+
+
+def test_clip_phrases():
+    P = lambda t: router.parse_pattern(router.normalize(t), lambda n: None)
+    assert P("clip that") == {"name": "clip", "args": {}}
+    assert P("save the last 20 seconds") == {"name": "clip", "args": {"seconds": 20}}
+    assert P("save the last minute") == {"name": "clip", "args": {"seconds": 60}}
+    assert P("save the last fifteen seconds") == {"name": "clip", "args": {"seconds": 15}}

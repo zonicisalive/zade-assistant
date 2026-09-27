@@ -7,6 +7,7 @@ import pathlib
 import re
 import signal
 import sqlite3
+import subprocess
 import sys
 import threading
 import time
@@ -98,7 +99,7 @@ def dismissed(text):
 
 
 # Tools whose calls are never learned as shortcuts (memory, one-off content, or risky).
-MEMORY_TOOLS = {"send_message", "discord", "snooze", "whoami", "express", "dnd", "look_at_screen", "system_status", "set_reminder", "list_reminders", "cancel_reminder", "sync_apps", "remember", "forget", "list_facts", "make_shortcut", "sleep", "set_timer", "note_add",
+MEMORY_TOOLS = {"clip", "send_message", "discord", "snooze", "whoami", "express", "dnd", "look_at_screen", "system_status", "set_reminder", "list_reminders", "cancel_reminder", "sync_apps", "remember", "forget", "list_facts", "make_shortcut", "sleep", "set_timer", "note_add",
                 "notes_read", "web_answer", "clipboard_read", "clipboard_copy", "type_text", "power", "shell"}
 
 
@@ -121,6 +122,7 @@ class Ctx:
     run_action: Callable = actions.run
     alerts: list = field(default_factory=list)  # due reminders, spoken by the main loop when idle
     discord_events: list = field(default_factory=list)  # new DMs, mentions and calls to announce
+    replay: object = None  # the replay buffer (replay.Replay) while clips are on
     history: list = field(default_factory=list)  # (time, user text, reply) for follow-ups
     turn: list = field(default_factory=list)  # actions done so far in the current request
     tried: bool = False  # the model tried an action this request (even one that failed)
@@ -301,6 +303,25 @@ def needs_confirm(name, level, args=None):
     return False
 
 
+def sync_replay(ctx):
+    """Start, restart or stop the replay buffer to match the clips settings (they apply live)."""
+    from . import replay
+
+    c = ctx.cfg.get("clips", {})
+    want = (max(5, min(120, int(c.get("seconds", 30)))), c.get("sources", "both")) if c.get("enabled") else None
+    have = (ctx.replay.seconds, ctx.replay.sources) if ctx.replay else None
+    if want == have:
+        return
+    if ctx.replay:
+        ctx.replay.stop()
+        ctx.replay = None
+    if want:
+        try:
+            ctx.replay = replay.Replay(*want)
+        except OSError as e:  # parec missing
+            log.warning("replay buffer off: %s", e)
+
+
 def pump_discord(ctx):
     """New Discord messages and calls from the ZadeControl plugin, to announce (kinds as set in discord.*).
     During quiet hours, Do Not Disturb or a snooze they're dropped: Discord keeps them as unread anyway."""
@@ -448,6 +469,15 @@ def dispatch(ctx, action, from_model=False):
             from . import vision
 
             return vision.look(a.get("question") or "What's on the screen?", ctx.cfg), True
+        if name == "clip":
+            if not ctx.replay:
+                return "The replay buffer is off. Turn it on in Settings, under Sounds.", False
+            try:
+                path = ctx.replay.save(a.get("seconds"))
+            except (RuntimeError, OSError, subprocess.CalledProcessError) as e:
+                return f"I couldn't save it: {e}", False
+            seconds = min(int(a.get("seconds") or ctx.replay.seconds), ctx.replay.seconds)
+            return f"Saved the last {seconds} seconds to {path.parent.name}.", True
         if name == "whoami":
             if a.get("who") == "assistant":
                 return f"I'm {ctx.cfg['persona']['name'] or 'Zade'}, your voice assistant.", True
@@ -803,6 +833,7 @@ def main():
         if time.monotonic() - last_check[0] >= 0.5:  # reminders, typed commands, live settings
             last_check[0] = time.monotonic()
             pump_reminders(ctx)
+            sync_replay(ctx)
             if time.monotonic() - last_discord[0] >= 2:
                 last_discord[0] = time.monotonic()
                 pump_discord(ctx)

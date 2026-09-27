@@ -88,6 +88,9 @@ DEFAULTS = {
     "learning": {"promote_after": 3},
     "history": {"keep": 1000},
     "weather": {"place": ""},
+    # Replay: keep the last `seconds` of what you hear (system) and/or your mic in RAM; "clip that" saves an
+    # MP3 to ~/Music/Clips. sources: both | system | mic. Nothing is written to disk until you save.
+    "clips": {"enabled": True, "seconds": 30, "sources": "both"},
     # Discord (ZadeControl plugin): read new messages aloud — off | dms | all (DMs and mentions) — and calls
     "discord": {"announce": "dms", "calls": True},
     # provider: spotify | youtube | youtube music ("play X on youtube" picks one for a single request).
@@ -99,7 +102,7 @@ DEFAULTS = {
 
 
 # Settings the running Zade picks up without a restart (it re-reads config.toml when it changes).
-LIVE_SECTIONS = ("ui", "sound", "quiet", "safety", "persona", "history", "web", "music", "weather", "discord")
+LIVE_SECTIONS = ("ui", "sound", "quiet", "safety", "persona", "history", "web", "music", "weather", "discord", "clips")
 LIVE_KEYS = ("llm.personality", "llm.keep_alive", "stt.keep_alive_s", "llm.thinking", "llm.think_model",
              "llm.think_min_words")
 
