@@ -116,6 +116,8 @@ _VC = r"(?:(?:the|my|this) )?(?:vc|voice(?: channel| chat| call)?|call|discord c
 
 
 def parse_discord(text):
+    from . import discord
+
     t = re.sub(r"^(?:discord )", "", text) if text.startswith("discord ") else text
     said_discord = "discord" in text
     mic = r"(?:me|my mic|my microphone|mic|microphone|myself)"
@@ -133,11 +135,13 @@ def parse_discord(text):
                     rf"|hang up|disconnect me{_DC}|(?:vc|call) (?:se )?(?:nikal|nikalo|chhodo|leave karo)", t):
         return {"action": "leave"}
     # "join the gaming vc", "join a staff-vc channel in BITNADE (not bitnade server)": the server stays in the
-    # target, and a trailing "not ..." only says which one it isn't
-    if m := re.fullmatch(rf"(?:join|connect to|go to|hop in|hop into|get in|get into|enter) (?:the |a )?(.+?) "
-                         rf"(?:vc|voice(?: channel| chat)?|channel)(?: (?:in|on|of) (.+?))?(?: server)?(?: not .+)?{_DC}"
-                         rf"|(?:join|connect to) (?:vc|voice) (.+?){_DC}", t):
-        return {"action": "join", "target": (m[1] or m[3]) + (f" in {m[2]}" if m[2] else "")}
+    # target, and a trailing "not ..." only says which one it isn't. A plain "channel" also needs "join" and a
+    # vc, voice or discord said: "go to the general channel" is no reason to go live on the mic.
+    if (m := re.fullmatch(rf"(join|connect to|go to|hop in|hop into|get in|get into|enter) (?:the |a )?(.+?) "
+                          rf"(vc|voice(?: channel| chat)?|channel)(?: (?:in|on|of) (?!discord$)(.+?))?(?: server)?(?: not .+)?{_DC}"
+                          rf"|(?:join|connect to) (?:vc|voice) (.+?){_DC}", t)) \
+            and (m[3] != "channel" or m[1] in ("join", "connect to") and (said_discord or re.search(r"\b(?:vc|voice)\b", m[2]))):
+        return {"action": "join", "target": (m[2] or m[5]) + (f" in {m[4]}" if m[4] else "")}
     if m := re.fullmatch(r"(?:call|ring|voice call|phone) (.+?) (?:on|in) discord|discord call (.+)", text):
         return {"action": "call", "target": m[1] or m[2]}
     if m := re.fullmatch(r"(?:open|show|go to|switch to|take me to)(?: my)?(?: (?:dm|dms|chat|messages|channel))?"
@@ -158,12 +162,17 @@ def parse_discord(text):
                          rf"(?: emoji| emote| reaction)?(?: (?:on|in) discord)?", t):
         target = m[1] or m[2]
         return {"action": "react", "emoji": m[3], **({"target": target} if target else {})}
-    if m := re.fullmatch(rf"react(?: with| using)? (?:a |an |the )?(.+?)(?: emoji)?(?: (?:to|on) (?:(.+?)(?:'s|s) )?{msg})?"
-                         rf"(?: (?:on|in) discord)?", t):
-        return {"action": "react", "emoji": m[1], **({"target": m[2]} if m[2] else {})}
-    if m := re.fullmatch(r"reply (?:to )?(.+?) (?:on|in) discord (?:saying|with|that) (.+)", text):
-        return {"action": "reply", "target": m[1], "text": m[2]}
-    if m := re.fullmatch(r"reply (?:saying |with )?(.+?) (?:on|in) discord", text):
+    # "react fire", "react with a skull emoji to my message": an emoji name, or said as a reaction to a message
+    # or on Discord ("react or vue, which is better?" is a question). No " to "/" on " inside the emoji: "react
+    # fire to alex message" (no 's) goes to the model instead of reacting "fire to alex message" to the open chat.
+    if (m := re.fullmatch(rf"react(?: with| using)? (?:a |an |the )?((?:(?! to | on ).)+?)( emoji| emote| reaction)?"
+                          rf"(?: (?:to|on) (?:(.+?)(?:'s|s) )?({msg}))?(?: (?:on|in) discord)?", t)) \
+            and (m[2] or m[4] or said_discord or discord.emoji(m[1])):
+        return {"action": "react", "emoji": m[1], **({"target": m[3]} if m[3] else {})}
+    if m := re.fullmatch(r"reply (?:to )?(.+?) (?:on|in) discord (?:saying|with|that) (.+)"
+                         r"|reply to (.+?) (?:saying|that) (.+?) (?:on|in) discord", text):
+        return {"action": "reply", "target": m[1] or m[3], "text": m[2] or m[4]}
+    if m := re.fullmatch(r"reply (?:saying |with )?((?!to )(?:(?! saying ).)+?) (?:on|in) discord", text):
         return {"action": "reply", "text": m[1]}
     if m := re.fullmatch(rf"(?:edit|change) my {msg}(?: on discord)? to(?: say)? (.+)", text):
         return {"action": "edit", "text": m[1]}

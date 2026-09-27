@@ -335,6 +335,19 @@ def test_catch_me_up_needs_discord_named():
     assert D("what's going on in ukraine") is None      # not a Discord question
 
 
+def test_everyday_sentences_are_not_discord_actions():
+    D = router.parse_discord
+    assert D("go to the general channel") is None and D("join the general channel") is None
+    assert D("go to the general channel on discord") is None or D("go to the general channel on discord")["action"] == "open"
+    assert D("join the general channel on discord") == {"action": "join", "target": "general"}
+    assert D("join the gaming vc on discord") == {"action": "join", "target": "gaming"}
+    assert D("react or vue which is better") is None
+    assert D("react fire") == {"action": "react", "emoji": "fire"}
+    assert D("react fire to alex message on discord") is None  # the model sorts out who "alex" is
+    assert D("reply to dexorto saying hi on discord") == {"action": "reply", "target": "dexorto", "text": "hi"}
+    assert D("reply to that on discord") is None
+
+
 def test_react_to_the_message_with_an_emoji():
     D = lambda t: router.parse_discord(router.normalize(t))
     assert D("React to the last message with a mad emoji.") == {"action": "react", "emoji": "mad"}
