@@ -4,7 +4,8 @@
 Two parec recorders (PipeWire) feed ring buffers in memory: the default output's monitor (games, calls,
 music) and the default mic; 30 s of both is about 9 MB. The screen is recorded by wf-recorder on the GPU
 into 5-second chunks in /dev/shm (RAM), the oldest overwritten. Nothing touches the disk until a clip is
-saved: then one folder in ~/Videos/Clips gets "mic and sound.mp3", "sound.mp3" and "screen.mp4".
+saved: then one folder in ~/Videos/Clips gets "mic and sound.mp3", "sound.mp3" and "screen.mp4" (picture only).
+Zade's service has MemorySwapMax=0, so none of it is ever swapped out to the disk either.
 """
 
 import collections
@@ -97,20 +98,16 @@ class Screen:
              str(self.dir / "seg%03d.ts")], stdin=self.rec.stdout, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
         self.rec.stdout.close()  # ffmpeg owns the pipe now
 
-    def save(self, dest, seconds, sound=None):
-        """The newest `seconds` of screen into `dest` (MP4), with `sound` (stereo int16 at RATE) as its audio."""
+    def save(self, dest, seconds):
+        """The newest `seconds` of screen into `dest` (MP4): the picture only, the sound is in its own files."""
         if self.seg.poll() is not None or self.rec.poll() is not None:
             raise RuntimeError("the screen recorder stopped")
         chunks = sorted(self.dir.glob("seg*.ts"), key=lambda p: p.stat().st_mtime)
         chunks = chunks[-(seconds // self.CHUNK + 2):]  # a little more, then cut to the last `seconds`
         if not chunks:
             raise RuntimeError("no screen recorded yet")
-        cmd = ["ffmpeg", "-loglevel", "error", "-y", "-sseof", f"-{seconds}", "-i", "concat:" + "|".join(map(str, chunks))]
-        if sound is not None and len(sound):
-            cmd += ["-f", "s16le", "-ar", str(RATE), "-ac", "2", "-i", "-", "-map", "0:v", "-map", "1:a",
-                    "-c:a", "aac", "-b:a", "192k", "-shortest"]
-        cmd += ["-c:v", "copy", "-movflags", "+faststart", str(dest)]
-        subprocess.run(cmd, input=sound.tobytes() if sound is not None else None, check=True)
+        subprocess.run(["ffmpeg", "-loglevel", "error", "-y", "-sseof", f"-{seconds}", "-i", "concat:" + "|".join(map(str, chunks)),
+                        "-map", "0:v", "-c:v", "copy", "-movflags", "+faststart", str(dest)], check=True)
         return dest
 
     def stop(self):
@@ -151,7 +148,7 @@ class Replay:
             mix = np.clip(sum(p[-n:].astype(np.int32) for p in parts.values()), -32768, 32767).astype(np.int16)
         if self.screen:
             try:
-                self.screen.save(out / "screen.mp4", seconds, mix)
+                self.screen.save(out / "screen.mp4", seconds)
             except (RuntimeError, subprocess.CalledProcessError) as e:
                 log.warning("screen replay: %s", e)
         if mix is not None:

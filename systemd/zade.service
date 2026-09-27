@@ -10,6 +10,9 @@ ExecStart=%h/Zade/.venv/bin/zade
 Restart=on-failure
 RestartSec=5
 EnvironmentFile=-%h/.config/zade/env
+# Never swapped out: the replay buffer (audio, and the screen's chunks in /dev/shm) must stay in RAM,
+# never be written to the disk's swap.
+MemorySwapMax=0
 
 [Install]
 WantedBy=graphical-session.target
