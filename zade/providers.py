@@ -66,6 +66,17 @@ def can_think(client, model):
     return _thinks[model]
 
 
+def _only_one(client, model, chat_models):
+    """Unload Zade's other chat model before this one runs: the main model (pre-loaded on the wake word) and
+    the thinking model (5.2 GB) must not sit in VRAM together. Reloading one takes ~1.3 s."""
+    try:
+        loaded = {m.model for m in client.ps().models}
+    except Exception:
+        return
+    for other in (chat_models & loaded) - {model}:
+        client.generate(model=other, prompt="", keep_alive=0)
+
+
 def _ollama(system, text, tools, run_tool, cfg, extra, history, think=False):
     llm = cfg["llm"]
     client = _client("ollama", cfg)
@@ -73,6 +84,7 @@ def _ollama(system, text, tools, run_tool, cfg, extra, history, think=False):
     if think and not can_think(client, model):
         log.info("thinking skipped: %s can't think (set a thinking model, e.g. qwen3:8b)", model)
         model, think = llm["model"], False
+    _only_one(client, model, {llm["model"], llm.get("think_model") or llm["model"]})
     # thinking is written before the answer and counts against the cap: give it room
     predict = max(llm.get("max_tokens", 400), llm.get("think_tokens", 2048)) if think else llm.get("max_tokens", 400)
     msgs = [{"role": "system", "content": system}, *_history(history), {"role": "user", "content": text}]

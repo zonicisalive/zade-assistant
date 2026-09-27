@@ -196,6 +196,9 @@ def test_thinking_uses_the_thinking_model_or_skips(monkeypatch):
     seen = []
 
     class Client:
+        def ps(self):
+            return type("P", (), {"models": []})()
+
         def show(self, model):
             return type("S", (), {"capabilities": ["thinking"] if model.startswith("qwen3") else []})()
 
@@ -211,3 +214,21 @@ def test_thinking_uses_the_thinking_model_or_skips(monkeypatch):
     cfg["llm"]["think_model"] = ""  # the main model can't think: answer without it
     providers._ollama("sys", "q", [], None, cfg, {}, (), think=True)
     assert seen == [("qwen3:8b", True, 2048), ("qwen2.5:7b-instruct", False, 400)]
+
+
+def test_only_one_chat_model_stays_in_vram():
+    unloaded = []
+
+    class Client:
+        def ps(self):
+            return type("P", (), {"models": [type("M", (), {"model": "qwen2.5:7b-instruct"})(),
+                                             type("M", (), {"model": "qwen2.5vl:3b"})()]})()
+
+        def generate(self, model, prompt, keep_alive):
+            unloaded.append((model, keep_alive))
+
+    providers._only_one(Client(), "qwen3:8b", {"qwen2.5:7b-instruct", "qwen3:8b"})
+    assert unloaded == [("qwen2.5:7b-instruct", 0)]  # the main model goes; other models (vision) are left alone
+    unloaded.clear()
+    providers._only_one(Client(), "qwen2.5:7b-instruct", {"qwen2.5:7b-instruct", "qwen3:8b"})
+    assert unloaded == []                             # it's the one needed
