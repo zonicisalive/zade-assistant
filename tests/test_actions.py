@@ -417,3 +417,18 @@ def test_app_volume_sets_only_that_apps_streams(monkeypatch):
     assert calls == [["pactl", "set-sink-input-volume", "3837", "50%"]]
     with pytest.raises(actions.Failed, match="isn't playing"):
         actions.app_volume("discord", 30)
+
+
+def test_app_volume_never_changes_other_apps(monkeypatch):
+    calls = []
+    streams = [{"index": 1, "properties": {"application.name": "Chromium"}, "volume": {"l": {"value_percent": "80%"}}},
+               {"index": 2, "properties": {"application.name": "Google Chrome"}, "volume": {"l": {"value_percent": "90%"}}},
+               {"index": 3, "properties": {"application.name": "Spotify"}, "volume": {"l": {"value_percent": "70%"}}}]
+    monkeypatch.setattr(actions, "_output", lambda cmd: json.dumps(streams))
+    monkeypatch.setattr(actions, "_call", lambda cmd: calls.append(cmd))
+    for app in ["", " ", "a"]:
+        with pytest.raises(actions.Failed):
+            actions.app_volume(app, 0)
+    actions.app_volume("chrome", 40)                 # the word chrome: Google Chrome, not Chromium
+    actions.app_volume("spotif", 30)                 # cut short, but only one app is that close
+    assert calls == [["pactl", "set-sink-input-volume", "2", "40%"], ["pactl", "set-sink-input-volume", "3", "30%"]]

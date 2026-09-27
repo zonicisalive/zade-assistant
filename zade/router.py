@@ -272,6 +272,10 @@ def _open_targets(target, find_app):
     return out or None
 
 
+_VOLUME_VERBS = {"set", "change", "put", "turn", "increase", "decrease", "raise", "lower", "reduce", "boost", "drop",
+                 "bring", "make", "keep", "adjust", "lessen", "cut"}
+
+
 def parse_pattern(text, find_app):
     if m := re.fullmatch(r"(?:open|launch|start|run) (?:the )?(.+?)(?: app)?", text):
         if actions := _open_targets(m[1], find_app):  # otherwise later patterns ("start do not disturb")
@@ -379,11 +383,11 @@ def parse_pattern(text, find_app):
         return {"name": "screenshot", "args": {}}
     if m := re.fullmatch(r"(?:close|quit|kill|exit) (?:the )?(.+?)(?: app)?", text):
         return {"name": "close_app", "args": {"name": m[1]}} if find_app(m[1]) else None
-    if m := re.fullmatch(r"(?:(set|increase|decrease|raise|lower|turn)(?: (up|down))? )?(?:the )?volume"
-                         rf"(?: (up|down))? (?:(to|by) )?{NUM}(?: percent)?", text):
+    if m := re.fullmatch(r"(?:(set|increase|decrease|raise|lower|reduce|boost|drop|turn|bring|put|make)(?: (up|down))? )?"
+                         rf"(?:the |my )?volume(?: (up|down))? (?:(to|by) )?{NUM}(?: percent)?", text):
         verb, up_down, prep, n = m[1], m[2] or m[3], m[4], num(m[5])
-        direction = 1 if verb in ("increase", "raise") or up_down == "up" else \
-            -1 if verb in ("decrease", "lower") or up_down == "down" else 0
+        direction = 1 if verb in ("increase", "raise", "boost") or up_down == "up" else \
+            -1 if verb in ("decrease", "lower", "reduce", "drop") or up_down == "down" else 0
         if prep == "to" or not direction:  # "volume 40", "set volume to 40", "raise volume to 70"
             return {"name": "volume", "args": {"set": n}}
         return {"name": "volume", "args": {"delta": direction * n}}  # "volume up 10", "lower volume by 20"
@@ -392,7 +396,9 @@ def parse_pattern(text, find_app):
     if m := re.fullmatch(rf"(?:(?:set|change|put|turn)(?: the)? )?(?:volume (?:of|for) {app_name}|{app_name}(?:'s)? volume)"
                          rf" (?:to |at )?{NUM}(?: percent)?", text):
         app = m[1] or m[2]
-        if app not in ("the", "my", "system", "master", "main", "overall") and not re.search(r"\b(?:then|and)\b", app):
+        # "reduce the volume to 30" is the whole volume: an app's name doesn't start with a verb or end in "the"
+        if app not in ("the", "my", "system", "master", "main", "overall") and not re.search(r"\b(?:then|and)\b", app) \
+                and app.split()[0] not in _VOLUME_VERBS and app.split()[-1] not in ("the", "my", "a"):
             return {"name": "app_volume", "args": {"app": app, "set": num(m[3])}}
     if m := re.fullmatch(r"(?:turn )?(?:the )?volume (up|down)(?: a bit| a little)?", text):
         return {"name": "volume", "args": {"delta": 10 if m[1] == "up" else -10}}

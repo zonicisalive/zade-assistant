@@ -441,10 +441,17 @@ def app_volume(app, set_to=None, delta=None):
         streams = json.loads(_output(["pactl", "-f", "json", "list", "sink-inputs"]) or "[]")
     except (OSError, ValueError, subprocess.SubprocessError):
         streams = []
-    q = app.lower().strip()
+    q = " ".join(app.lower().split())
+    if len(q) < 3:  # "" is inside every name: it must never turn every app down
+        raise Failed("Which app's volume?")
     name = lambda s: " ".join(filter(None, (s["properties"].get("application.name"),
                                              s["properties"].get("application.process.binary")))).lower()
-    hits = [s for s in streams if q in name(s) or fuzz.partial_ratio(q, name(s)) >= 85]
+    # The name as a whole word ("chrome", not the "Chromium" stream Discord and other Electron apps show),
+    # else a close spelling, but only if that's one app (its streams: a browser has one per tab)
+    hits = [s for s in streams if re.search(rf"\b{re.escape(q)}\b", name(s))]
+    if not hits:
+        close = [s for s in streams if fuzz.partial_ratio(q, name(s)) >= 85]
+        hits = close if len({name(s) for s in close}) == 1 else []
     if not hits:
         if "spotify" in q:
             from . import music

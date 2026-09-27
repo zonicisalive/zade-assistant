@@ -362,6 +362,10 @@ def test_volume_with_number_words_and_per_app():
     assert P("Set the volume of Spotify to fifty percent.") == {"name": "app_volume", "args": {"app": "spotify", "set": 50}}
     assert P("discord volume 30") == {"name": "app_volume", "args": {"app": "discord", "set": 30}}
     assert P("set firefox volume to a hundred") == {"name": "app_volume", "args": {"app": "firefox", "set": 100}}
+    assert P("reduce the volume to 30") == {"name": "volume", "args": {"set": 30}}
+    assert P("reduce the volume by 20") == {"name": "volume", "args": {"delta": -20}}
+    assert P("bring the volume down to 20") == {"name": "volume", "args": {"set": 20}}
+    assert P("keep the volume at 40") is None or P("keep the volume at 40")["name"] != "app_volume"
     assert P("set volume to 40") == {"name": "volume", "args": {"set": 40}}   # the speakers, as before
 
 
