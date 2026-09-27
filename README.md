@@ -82,8 +82,9 @@ cp -r ~/Zade/vencord/zadeControl ~/path/to/Vencord/src/userplugins/
 cd ~/path/to/Vencord && pnpm build   # then restart Discord and enable ZadeControl in Settings > Vencord > Plugins
 ```
 
-The plugin listens only on 127.0.0.1:47823 and answers only requests carrying the secret token it writes to
-`~/.config/zade/discord-token` (readable only by you). Without it, Zade falls back to typing into Discord.
+The plugin listens only on a Unix socket in `$XDG_RUNTIME_DIR/zade` that only you can open, and answers only
+requests carrying the secret token it writes to `~/.config/zade/discord-token` (readable only by you). Without
+it, Zade falls back to typing into Discord.
 
 ## GPU speech recognition (optional, ~0.9 GB VRAM)
 
