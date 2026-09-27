@@ -322,7 +322,7 @@ def dispatch(ctx, action, from_model=False):
             from . import discord
 
             try:  # with the ZadeControl plugin: the person it will really go to, and sent without key presses
-                found = discord.call("find", name=a.get("to", ""))
+                found = discord.call("find", name=discord.clean_name(a.get("to", "")))
             except discord.Unavailable:
                 found = None  # no plugin: Discord's quick switcher, by keyboard
             except discord.Failed as e:

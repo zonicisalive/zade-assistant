@@ -59,9 +59,18 @@ def _voice_line(s):
     return f"In {v['channel']}: {who}.{state}"
 
 
+def clean_name(name):
+    """What was said, as a Discord name: "D E X O R T O user" -> "dexorto", "the dexorto guy" -> "dexorto"."""
+    import re
+
+    t = re.sub(r"\b(?:the |a )?(?:user|person|guy|dude|bhai|bro|account|named|called|wala|waala)\b", " ", name.lower())
+    t = re.sub(r"\b[a-z](?: [a-z]\b)+", lambda m: m[0].replace(" ", ""), " ".join(t.split()))  # spelled out
+    return " ".join(re.sub(r"^(?:the|my) ", "", t).split())
+
+
 def run(a):
     """One spoken request (the "discord" tool): returns what to say."""
-    act, target = a.get("action", ""), (a.get("target") or "").strip()
+    act, target = a.get("action", ""), clean_name(a.get("target") or "")
     if act in ("mute", "unmute"):
         return "Muted on Discord." if call("mute", on=act == "mute")["muted"] else "Unmuted on Discord."
     if act in ("deafen", "undeafen"):

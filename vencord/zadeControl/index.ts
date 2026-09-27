@@ -26,7 +26,22 @@ type Result = { ok: boolean; [key: string]: any; };
 // "💬│general-chat" and "General Chat" are the same channel when spoken
 const simple = (s: string) => s.toLowerCase().normalize("NFKD").replace(/[^a-z0-9]+/g, " ").trim();
 
-// Exact name first, then one starting with what was said, then one containing it.
+// Speech gets names slightly wrong ("dexoto" for dexorto): how alike two names are, 0 to 1.
+function likeness(a: string, b: string) {
+    const d = Array.from({ length: b.length + 1 }, (_, j) => j);
+    for (let i = 1; i <= a.length; i++) {
+        let prev = d[0];
+        d[0] = i;
+        for (let j = 1; j <= b.length; j++) {
+            const cur = d[j];
+            d[j] = Math.min(d[j] + 1, d[j - 1] + 1, prev + (a[i - 1] === b[j - 1] ? 0 : 1));
+            prev = cur;
+        }
+    }
+    return 1 - d[b.length] / Math.max(a.length, b.length, 1);
+}
+
+// Exact name first, then one starting with what was said, then one containing it, then the closest spelling.
 function best<T>(items: T[], names: (item: T) => string[], query: string): T | undefined {
     const q = simple(query);
     if (!q) return;
@@ -34,6 +49,14 @@ function best<T>(items: T[], names: (item: T) => string[], query: string): T | u
         const hit = items.find(i => names(i).some(n => test(simple(n))));
         if (hit) return hit;
     }
+    let top: T | undefined, score = 0.7; // below this it's a different name, not a misspelling
+    for (const i of items) {
+        for (const n of names(i)) {
+            const s = likeness(q.replace(/ /g, ""), simple(n).replace(/ /g, ""));
+            if (s > score) [top, score] = [i, s];
+        }
+    }
+    return top;
 }
 
 function userName(id: string) {

@@ -297,3 +297,10 @@ def test_discord_phrases():
     assert M("message dexorto on discord saying I'm late") == ("dexorto", "i'm late")
     assert M("send hi to dexorto on discord") == ("dexorto", "hi")
     assert router.parse_pattern("mute", lambda n: None) == {"name": "mute", "args": {"on": True}}
+
+
+def test_saying_something_in_the_open_discord_chat():
+    M = lambda t: router.parse_message(router.normalize(t))
+    assert M("Say hello in Discord chat.") == ("the current chat", "hello")
+    assert M("send gg in the chat on discord") == ("the current chat", "gg")
+    assert M("say hi to neel on discord") == ("neel", "hi")

@@ -22,3 +22,9 @@ def test_spoken_replies(monkeypatch):
 def test_without_the_plugin_it_says_so():
     with pytest.raises(discord.Unavailable):  # conftest hides the real token
         discord.call("status")
+
+
+def test_spoken_names_are_cleaned_up():
+    assert discord.clean_name("D E X O R T O user") == "dexorto"
+    assert discord.clean_name("the dexorto guy") == "dexorto"
+    assert discord.clean_name("general in bitnade") == "general in bitnade"
