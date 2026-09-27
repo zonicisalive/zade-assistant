@@ -319,6 +319,7 @@ def sync_replay(ctx):
     if want:
         try:
             ctx.replay = replay.Replay(*want)
+            atexit.register(lambda r=ctx.replay: r.stop())  # on exit or restart: stop recorders, free the RAM
         except OSError as e:  # parec missing
             log.warning("replay buffer off: %s", e)
 

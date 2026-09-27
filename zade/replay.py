@@ -100,6 +100,8 @@ class Screen:
     CHUNK = 5
 
     def __init__(self, seconds, binary="wf-recorder"):
+        for old in pathlib.Path("/dev/shm").glob("zade-screen-*"):  # left by a Zade that was killed: RAM held for nothing
+            shutil.rmtree(old, ignore_errors=True)
         self.dir = pathlib.Path(tempfile.mkdtemp(prefix="zade-screen-", dir="/dev/shm"))
         rec = [binary, "-c", "h264_vaapi", "-F", "scale_vaapi=format=nv12", "-r", "60", "-m", "mpegts", "-f", "/dev/stdout"]
         if device := gpu_device():
