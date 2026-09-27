@@ -78,29 +78,30 @@ def _profile(data_dir):
 
 def focus(audio, cfg, embed=embed, pieces=speech_pieces, profile=None):
     """The recording with other people's speech removed (unchanged if there's nothing to remove).
-    If the speaker is the owner (matches their saved voiceprint), other voices are judged against that
-    voiceprint; otherwise against whoever started talking."""
+    If the owner (their saved voiceprint) speaks in any piece, every piece is judged against that voiceprint,
+    so a TV or a friend talking first can't take their place; otherwise against whoever started talking."""
     a = cfg["audio"]
     th = a.get("focus_threshold", 0.25)
     spans = pieces(audio)
     if len(spans) < 2:
         return audio
     data_dir = cfg["paths"]["data"]
-    ref_span = next((s for s in spans if s[1] - s[0] >= MIN_JUDGE_S * RATE), spans[0])
-    ref = embed(audio[ref_span[0]:ref_span[1]], data_dir)
+    voices = {s: embed(audio[s[0]:s[1]], data_dir) for s in spans if s[1] - s[0] >= MIN_JUDGE_S * RATE}
+    owner = _profile(data_dir) if profile is None else profile
+    if owner is not None and any(e is not None and float(e @ owner) >= th for e in voices.values()):
+        ref, first = owner, None
+    else:
+        first = next(iter(voices), spans[0])
+        ref = voices[first] if first in voices else embed(audio[first[0]:first[1]], data_dir)
     if ref is None:
         return audio
-    owner = _profile(data_dir) if profile is None else profile
-    if owner is not None and float(ref @ owner) >= th:
-        ref = owner
     kept, dropped = [], 0
-    for start, end in spans:
-        if end - start >= MIN_JUDGE_S * RATE and ((start, end) != ref_span or ref is owner):
-            e = embed(audio[start:end], data_dir)
-            if e is not None and float(e @ ref) < th:
-                dropped += 1
-                continue
-        kept.append(audio[start:end])
+    for span in spans:
+        e = voices.get(span)  # pieces too short to judge are kept
+        if span != first and e is not None and float(e @ ref) < th:
+            dropped += 1
+            continue
+        kept.append(audio[span[0]:span[1]])
     if not dropped or not kept:
         return audio
     log.info("voice focus: dropped %d of %d speech pieces from another voice", dropped, len(spans))

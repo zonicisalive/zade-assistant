@@ -38,3 +38,14 @@ def test_owner_voiceprint_is_used_when_the_owner_speaks(tmp_path):
     out = voice_focus.focus(audio, c, embed=embed, pieces=lambda a: spans)
     assert len(out) == RATE
 
+
+
+def test_the_owner_is_kept_even_when_another_voice_speaks_first(tmp_path):
+    c = copy.deepcopy(config.DEFAULTS)
+    c["paths"]["data"] = str(tmp_path)
+    you, tv = np.array([1.0, 0.0]), np.array([0.0, 1.0])
+    audio = np.arange(4 * RATE, dtype=np.int16)
+    spans = [(0, RATE), (2 * RATE, 3 * RATE)]  # the TV, then you
+    embed = lambda clip, d: tv if clip[0] == 0 else you
+    out = voice_focus.focus(audio, c, embed=embed, pieces=lambda a: spans, profile=you)
+    assert np.array_equal(out, audio[2 * RATE:3 * RATE])
