@@ -664,3 +664,11 @@ def test_replay_start_failure_is_not_retried_and_dead_recorders_restart(monkeypa
     for t in range(0, 70, 1):
         z.sync_replay(ctx, now=100 + t)
     assert isinstance(ctx.replay, Fine) and len(healed) == 3  # checked every 30 s, not every poll
+
+
+def test_a_mistyped_setting_does_not_crash_the_loop(caplog):
+    ctx = make([])
+    ctx.cfg["clips"].update(enabled=True, seconds="45s")
+    for _ in range(3):
+        z.guarded(z.sync_replay, ctx)
+    assert sum("sync_replay failed" in r.message for r in caplog.records) == 1

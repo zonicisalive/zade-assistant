@@ -341,6 +341,21 @@ def sync_replay(ctx, now=None):
             ctx.replay_failed = want
 
 
+_failed = {}  # background step -> its last error
+
+
+def guarded(step, *args):
+    """One of the main loop's background steps. An error (a mistyped setting like seconds = "45s") is logged
+    once and the loop carries on: uncaught, it would crash Zade again on every restart."""
+    try:
+        step(*args)
+        _failed.pop(step, None)
+    except Exception as e:
+        if _failed.get(step) != str(e):
+            _failed[step] = str(e)
+            log.warning("%s failed: %s", step.__name__, e)
+
+
 def pump_discord(ctx):
     """New Discord messages and calls from the ZadeControl plugin, to announce (kinds as set in discord.*).
     During quiet hours, Do Not Disturb or a snooze they're dropped: Discord keeps them as unread anyway."""
@@ -869,21 +884,27 @@ def main():
         except (discord.Unavailable, discord.Failed) as err:
             log.warning("discord: %s", err)
 
+    def discord_names():
+        from . import discord
+
+        ctx.discord_words = discord.names()
+
+    def read_typed():
+        typed.extend(read_inbox(inbox))
+
     def poll():
         if time.monotonic() - last_check[0] >= 0.5:  # reminders, typed commands, live settings
             last_check[0] = time.monotonic()
-            pump_reminders(ctx)
-            sync_replay(ctx)
+            guarded(pump_reminders, ctx)
+            guarded(sync_replay, ctx)
             if time.monotonic() - last_discord[0] >= 2:
                 last_discord[0] = time.monotonic()
-                pump_discord(ctx)
+                guarded(pump_discord, ctx)
             if time.monotonic() - last_names[0] >= 600 or (not ctx.discord_words and time.monotonic() - last_names[0] >= 30):
                 last_names[0] = time.monotonic()  # every 10 min (every 30 s until Discord is up)
-                from . import discord
-
-                ctx.discord_words = discord.names()
-            stt.gpu_idle(cfg)  # frees its VRAM after stt.keep_alive_s
-            typed.extend(read_inbox(inbox))
+                guarded(discord_names)
+            guarded(stt.gpu_idle, cfg)  # frees its VRAM after stt.keep_alive_s
+            guarded(read_typed)
             mtime = config_file.stat().st_mtime if config_file.exists() else 0
             if mtime != config_mtime[0]:  # changed in the app: overlay, sounds, quiet hours, safety apply now
                 config_mtime[0] = mtime
