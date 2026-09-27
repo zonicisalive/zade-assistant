@@ -216,6 +216,28 @@ def test_qwen_asr_provider(monkeypatch):
     msgs = sent["body"]["messages"]
     assert sent["url"].endswith(":8182/v1/chat/completions")
     assert "Discord" in msgs[0]["content"] and msgs[-1] == {"role": "assistant", "content": "language English<asr_text>"}
+    assert sent["body"]["max_tokens"] == 72  # 1 s of audio: room grows with the recording, 2 min get 1024
+
+
+def test_a_cut_off_qwen_transcript_falls_back_to_the_cpu(monkeypatch):
+    import json as _json
+
+    import zade.stt as S
+
+    c = copy.deepcopy(config.DEFAULTS)
+    c["stt"]["provider"] = "qwen"
+
+    class Resp:
+        def __enter__(self): return self
+        def __exit__(self, *a): pass
+        def read(self, *a):
+            return _json.dumps({"choices": [{"finish_reason": "length", "message": {"content": "<asr_text>Open"}}]}).encode()
+
+    monkeypatch.setattr("urllib.request.urlopen", lambda req, timeout: Resp())
+    monkeypatch.setattr(S, "has_speech", lambda a: True)
+    seg = type("Seg", (), {"text": "Open Firefox and Discord.", "no_speech_prob": 0.0, "avg_logprob": -0.1})
+    monkeypatch.setattr(S, "_whisper", lambda m, d: type("W", (), {"transcribe": lambda self, *a, **k: ([seg], None)})())
+    assert S.transcribe(np.zeros(16000, np.int16), c) == "Open Firefox and Discord."
 
 
 def test_unused_speech_servers_are_stopped(monkeypatch):

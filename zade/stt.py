@@ -73,12 +73,18 @@ def _qwen(audio, cfg, prompt):
         {"role": "user", "content": [{"type": "input_audio", "input_audio": {
             "data": base64.b64encode(to_wav(audio)).decode(), "format": "wav"}}]},
         {"role": "assistant", "content": "language English<asr_text>"}]
+    # room for what can be said in the recording (~3 words a second, speaking fast): a fixed cap cut long
+    # requests off after about 50 s
+    seconds = len(audio) / 16000
+    tokens = 64 + int(seconds * 8)
     req = urllib.request.Request(cfg["stt"]["qwen_url"].rstrip("/") + "/v1/chat/completions",
-                                 data=json.dumps({"messages": msgs, "temperature": 0, "max_tokens": 160}).encode(),
+                                 data=json.dumps({"messages": msgs, "temperature": 0, "max_tokens": tokens}).encode(),
                                  headers={"Content-Type": "application/json"})
-    with urllib.request.urlopen(req, timeout=15) as r:
-        text = json.load(r)["choices"][0]["message"]["content"]
-    return text.split("<asr_text>")[-1].strip()
+    with urllib.request.urlopen(req, timeout=15 + seconds / 10) as r:
+        choice = json.load(r)["choices"][0]
+    if choice.get("finish_reason") == "length":  # still cut off: the CPU model below writes it all
+        raise RuntimeError("the transcript was cut off")
+    return choice["message"]["content"].split("<asr_text>")[-1].strip()
 
 
 def _server(audio, cfg, prompt):
