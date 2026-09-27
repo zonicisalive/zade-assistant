@@ -392,6 +392,14 @@ def test_close_app_closes_its_windows_and_reports_a_miss(monkeypatch):
         actions._close_app(("google-chrome", "google-chrome-stable"), "chrome")
 
 
+def test_a_failed_or_hung_command_is_an_error_not_done():
+    with pytest.raises(actions.Failed, match="No players found"):
+        actions._call(["sh", "-c", "echo 'No players found' >&2; exit 1"])
+    with pytest.raises(actions.Failed, match="didn't answer"):
+        actions._call(["sleep", "5"], timeout=0.2)
+    actions._call(["true"])
+
+
 def test_a_missing_program_is_a_failure_not_a_crash():
     with pytest.raises(actions.Failed, match="isn't installed"):
         actions._call(["zade-no-such-program-xyz", "--help"])

@@ -150,11 +150,18 @@ def app_names(dirs=USER_APP_DIRS):
     return list(dict.fromkeys(names))
 
 
-def _call(cmd):
+def _call(cmd, timeout=15):
+    """Run a command; its failure is a spoken error, not a false "Done", and a hung one (ddcutil on a
+    monitor that doesn't answer) can't stall Zade."""
     try:
-        subprocess.run(cmd, check=False, capture_output=True)
+        p = subprocess.run(cmd, check=False, capture_output=True, text=True, timeout=timeout)
     except FileNotFoundError:  # e.g. wtype or playerctl not installed: a spoken failure, never a crash
         raise Failed(f"{cmd[0]} isn't installed, so I can't do that.") from None
+    except subprocess.TimeoutExpired:
+        raise Failed(f"{cmd[0]} didn't answer, so that may not have worked.") from None
+    if p.returncode:
+        error = next((line for line in (p.stderr or p.stdout).splitlines() if line.strip()), "")
+        raise Failed(f"That didn't work: {error.strip()}." if error else f"{cmd[0]} couldn't do that.")
 
 
 def typed(text):

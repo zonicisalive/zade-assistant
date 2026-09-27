@@ -133,7 +133,12 @@ def _open(uri):
             if _running():
                 time.sleep(1.0)  # let it finish starting up
                 break
-    subprocess.run(["playerctl", "--player=spotify", "open", uri], capture_output=True, timeout=5)
+    try:
+        ok = subprocess.run(["playerctl", "--player=spotify", "open", uri], capture_output=True, timeout=5).returncode == 0
+    except (OSError, subprocess.SubprocessError):
+        ok = False
+    if not ok:  # not "Playing X" when nothing plays
+        raise Failed("Spotify didn't respond. Try again in a moment.")
 
 
 def _post_token(cid, secret, form):
