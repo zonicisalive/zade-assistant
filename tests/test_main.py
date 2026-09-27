@@ -407,6 +407,16 @@ def test_claims_must_match_the_tools_that_ran():
     assert z.tidy("Discord is now open.", ["open_app"]) == "Discord is now open."
 
 
+def test_claims_are_how_the_model_talks_about_itself_not_facts():
+    assert z.tidy("I've muted the sound.", ["mute"]) == "I've muted the sound."
+    for fact in ["The first email was sent in 1971 by Ray Tomlinson.", "Opening hours are 9 am to 5 pm.",
+                 "Launched in 1969, Apollo 11 landed on the Moon."]:
+        assert z.tidy(fact) == fact, fact
+    for claim in ["Message sent to Dexorto!", "Opened Discord.", "closing."]:
+        assert z.tidy(claim) == "I couldn't do that.", claim
+    assert z.tidy("It's 5 pm. Message sent to Dexorto.", ["time"]) == "I couldn't do all of that."  # time proves nothing
+
+
 def test_messages_to_people_are_always_confirmed(monkeypatch):
     asked, ran = [], []
     ctx = make([], run_action=lambda a, c: ran.append(a) or "Sent to dexorto on Discord.")

@@ -210,24 +210,38 @@ FILLER_SENTENCE = re.compile(
 # ...and claim they did things no tool did ("Instagram is now open!", "the message has been sent" after only
 # opening Discord). Each kind of claim needs one of its tools to have run. After a lookup (web, weather, the
 # screen...) the reply reports facts ("the metro line is now open"), not actions, so it isn't checked.
-INFO_TOOLS = {"web_answer", "web_search", "look_at_screen", "weather", "time", "date", "notes_read", "list_facts",
-              "list_reminders", "system_status", "clipboard_read"}
+# Tools whose results the reply may quote (a web page, the screen, your notes): their words aren't claims.
+INFO_TOOLS = {"web_answer", "look_at_screen", "notes_read", "list_facts", "list_reminders", "clipboard_read"}
+_ACK = r"(?:(?:done|sure|okay|ok|alright|all right)[,.!]? )"
+# A sentence that's only a short "-ing" phrase ("Closing Discord.", "Setting Spotify volume to 50%."), not a
+# statement with a verb of its own ("Opening hours are 9 to 5.")
+_BARE = r"^(?!.*\b(?:is|are|was|were|has|have|had|will|can|means)\b)(?:{})(?: \S+){{0,5}}\W*$"
+# Claims of actions: each needs one of its tools to have run (None: any tool). Only the ways a model speaks of
+# what it just did ("I've sent", "Message sent to X", "Opened Discord.", "Sure, closing it"), not facts
+# ("The first email was sent in 1971", "NASA sent a probe").
 CLAIMS = [
-    (re.compile(r"\b(?:(?:(?:has|have|had) been|was|were) (?:sent|shared|posted|uploaded)"
-                r"|i(?:'ve| have)? (?:sent|shared|posted|uploaded|messaged|typed))\b"
-                r"|^(?:done|okay|ok|sure)?[,.!]? ?(?:sent|messaged|typed)\b", re.I),
-     {"send_message", "type_text", "press_keys"}),
+    (re.compile(r"\b(?:(?:has|have) been (?:sent|shared|posted|uploaded)"
+                r"|i(?:'ve| have)? (?:sent|shared|posted|uploaded|messaged|typed|replied))\b"
+                r"|^(?:the |your )?(?:message|msg|text|dm|screenshot|picture|file|reply)s? (?:was |were |is |are )?"
+                r"(?:sent|shared|posted|uploaded)\b"
+                rf"|^{_ACK}?(?:sent|messaged|typed|replied)\b", re.I),
+     {"send_message", "type_text", "press_keys", "discord"}),
     (re.compile(r"\b(?:is now open|is open now|now open|i(?:'ve| have)? (?:opened|launched|started))\b"
-                r"|^(?:sure|okay|ok)?,? ?opening\b", re.I), {"open_app", "open_website", "window", "web_search"}),
-    (re.compile(r"\b(?:is now closed|i(?:'ve| have)? closed)\b|^(?:sure|okay|ok)?,? ?closing\b", re.I),
+                rf"|^{_ACK}?opened\b(?! in \d)|^{_ACK}opening\b|" + _BARE.format("opening"), re.I),
+     {"open_app", "open_website", "window", "web_search"}),
+    (re.compile(rf"\b(?:is now closed|i(?:'ve| have)? closed)\b|^{_ACK}closing\b|" + _BARE.format("closing"), re.I),
      {"close_app", "window", "press_keys"}),
     (re.compile(r"\b(?:is now (?:playing|paused)|now playing|i(?:'ve| have)? (?:paused|played|resumed))\b", re.I),
      {"play_music", "media"}),
     (re.compile(r"\b(?:disconnected|left the (?:call|vc|voice(?: channel)?)|joined the \w+|calling \w+|"
-                r"i(?:'ve| have)? (?:joined|called|muted|unmuted|deafened))\b", re.I), {"discord"}),
+                r"i(?:'ve| have)? (?:joined|called|deafened))\b", re.I), {"discord"}),
+    (re.compile(rf"\bi(?:'ve| have)? (?:muted|unmuted)\b|^{_ACK}?(?:muted|unmuted)\b", re.I),
+     {"discord", "mute", "volume", "app_volume", "media"}),
     # "Setting Spotify volume to 50%." with nothing done: any tool at all must have run
-    (re.compile(r"^(?:sure|okay|ok|alright)?[,.!]? ?(?:setting|turning|changing|switching|starting|stopping|"
-                r"muting|unmuting|raising|lowering|increasing|decreasing)\b", re.I), None),
+    (re.compile(rf"^{_ACK}(?:setting|turning|changing|switching|starting|stopping|muting|unmuting|raising|lowering|"
+                r"increasing|decreasing)\b|" + _BARE.format("setting|turning|changing|switching|starting|stopping|"
+                                                           "muting|unmuting|raising|lowering|increasing|decreasing"), re.I),
+     None),
     (re.compile(r"\b(?:is now (?:displayed|showing)|now displayed|i(?:'ve| have)? (?:turned on|turned off|switched))\b",
                 re.I), None),  # any tool will do
 ]
