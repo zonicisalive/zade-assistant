@@ -33,6 +33,12 @@ STOP_WORDS = {
     "kuch nahi", "kuch nahin", "koi baat nahi", "jaane do", "jane do", "band kar", "band karo", "bas rehne do",
     "rehne do bas", "bas chhodo", "chhodo rehne do", "chup chap", "chup chaap", "bas bas", "stop stop", "ruko ruko",
 }
+# Ending a request, these cancel it. Not every stop word: "band karo", "chhod do", "go to sleep" or "shut up"
+# end real requests ("Spotify band karo", "vc chhod do", "remind me at 11 to go to sleep").
+END_CANCELS = {"never mind", "forget it", "forget that", "forget about it", "leave it", "nothing nothing", "no nothing",
+               "rehne do", "rehne de", "bas rehne do", "rehne do bas", "jaane do", "jane do", "kuch nahi", "kuch nahin",
+               "koi baat nahi"}
+QUOTING = {"to", "saying", "say", "says", "that", "text", "message", "type", "write", "called", "named", "play", "by"}
 # Whole utterances made only of these words, with at least one real "no" ("no thanks, that's all"): waved off
 DISMISS = {"no", "nope", "nah", "naa", "nahi", "nahin", "nothing", "never", "mind", "nevermind", "nvm", "leave",
            "forget", "it", "its", "it's", "a", "just", "thanks", "thank", "you", "thankyou", "that's", "thats", "all",
@@ -79,10 +85,10 @@ def after_stop(raw):
     clauses = [c.strip() for c in re.split(r"[.!?,]", raw or "") if c.strip()]
     stops = [i for i, c in enumerate(clauses) if plain(router.normalize(c)) in STOP_WORDS]
     if not stops:
-        # "call B I nothing nothing leave it": ending with a cancelling phrase of two or more words (a lone
-        # "stop" at the end can belong to the request)
+        # "call B I nothing nothing leave it": ending with a phrase that only cancels, not quoted ("... saying
+        # never mind")
         words = router.normalize(raw or "").split()
-        if any(" ".join(words[-n:]) in STOP_WORDS for n in (2, 3) if len(words) > n):
+        if any(" ".join(words[-n:]) in END_CANCELS and words[-n - 1] not in QUOTING for n in (2, 3) if len(words) > n):
             return ""
         return None
     rest = ", ".join(clauses[stops[-1] + 1:])

@@ -604,6 +604,9 @@ def test_ending_with_a_cancelling_phrase_cancels():
     assert z.after_stop("open the door never mind") == ""
     assert z.after_stop("turn the music off stop") is None        # a lone "stop" at the end isn't a cancel
     assert z.after_stop("play leave it by vance joy") is None
+    for text in ["Remind me at 11 pm to go to sleep", "Spotify band karo", "vc chhod do", "tell him to shut up",
+                 "message dexorto on discord saying never mind", "play forget it"]:
+        assert z.after_stop(text) is None, text
 
 
 def test_discord_claims_need_a_discord_action():
