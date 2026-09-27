@@ -60,12 +60,11 @@ def _voice_line(s):
 
 
 def clean_name(name):
-    """What was said, as a Discord name: "D E X O R T O user" -> "dexorto", "the dexorto guy" -> "dexorto"."""
+    """Spelled-out letters joined ("D E X O R T O" -> "dexorto"); nothing else is changed. Extra words
+    ("dexorto user") are the plugin's job: it tries the whole phrase first, then its longest word."""
     import re
 
-    t = re.sub(r"\b(?:the |a )?(?:user|person|guy|dude|bhai|bro|account|named|called|wala|waala)\b", " ", name.lower())
-    t = re.sub(r"\b[a-z](?: [a-z]\b)+", lambda m: m[0].replace(" ", ""), " ".join(t.split()))  # spelled out
-    return " ".join(re.sub(r"^(?:the|my) ", "", t).split())
+    return re.sub(r"\b[a-z](?: [a-z]\b)+", lambda m: m[0].replace(" ", ""), " ".join(name.lower().split()))
 
 
 def run(a):

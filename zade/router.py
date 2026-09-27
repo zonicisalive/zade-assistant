@@ -164,7 +164,7 @@ def parse_message(text):
         return m[2], m[1]
     # "say hello in discord chat", "send gg in the chat on discord", "type lol here on discord": the open chat
     if m := re.fullmatch(r"(?:say|send|type|write|post|drop) (.+?) (?:in|on|to|into) (?:the |this |my )?(?:current |open )?"
-                         r"(?:discord (?:chat|channel|dm|jet|chart|chad|chats)|(?:chat|channel|dm)(?: on discord| in discord)?)"
+                         r"(?:discord (?:chat|channel|dm)|(?:chat|channel|dm)(?: on discord| in discord)?)"
                          r"|(?:say|send|type|write|post) (.+?) here (?:on|in) discord", text):
         return "the current chat", m[1] or m[2]
     return None

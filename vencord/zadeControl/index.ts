@@ -84,8 +84,18 @@ function describe(channel: any) {
     return channel.guild_id ? `the ${name} channel in ${GuildStore.getGuild(channel.guild_id)?.name ?? "a server"}` : name;
 }
 
-// A person's DM, else a text channel, by what was said ("dexorto", "general", "general in bitnade").
+// A person's DM, else a text channel, by what was said ("dexorto", "general", "general in bitnade"). If the
+// whole phrase finds nothing ("dexorto user"), its words are tried, longest first.
 async function findChat(name: string): Promise<{ id: string; label: string; } | undefined> {
+    const whole = await findChatExactly(name);
+    if (whole || !name.includes(" ")) return whole;
+    for (const word of name.split(/\s+/).filter(w => w.length >= 3).sort((a, b) => b.length - a.length)) {
+        const hit = await findChatExactly(word);
+        if (hit) return hit;
+    }
+}
+
+async function findChatExactly(name: string): Promise<{ id: string; label: string; } | undefined> {
     // "the current chat", "this channel", "here": what's open on screen (small models misspell it: "current chant")
     if (/^(?:the )?(?:current|this|here|open|opened|same)\b/.test(simple(name))) {
         const channel = ChannelStore.getChannel(SelectedChannelStore.getChannelId());
