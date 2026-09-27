@@ -248,8 +248,9 @@ def pick_emoji(description, cfg):
 
     for name, extra in candidates(cfg):
         try:
-            reply = providers.chat(name, "Reply with only the one emoji character that best fits the description.",
-                                   description, [], lambda n, a: "", cfg, extra)
+            reply = providers.chat(name, "Reply with only the one emoji character that best fits the feeling or thing "
+                                   "described. Examples: mad -> \U0001f621, lol -> \U0001f602, gg -> \U0001f44d.",
+                                   description, [], lambda n, a: "", cfg, {**extra, "temperature": 0})
         except providers.ProviderError:
             continue
         chars = [c for c in reply or "" if unicodedata.category(c) == "So" or c == "\ufe0f"]
