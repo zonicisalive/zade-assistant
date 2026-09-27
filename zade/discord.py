@@ -97,6 +97,20 @@ def emoji(name):
     return best[1] if best else None
 
 
+def names():
+    """Discord names for speech recognition to expect ("BITNADE", "DEXORTO", "staff vc"), or [] without the
+    plugin. Capped: a very long list of expected words makes recognition worse, not better."""
+    try:
+        n = call("names", timeout=3)
+    except (Unavailable, Failed):
+        return []
+    out = []
+    for name in [*n["servers"], *n["people"], *n["voice"]]:
+        if name and len(name) >= 3 and name.lower() not in {o.lower() for o in out}:
+            out.append(name)
+    return out[:80]
+
+
 def event_line(e):
     """What Zade says for a Discord event: a DM or mention (then asks to reply), or a call (asks to answer)."""
     if e["kind"] == "call":
@@ -148,6 +162,10 @@ def run(a):
         return _voice_line(call("status"))
     if act in ("react", "unreact"):
         e = emoji(a.get("emoji") or "")
+        if not e:  # not an emoji's name ("mad"): the brain picks one
+            from . import brain, config
+
+            e = brain.pick_emoji(a.get("emoji") or "", config.load())
         if not e:
             raise Failed(f"I don't know the {a.get('emoji')} emoji.")
         out = call("react", name=target, emoji=e, remove=act == "unreact")

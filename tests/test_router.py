@@ -333,3 +333,10 @@ def test_catch_me_up_needs_discord_named():
     assert D("catch me up on discord") == {"action": "summarize"}
     assert D("summarize the chat with dexorto on discord") == {"action": "summarize", "target": "dexorto"}
     assert D("what's going on in ukraine") is None      # not a Discord question
+
+
+def test_react_to_the_message_with_an_emoji():
+    D = lambda t: router.parse_discord(router.normalize(t))
+    assert D("React to the last message with a mad emoji.") == {"action": "react", "emoji": "mad"}
+    assert D("react to dexorto's message with fire") == {"action": "react", "emoji": "fire", "target": "dexorto"}
+    assert D("react fire to dexorto's message") == {"action": "react", "emoji": "fire", "target": "dexorto"}

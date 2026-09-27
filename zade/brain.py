@@ -242,6 +242,22 @@ def summarize(text, cfg):
     return None
 
 
+def pick_emoji(description, cfg):
+    """The emoji that fits a word that isn't an emoji's name ("mad" -> 😠), from the first brain that answers."""
+    import unicodedata
+
+    for name, extra in candidates(cfg):
+        try:
+            reply = providers.chat(name, "Reply with only the one emoji character that best fits the description.",
+                                   description, [], lambda n, a: "", cfg, extra)
+        except providers.ProviderError:
+            continue
+        chars = [c for c in reply or "" if unicodedata.category(c) == "So" or c == "\ufe0f"]
+        if chars:
+            return "".join(chars[:2]).rstrip() if len(chars) > 1 and chars[1] == "\ufe0f" else chars[0]
+    return None
+
+
 FIX_SONG = ("A speech recognizer transcribed a request to play a song. It often mishears names, because the user "
             "speaks English with an Indian accent: words are replaced by similar-sounding ones. Think of famous songs "
             "and artists whose names SOUND like the words. Examples: \"lucid dreams by juice world\" -> Lucid Dreams "

@@ -153,6 +153,11 @@ def parse_discord(text):
                     r"(?: on discord)?|kisne message kiya", text):
         return {"action": "unread"}
     msg = r"(?:last |latest )?(?:message|msg|text)"
+    # "react fire to dexorto's message" and "react to the last message with a mad emoji"
+    if m := re.fullmatch(rf"react (?:to|on) (?:(?:the|my)|(.+?)(?:'s|s)) {msg}(?: from (.+?))? (?:with|using) (?:a |an |the )?(.+?)"
+                         rf"(?: emoji| emote| reaction)?(?: (?:on|in) discord)?", t):
+        target = m[1] or m[2]
+        return {"action": "react", "emoji": m[3], **({"target": target} if target else {})}
     if m := re.fullmatch(rf"react(?: with| using)? (?:a |an |the )?(.+?)(?: emoji)?(?: (?:to|on) (?:(.+?)(?:'s|s) )?{msg})?"
                          rf"(?: (?:on|in) discord)?", t):
         return {"action": "react", "emoji": m[1], **({"target": m[2]} if m[2] else {})}

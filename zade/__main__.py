@@ -125,6 +125,7 @@ class Ctx:
     turn: list = field(default_factory=list)  # actions done so far in the current request
     tried: bool = False  # the model tried an action this request (even one that failed)
     app_words: list = field(default_factory=list)  # installed app names, given to Whisper as hotwords
+    discord_words: list = field(default_factory=list)  # Discord servers, people, voice channels (ZadeControl)
     show: Callable = lambda **fields: None  # overlay updates (emotion); ui.set in the real app
     route: str = ""  # how the last request was handled (shortcut, pattern, llm, ...), for History
 
@@ -698,7 +699,7 @@ def main():
                 a = voice_focus.focus(a, cfg)
             except Exception as e:  # never lose the request over it
                 log.warning("voice focus failed: %s", e)
-        words = [*memory.shortcuts(conn), *fact_words(memory.facts(conn)), *ctx.app_words]
+        words = [*memory.shortcuts(conn), *fact_words(memory.facts(conn)), *ctx.app_words, *ctx.discord_words]
         text = stt.transcribe(a, cfg, hotwords=words)
         ui.show("thinking", heard=text.strip())
         return text
@@ -755,7 +756,7 @@ def main():
     config_file = pathlib.Path("~/.config/zade/config.toml").expanduser()
     config_mtime = [config_file.stat().st_mtime if config_file.exists() else 0]
 
-    last_discord = [0.0]
+    last_discord, last_names = [0.0], [-1e9]
 
     def announce(e):
         """Read a Discord event out, then act on the answer: reply to a message (after a yes), answer or
@@ -793,6 +794,11 @@ def main():
             if time.monotonic() - last_discord[0] >= 2:
                 last_discord[0] = time.monotonic()
                 pump_discord(ctx)
+            if time.monotonic() - last_names[0] >= 600 or (not ctx.discord_words and time.monotonic() - last_names[0] >= 30):
+                last_names[0] = time.monotonic()  # every 10 min (every 30 s until Discord is up)
+                from . import discord
+
+                ctx.discord_words = discord.names()
             stt.gpu_idle(cfg)  # frees its VRAM after stt.keep_alive_s
             typed.extend(read_inbox(inbox))
             mtime = config_file.stat().st_mtime if config_file.exists() else 0

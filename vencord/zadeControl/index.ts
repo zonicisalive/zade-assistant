@@ -320,6 +320,17 @@ const tools: Record<string, (a: Args) => Promise<Result> | Result> = {
         return { ok: true };
     },
 
+    // Names speech recognition should expect: servers, friends (and DM people), and voice channels
+    names() {
+        const people = new Set<string>();
+        for (const id of RelationshipStore.getFriendIDs()) people.add(userName(id));
+        for (const c of ChannelStore.getSortedPrivateChannels().slice(0, 30)) (c.recipients ?? []).forEach(r => people.add(userName(r)));
+        const clean = (n: string) => n.replace(/[^\p{L}\p{N}' -]+/gu, " ").replace(/\s+/g, " ").trim();
+        const servers = (Object.values(GuildStore.getGuilds()) as any[]).map(g => clean(g.name));
+        const voice = guildChannels("VOCAL").map(c => clean(c.name));
+        return { ok: true, servers, people: [...people].map(clean), voice };
+    },
+
     // Server names, to tell apart servers with similar names
     servers: () => ({ ok: true, servers: (Object.values(GuildStore.getGuilds()) as any[]).map(g => g.name) }),
 
