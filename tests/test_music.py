@@ -257,3 +257,32 @@ def test_a_rotated_spotify_refresh_token_is_kept(monkeypatch):
     monkeypatch.setenv("SPOTIFY_REFRESH_TOKEN", "OLD")
     assert music._user_token("id", "secret", "OLD") == "A"
     assert saved == [("SPOTIFY_REFRESH_TOKEN", "NEW")] and music.os.environ["SPOTIFY_REFRESH_TOKEN"] == "NEW"
+
+
+def test_liked_songs_on_this_pc_stay_on_this_pc(monkeypatch):
+    calls, searched = [], []
+    connect(monkeypatch, calls, searched)
+    liked = {"items": [{"track": {"uri": "spotify:track:L1"}}]}
+    api = music._api
+    monkeypatch.setattr(music, "_api", lambda m, path, t, body=None:
+                        liked if path.startswith("/me/tracks") else (calls.append((m, path)) if m == "PUT" else api(m, path, t, body)))
+    assert music.play("my liked songs on this pc", "connect", play_on="last_used").endswith("on archlinux.")
+    assert calls[-1] == ("PUT", "/me/player/play?device_id=pc")
+
+
+def test_in_is_part_of_a_title_not_a_place():
+    assert music.split_this_pc("ghost in the machine") == ("ghost in the machine", False)
+    assert music.split_this_pc("hot in here") == ("hot in here", False)
+    assert music.split_this_pc("scars on this pc") == ("scars", True)
+
+
+def test_spotify_volume_from_zero_and_devices_without_an_id(monkeypatch):
+    monkeypatch.setenv("SPOTIFY_REFRESH_TOKEN", "R")
+    monkeypatch.setattr(music, "_user_token", lambda *a: "USER")
+    put = []
+    devices = [{"id": None, "name": "Restricted", "type": "Speaker", "is_active": False},
+               {"id": "p", "name": "Pixel", "type": "Smartphone", "is_active": True, "volume_percent": 0}]
+    monkeypatch.setattr(music, "_api", lambda m, path, t, body=None:
+                        {"devices": devices} if path == "/me/player/devices" else put.append(path))
+    assert [d["name"] for d in music._devices("USER")] == ["Pixel"]
+    assert music.connect_volume(delta=10) == "Spotify on Pixel is at 10 percent."

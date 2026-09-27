@@ -181,13 +181,16 @@ THIS_PC = re.compile(r"(?:(?:this|my|the) )?(?:system|pc|computer|laptop|desktop
 
 
 def split_this_pc(query):
-    if (m := re.fullmatch(r"(.+) (?:on|in) (.+)", query)) and THIS_PC.fullmatch(m[2]):
+    """ "scars on this pc" -> ("scars", True). Only "on": "in" is part of titles ("ghost in the machine",
+    "hot in here")."""
+    if (m := re.fullmatch(r"(.+) on (.+)", query)) and THIS_PC.fullmatch(m[2]):
         return m[1], True
     return query, False
 
 
 def _devices(token):
-    return _api("GET", "/me/player/devices", token)["devices"]
+    # a device without an id (the API allows it, e.g. a restricted one) can't be played on
+    return [d for d in _api("GET", "/me/player/devices", token)["devices"] if d.get("id")]
 
 
 def _match_device(devices, name):
@@ -308,7 +311,9 @@ def connect_volume(set_to=None, delta=None):
     active = next((d for d in _devices(token) if d.get("is_active")), None)
     if not active:
         raise Failed("Spotify isn't playing anywhere right now.")
-    target = max(0, min(100, int(set_to) if set_to is not None else (active.get("volume_percent") or 50) + int(delta or 10)))
+    current = active.get("volume_percent")
+    current = 50 if current is None else current  # 0 is a volume, not a missing one
+    target = max(0, min(100, int(set_to) if set_to is not None else current + int(delta or 10)))
     _api("PUT", f"/me/player/volume?volume_percent={target}", token)
     return f"Spotify on {active['name']} is at {target} percent."
 
@@ -374,8 +379,8 @@ def play(query, mode="app", provider="spotify", device="", play_on="this_pc", fi
                 raise Failed(f"I can't find {device} in Spotify. It sees {names}.")
         else:
             query, chosen = split_device(query, devices)
-    if LIKED.fullmatch(query.strip()):
-        return _play_liked(cid, secret, refresh, user, devices, chosen, mode, play_on)
+    if LIKED.fullmatch(query.strip()):  # "on this pc" said: this PC, whatever play_on says
+        return _play_liked(cid, secret, refresh, user, devices, chosen, mode, "this_pc" if here else play_on)
     try:
         token = _token(cid, secret)
         track, score = _find(query, token)
