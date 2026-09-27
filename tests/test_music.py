@@ -9,21 +9,19 @@ from zade import config, music
 
 @pytest.fixture(autouse=True)
 def no_real_keys(monkeypatch):
-    monkeypatch.setattr(music, "config", SimpleNamespace(load_env=lambda *a, **k: None))  # never the real keys
+    # never the real keys: only what a test sets in the environment
+    monkeypatch.setattr(music, "config", SimpleNamespace(load_env=lambda *a, **k: None, SECRETS={},
+                                                         secret=lambda k: music.config.SECRETS.get(k) or music.os.environ.get(k)))
     monkeypatch.delenv("SPOTIFY_REFRESH_TOKEN", raising=False)
     monkeypatch.setattr(music, "_user_cache", {})  # no login carried over between tests
 
 
-def test_env_file_is_loaded_without_overriding(tmp_path, monkeypatch):
+def test_env_file_is_loaded(tmp_path, monkeypatch):
     env = tmp_path / "env"
-    env.write_text("# keys\nSPOTIFY_CLIENT_ID=abc\nSPOTIFY_CLIENT_SECRET = 'xyz'\n\nALREADY=file\n")
-    monkeypatch.setenv("ALREADY", "shell")
-    monkeypatch.delenv("SPOTIFY_CLIENT_ID", raising=False)
-    monkeypatch.delenv("SPOTIFY_CLIENT_SECRET", raising=False)
+    env.write_text("# keys\nSPOTIFY_CLIENT_ID=abc\nSPOTIFY_CLIENT_SECRET = 'xyz'\n\n")
+    monkeypatch.setattr(config, "SECRETS", {})
     config.load_env(env)
-    import os
-    assert os.environ["SPOTIFY_CLIENT_ID"] == "abc" and os.environ["SPOTIFY_CLIENT_SECRET"] == "xyz"
-    assert os.environ["ALREADY"] == "shell"
+    assert config.secret("SPOTIFY_CLIENT_ID") == "abc" and config.secret("SPOTIFY_CLIENT_SECRET") == "xyz"
 
 
 def test_play_finds_track_and_plays_it_in_spotify(monkeypatch):
@@ -256,7 +254,7 @@ def test_a_rotated_spotify_refresh_token_is_kept(monkeypatch):
     monkeypatch.setattr(music, "_user_cache", {})
     monkeypatch.setenv("SPOTIFY_REFRESH_TOKEN", "OLD")
     assert music._user_token("id", "secret", "OLD") == "A"
-    assert saved == [("SPOTIFY_REFRESH_TOKEN", "NEW")] and music.os.environ["SPOTIFY_REFRESH_TOKEN"] == "NEW"
+    assert saved == [("SPOTIFY_REFRESH_TOKEN", "NEW")] and music.config.secret("SPOTIFY_REFRESH_TOKEN") == "NEW"
 
 
 def test_liked_songs_on_this_pc_stay_on_this_pc(monkeypatch):

@@ -105,6 +105,9 @@ ShellRoot {
         Process {
             id: proc
             property var callback: null
+            property string input: ""  // sent on stdin (secrets: never on the command line, which /proc shows)
+            stdinEnabled: input !== ""
+            onRunningChanged: if (running && input) { write(input + "\n"); stdinEnabled = false }
             workingDirectory: root.repo
             stdout: StdioCollector {
                 onStreamFinished: {
@@ -117,14 +120,20 @@ ShellRoot {
         }
     }
 
-    function ctl(args, callback) {
-        const p = procComponent.createObject(root, { command: [python, "-m", "zade.ctl"].concat(args), callback: callback || null })
+    function ctl(args, callback, input) {
+        const p = procComponent.createObject(root, { command: [python, "-m", "zade.ctl"].concat(args), callback: callback || null,
+                                                     input: input || "" })
         p.running = true
+    }
+    // ctl answers {ok: false, error} when config.toml can't be read (a typo made by hand): keep what's shown
+    function takeSettings(r) {
+        if (r && r.ok !== false) settings = r
+        else if (r && r.error) flash("Your config.toml has a mistake: " + r.error)
     }
 
     function refresh() {
         ctl(["status"], r => { if (r) status = r })
-        ctl(["settings"], r => { if (r) settings = r })
+        ctl(["settings"], takeSettings)
         ctl(["facts"], r => { if (r) facts = r })
         ctl(["shortcuts"], r => { if (r) shortcuts = r })
         ctl(["reminders"], r => { if (r) reminders = r })
@@ -136,7 +145,7 @@ ShellRoot {
         ctl(["wake-add", wakeUpload, phrase], r => {
             if (r && r.ok) { wakeUpload = ""; needsRestart = status.running; flash("Added \u201c" + r.phrase + "\u201d.")
                              ctl(["wake-list"], w => { if (w && w.ok) wakeWords = w.words })
-                             ctl(["settings"], s => { if (s) settings = s }) }
+                             ctl(["settings"], takeSettings) }
             else flash(r && r.error ? r.error : "Couldn't add that model.")
         })
     }
@@ -144,21 +153,21 @@ ShellRoot {
         ctl(["wake-del", model], r => {
             if (r && r.ok) { needsRestart = status.running; flash("Removed.")
                              ctl(["wake-list"], w => { if (w && w.ok) wakeWords = w.words })
-                             ctl(["settings"], s => { if (s) settings = s }) }
+                             ctl(["settings"], takeSettings) }
             else flash(r && r.error ? r.error : "Couldn't remove it.")
         })
     }
     function setKey(name, value) {
-        ctl(["key-set", name, value], r => {
+        ctl(["key-set", name], r => {
             if (r && r.ok) { needsRestart = status.running; flash(value ? "Key saved." : "Key removed.")
                              ctl(["keys"], k => { if (k) keys = k }) }
-            else flash("Couldn't save that key.")
-        })
+            else flash(r && r.error ? r.error : "Couldn't save that key.")
+        }, value || " ")
     }
 
     function setSetting(key, value) {
         ctl(["set", key, String(value)], r => {
-            if (r && r.ok) { if (!r.live) needsRestart = status.running; ctl(["settings"], s => { if (s) settings = s }) }
+            if (r && r.ok) { if (!r.live) needsRestart = status.running; ctl(["settings"], takeSettings) }
             else flash(r && r.error ? r.error : "Couldn't save that setting.")
         })
     }

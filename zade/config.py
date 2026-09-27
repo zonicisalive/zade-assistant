@@ -134,17 +134,27 @@ def wake_sure(wake):
     return wake.get("sure") or min(0.9, wake["threshold"] + 0.3)
 
 
+# API keys from ~/.config/zade/env. Kept here, not in os.environ: every program Zade starts (a shell command,
+# a game, xdg-open) would inherit them, and "run env" would read them out.
+SECRETS = {}
+
+
 def load_env(path=None, override=False):
-    """Read KEY=VALUE lines (API keys) from ~/.config/zade/env. Variables already set win, unless override
-    (for keys changed in the app while Zade runs)."""
+    """Read KEY=VALUE lines (API keys) from ~/.config/zade/env into SECRETS. Keys already loaded win, unless
+    override (for keys changed in the app while Zade runs)."""
     p = pathlib.Path(path or "~/.config/zade/env").expanduser()
     if not p.exists():
         return
     for line in p.read_text().splitlines():
         key, sep, value = line.partition("=")
         if sep and not key.strip().startswith("#"):
-            if override or key.strip() not in os.environ:
-                os.environ[key.strip()] = value.strip().strip("'\"")
+            if override or key.strip() not in SECRETS:
+                SECRETS[key.strip()] = value.strip().strip("'\"")
+
+
+def secret(name):
+    """An API key: from the env file, else a variable set where Zade was started."""
+    return SECRETS.get(name) or os.environ.get(name)
 
 
 _TOML_ESCAPES = {"\\": "\\\\", '"': '\\"', "\n": "\\n", "\t": "\\t", "\r": "\\r", "\b": "\\b", "\f": "\\f"}

@@ -1,9 +1,10 @@
 import json
 import logging
-import os
 
 import httpx
 import ollama
+
+from . import config
 
 log = logging.getLogger("zade")
 
@@ -33,7 +34,7 @@ def _client(name, cfg):
     if name == "ollama":
         return ollama.Client(host=cfg["llm"]["host"], timeout=120)
     pc = cfg["providers"][name]
-    key = os.environ.get(pc["api_key_env"])
+    key = config.secret(pc["api_key_env"])
     if not key:
         raise ProviderError(f"{pc['api_key_env']} is not set")
     if name == "anthropic":

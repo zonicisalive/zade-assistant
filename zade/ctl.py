@@ -279,14 +279,14 @@ def run(argv):
         return set_setting(args[0], args[1])
     if cmd == "keys":
         return keys()
-    if cmd == "key-set":
-        return set_key(args[0], args[1])
+    if cmd == "key-set":  # the value on stdin (the app sends it so): on the command line, /proc shows it to all
+        return set_key(args[0], args[1] if len(args) > 1 else sys.stdin.readline().rstrip("\n"))
     if cmd == "spotify-login":  # opens the browser; Spotify sends you back to Zade
         from . import music
         from .actions import Failed
 
         config.load_env(ENV)
-        cid, secret = os.environ.get("SPOTIFY_CLIENT_ID"), os.environ.get("SPOTIFY_CLIENT_SECRET")
+        cid, secret = config.secret("SPOTIFY_CLIENT_ID"), config.secret("SPOTIFY_CLIENT_SECRET")
         if not cid or not secret:
             return {"ok": False, "error": "Save the Spotify Client ID and secret first."}
         try:

@@ -170,7 +170,7 @@ def _user_token(cid, secret, refresh):
             from . import ctl
 
             ctl.set_key("SPOTIFY_REFRESH_TOKEN", new)
-            os.environ["SPOTIFY_REFRESH_TOKEN"] = refresh = new
+            config.SECRETS["SPOTIFY_REFRESH_TOKEN"] = refresh = new
         _user_cache.update(refresh=refresh, token=data["access_token"],
                            expires=time.time() + data.get("expires_in", 3600))
     return _user_cache["token"]
@@ -304,7 +304,7 @@ def play_youtube(query, provider="youtube"):
 def connect_volume(set_to=None, delta=None):
     """Spotify's own volume (Connect, Premium), for when it plays on another device."""
     config.load_env(override=True)
-    cid, secret, refresh = (os.environ.get(k) for k in ("SPOTIFY_CLIENT_ID", "SPOTIFY_CLIENT_SECRET", "SPOTIFY_REFRESH_TOKEN"))
+    cid, secret, refresh = (config.secret(k) for k in ("SPOTIFY_CLIENT_ID", "SPOTIFY_CLIENT_SECRET", "SPOTIFY_REFRESH_TOKEN"))
     if not refresh:
         raise Failed("Spotify isn't playing on this PC, and I'm not logged in to change it elsewhere.")
     token = _user_token(cid, secret, refresh)
@@ -352,7 +352,7 @@ def play(query, mode="app", provider="spotify", device="", play_on="this_pc", fi
     if provider in YOUTUBE:
         return play_youtube(query, provider)
     config.load_env(override=True)  # keys saved (or replaced) in the app since Zade started
-    cid, secret = os.environ.get("SPOTIFY_CLIENT_ID"), os.environ.get("SPOTIFY_CLIENT_SECRET")
+    cid, secret = config.secret("SPOTIFY_CLIENT_ID"), config.secret("SPOTIFY_CLIENT_SECRET")
     if not cid or not secret:
         if found := _find_keyless(query):
             _open(found[0])
@@ -363,7 +363,7 @@ def play(query, mode="app", provider="spotify", device="", play_on="this_pc", fi
         device, here = "", True
     else:
         query, here = split_this_pc(query)
-    refresh = os.environ.get("SPOTIFY_REFRESH_TOKEN")
+    refresh = config.secret("SPOTIFY_REFRESH_TOKEN")
     user = devices = chosen = None
     if refresh and not here and (mode == "connect" or device or " on " in query):
         try:

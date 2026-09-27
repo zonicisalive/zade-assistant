@@ -104,6 +104,15 @@ def test_api_keys_are_saved_privately_and_never_read_back(env, monkeypatch):
     assert run("keys")["SPOTIFY_CLIENT_ID"] is False
 
 
+def test_the_app_sends_a_key_on_stdin_not_the_command_line(env, monkeypatch):
+    import io
+
+    monkeypatch.setattr(ctl, "ENV", env / "env")
+    monkeypatch.setattr(ctl.sys, "stdin", io.StringIO("sk-secret\n"))
+    assert run("key-set", "OPENAI_API_KEY") == {"ok": True}
+    assert "OPENAI_API_KEY=sk-secret" in (env / "env").read_text()
+
+
 def test_shortcut_phrases_are_stored_the_way_speech_is_matched(env):
     step = json.dumps([{"name": "open_app", "args": {"name": "steam"}}])
     assert run("shortcut-save", "Hey Zade, Gaming Mode!", step) == {"ok": True}

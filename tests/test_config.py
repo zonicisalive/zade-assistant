@@ -16,14 +16,18 @@ def test_override_keeps_siblings(tmp_path):
     assert config.DEFAULTS["llm"]["model"] == "qwen2.5:7b-instruct"  # defaults not mutated
 
 
-def test_load_env_override_replaces_changed_keys(tmp_path, monkeypatch):
+def test_keys_stay_out_of_the_environment_and_reload_when_changed(tmp_path, monkeypatch):
     env = tmp_path / "env"
-    env.write_text("ZADE_TEST_KEY=new\n")
-    monkeypatch.setenv("ZADE_TEST_KEY", "old")
+    env.write_text("ZADE_TEST_KEY=old\n")
+    monkeypatch.setattr(config, "SECRETS", {})
+    monkeypatch.delenv("ZADE_TEST_KEY", raising=False)
     config.load_env(env)
-    assert os.environ["ZADE_TEST_KEY"] == "old"
+    assert config.secret("ZADE_TEST_KEY") == "old" and "ZADE_TEST_KEY" not in os.environ  # no child inherits it
+    env.write_text("ZADE_TEST_KEY=new\n")
+    config.load_env(env)
+    assert config.secret("ZADE_TEST_KEY") == "old"
     config.load_env(env, override=True)
-    assert os.environ["ZADE_TEST_KEY"] == "new"
+    assert config.secret("ZADE_TEST_KEY") == "new"
 
 
 def test_the_whisper_wake_check_can_run_at_the_defaults():
