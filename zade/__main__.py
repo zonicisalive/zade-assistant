@@ -79,6 +79,28 @@ def as_said(part, raw):
     return " ".join(said.get(w, w) for w in part.split())
 
 
+def said_text(part, raw):
+    """`part` of the normalized text as it was said: with its capitals and punctuation, and the words
+    normalizing drops ("hey", "please", "can you"), which in a message or typed text belong to it: "saying hey,
+    can you please call me back?" sends all of that, not "call me back"."""
+    tokens = list(re.finditer(r"[a-z0-9']+", (raw or "").lower()))
+    joined = " ".join(t[0] for t in tokens)
+    filler, pos = set(), [0]
+    for t in tokens:  # each token's start in `joined`
+        pos.append(pos[-1] + len(t[0]) + 1)
+    for f in router.FILLER.finditer(joined):
+        filler |= {i for i, p in enumerate(pos[:-1]) if f.start() <= p < f.end()}
+    kept = [i for i in range(len(tokens)) if i not in filler]
+    words = [tokens[i][0] for i in kept]
+    n = len(part.split())
+    at = next((i for i in range(len(words) - n, -1, -1) if words[i:i + n] == part.split()), None)
+    if not part or at is None:
+        return part
+    start = tokens[kept[at - 1]].end() if at else 0  # from just after the word before it...
+    end = tokens[kept[at + n]].start() if at + n < len(kept) else len(raw)  # ...to the word after it
+    return raw[start:end].strip(" ,;:-") or part
+
+
 def after_stop(raw):
     """What was said after a stop word said on its own ("Stop. Play the next song." -> "Play the next song."),
     "" when nothing real follows ("Hey, stop." or "Stop. Canild."), None when there's no such stop."""
@@ -677,6 +699,10 @@ def handle(ctx, raw):
     for action in r.actions or []:  # routing lower-cases; names go to Discord with the capitals as said
         if action["name"] == "discord" and action["args"].get("target"):
             action["args"]["target"] = as_said(action["args"]["target"], raw)
+        # and messages and typed text exactly as said, words normalizing drops included
+        if (action["name"] in ("send_message", "type_text") or action["name"] == "discord" and
+                action["args"].get("action") in ("reply", "edit")) and action["args"].get("text"):
+            action["args"]["text"] = said_text(action["args"]["text"], raw)
     if r.kind in ("run", "confirm"):
         ctx.route = r.source
         results = [dispatch(ctx, a) for a in r.actions]

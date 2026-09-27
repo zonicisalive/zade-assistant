@@ -734,3 +734,19 @@ def test_a_message_without_words_asks_what_to_say(monkeypatch):
     out = z.dispatch(ctx, {"name": "send_message", "args": {"to": "dexorto", "text": "a message"}})
     assert out == ("Sent to DEXORTO.", True) and said[0] == "What should I say to DEXORTO?"
     assert calls[-1] == ("send", {"channel_id": "42", "text": "I'm on my way"})
+
+
+def test_messages_and_typing_keep_every_word_as_said(monkeypatch):
+    from zade import discord
+
+    sent = []
+    monkeypatch.setattr(discord, "call", lambda tool, timeout=10, **a: sent.append((tool, a)) or
+                        {"ok": True, "channel_id": "4", "label": "DEXORTO"})
+    ran = []
+    ctx = make([], answers=[True], run_action=lambda a, c: ran.append(a) or "")
+    z.handle(ctx, "Hey Zade, message Dexorto on Discord saying hey, can you please call me back?")
+    assert sent[-1] == ("send", {"channel_id": "4", "text": "hey, can you please call me back?"})
+    z.handle(ctx, "Type Hello Zade, please review my PR.")
+    z.handle(ctx, "type hi and press enter")
+    assert [a["args"] for a in ran] == [{"text": "Hello Zade, please review my PR."}, {"text": "hi"}, {"keys": "enter"}]
+    assert z.said_text("what's up", "Say hey, what's up to Dexorto on Discord.") == "hey, what's up"

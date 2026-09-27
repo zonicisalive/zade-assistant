@@ -368,6 +368,8 @@ def parse_pattern(text, find_app):
         key = " ".join(w for w in words if w not in _SPOKEN_MODS)
         if key:
             return {"name": "press_keys", "args": {"keys": "+".join([_SPOKEN_MODS[w] for w in mods] + [key])}}
+    if m := re.fullmatch(r"type (.+?)(?: and| then| and then)? (?:press|hit) enter", text):  # typed, then sent
+        return [{"name": "type_text", "args": {"text": m[1]}}, {"name": "press_keys", "args": {"keys": "enter"}}]
     if m := re.fullmatch(r"type (.+)", text):
         return {"name": "type_text", "args": {"text": m[1]}}
     # Local time and date come from the clock, never from the model. "in india" = local time here.
