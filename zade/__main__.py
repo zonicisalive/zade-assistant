@@ -165,7 +165,7 @@ INFO_TOOLS = {"web_answer", "web_search", "look_at_screen", "weather", "time", "
               "list_reminders", "system_status", "clipboard_read"}
 CLAIMS = [
     (re.compile(r"\b(?:(?:the |your )?(?:message|text)s? (?:has |have )?(?:been |was |were )?sent"
-                r"|i(?:'ve| have)? (?:sent|messaged|typed))\b", re.I),
+                r"|i(?:'ve| have)? (?:sent|messaged|typed))\b|^(?:done|okay|ok|sure)?[,.!]? ?(?:sent|messaged|typed)\b", re.I),
      {"send_message", "type_text", "press_keys"}),
     (re.compile(r"\b(?:is now open|is open now|now open|i(?:'ve| have)? (?:opened|launched|started))\b"
                 r"|^(?:sure|okay|ok)?,? ?opening\b", re.I), {"open_app", "open_website", "window", "web_search"}),

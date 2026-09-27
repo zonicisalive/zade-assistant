@@ -78,8 +78,10 @@ function guildChannels(kind: "SELECTABLE" | "VOCAL") {
     return ids.flatMap(id => (GuildChannelStore.getChannels(id)?.[kind] ?? []).map((c: any) => c.channel).filter(Boolean));
 }
 
+// Read back so a channel doesn't sound like a person: "the dexorto channel in BITNADE"
 function describe(channel: any) {
-    return channel.guild_id ? `${channel.name} in ${GuildStore.getGuild(channel.guild_id)?.name ?? "a server"}` : channel.name;
+    const name = channel.name.replace(/^[^a-z0-9]+/i, "");
+    return channel.guild_id ? `the ${name} channel in ${GuildStore.getGuild(channel.guild_id)?.name ?? "a server"}` : name;
 }
 
 // A person's DM, else a text channel, by what was said ("dexorto", "general", "general in bitnade").
@@ -87,7 +89,7 @@ async function findChat(name: string): Promise<{ id: string; label: string; } | 
     // "the current chat", "this channel", "here": what's open on screen (small models misspell it: "current chant")
     if (/^(?:the )?(?:current|this|here|open|opened|same)\b/.test(simple(name))) {
         const channel = ChannelStore.getChannel(SelectedChannelStore.getChannelId());
-        if (!channel) return;
+        if (!channel) throw new Error("No chat is open in Discord right now.");
         const other = channel.recipients?.length === 1 ? userName(channel.recipients[0]) : null;
         return { id: channel.id, label: other ?? describe(channel) };
     }
@@ -202,7 +204,7 @@ export default definePlugin({
             try {
                 return await tool(args ?? {});
             } catch (e) {
-                return { ok: false, error: String(e) };
+                return { ok: false, error: e instanceof Error ? e.message : String(e) };
             }
         };
         Native.start();
