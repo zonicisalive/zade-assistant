@@ -394,6 +394,14 @@ def dispatch(ctx, action, from_model=False):
             except discord.Failed as e:
                 return str(e), False
             to = found["label"] if found else a.get("to", "")
+            if found and discord.screenshot_meant(a.get("text", "")):  # "send the screenshot to ...": attach it
+                shot = discord.latest_screenshot()
+                if not shot:
+                    return "You have no screenshots yet.", False
+                if not ctx.confirm(f"Send your screenshot from {discord.ago(shot)} to {to} on Discord?"):
+                    return "Cancelled.", False
+                discord.call("send_file", channel_id=found["channel_id"], path=str(shot), timeout=60)
+                return f"Sent the screenshot to {to}.", True
             if not ctx.confirm(ask_send(a.get("text", ""), f"to {to} on Discord")):
                 return "Cancelled.", False
             if found:

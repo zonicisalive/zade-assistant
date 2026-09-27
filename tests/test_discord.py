@@ -46,3 +46,16 @@ def test_announcements_and_replies():
     assert discord.reply_text("say I'm coming") == "I'm coming"
     assert discord.reply_text("can't talk now") == "can't talk now"
     assert discord.reply_text("yes") == ""
+
+
+def test_the_screenshot_is_attached_not_typed(tmp_path):
+    import os
+    import time
+
+    assert discord.screenshot_meant("the screenshot") and discord.screenshot_meant("my latest screenshot")
+    assert not discord.screenshot_meant("did you see my screenshot")       # words about one: sent as text
+    old, new = tmp_path / "a.png", tmp_path / "b.png"
+    old.write_bytes(b""), new.write_bytes(b"")
+    os.utime(old, (time.time() - 600, time.time() - 600))
+    assert discord.latest_screenshot(tmp_path) == new
+    assert discord.ago(old) == "10 minutes ago" and discord.ago(new) == "just now"

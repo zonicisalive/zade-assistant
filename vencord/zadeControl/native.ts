@@ -11,7 +11,7 @@
 
 import { randomBytes, timingSafeEqual } from "crypto";
 import { BrowserWindow, IpcMainInvokeEvent } from "electron";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
+import { existsSync, mkdirSync, readFileSync, realpathSync, statSync, writeFileSync } from "fs";
 import { createServer, Server } from "http";
 import { homedir } from "os";
 import { join } from "path";
@@ -61,6 +61,15 @@ export function start(_: IpcMainInvokeEvent) {
     });
     server.on("error", e => console.error("[ZadeControl]", e));
     server.listen(PORT, "127.0.0.1");
+}
+
+// A picture for Zade to send (a screenshot), as base64. Only image files inside ~/Pictures, up to 25 MB:
+// the page can ask for a file, so this is kept from reading anything else.
+export function readPicture(_: IpcMainInvokeEvent, path: string) {
+    const real = realpathSync(path);
+    if (!real.startsWith(join(homedir(), "Pictures") + "/") || !/\.(png|jpe?g|webp|gif)$/i.test(real)) throw new Error("not a picture in ~/Pictures");
+    if (statSync(real).size > 25 * 1024 * 1024) throw new Error("that picture is over 25 MB");
+    return readFileSync(real).toString("base64");
 }
 
 export function stop(_: IpcMainInvokeEvent) {

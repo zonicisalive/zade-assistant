@@ -111,6 +111,30 @@ def names():
     return out[:80]
 
 
+SCREENSHOTS = pathlib.Path("~/Pictures/Screenshots").expanduser()  # where niri and the shell save them
+
+
+def screenshot_meant(text):
+    """Whether a message to send is really "the screenshot" (to attach), not words to type."""
+    import re
+
+    return bool(re.fullmatch(r"(?:the |my |a |this |that |your )?(?:last |latest |recent |new )?"
+                             r"(?:screenshot|screen shot|screenie|screen grab|ss|snip)", (text or "").strip(" .").lower()))
+
+
+def latest_screenshot(folder=None):
+    shots = [p for p in (folder or SCREENSHOTS).glob("*") if p.suffix.lower() in (".png", ".jpg", ".jpeg", ".webp")]
+    return max(shots, key=lambda p: p.stat().st_mtime, default=None)
+
+
+def ago(path, now=None):
+    import time
+
+    s = max(0, int((now or time.time()) - path.stat().st_mtime))
+    return "just now" if s < 60 else f"{s // 60} minute{'s' * (s >= 120)} ago" if s < 3600 else \
+        f"{s // 3600} hour{'s' * (s >= 7200)} ago" if s < 86400 else f"{s // 86400} day{'s' * (s >= 172800)} ago"
+
+
 def event_line(e):
     """What Zade says for a Discord event: a DM or mention (then asks to reply), or a call (asks to answer)."""
     if e["kind"] == "call":

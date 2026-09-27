@@ -583,3 +583,19 @@ def test_ending_with_a_cancelling_phrase_cancels():
 def test_discord_claims_need_a_discord_action():
     assert z.tidy("Disconnected from the call.") == "I couldn't do that."
     assert z.tidy("Joined the STAFF-VC channel in BITNADE.", ["discord"]) == "Joined the STAFF-VC channel in BITNADE."
+
+
+def test_send_the_screenshot_attaches_it(monkeypatch, tmp_path):
+    from zade import discord
+
+    (tmp_path / "shot.png").write_bytes(b"png")
+    monkeypatch.setattr(discord, "SCREENSHOTS", tmp_path)
+    calls, asked = [], []
+    monkeypatch.setattr(discord, "call", lambda tool, timeout=10, **a: calls.append((tool, a)) or
+                        {"ok": True, "channel_id": "9", "label": "DEXORTO"})
+    ctx = make([])
+    ctx.confirm = lambda q: asked.append(q) or True
+    out = z.dispatch(ctx, {"name": "send_message", "args": {"to": "the current chat", "text": "the screenshot"}})
+    assert out == ("Sent the screenshot to DEXORTO.", True)
+    assert asked == ["Send your screenshot from just now to DEXORTO on Discord?"]
+    assert calls[-1] == ("send_file", {"channel_id": "9", "path": str(tmp_path / "shot.png")})

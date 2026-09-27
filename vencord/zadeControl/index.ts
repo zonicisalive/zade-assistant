@@ -11,10 +11,10 @@
 import { getUserSettingLazy } from "@api/UserSettings";
 import { sendMessage } from "@utils/discord";
 import definePlugin, { PluginNative } from "@utils/types";
-import { findByPropsLazy } from "@webpack";
+import { findByPropsLazy, findLazy } from "@webpack";
 import {
-    ChannelActionCreators, ChannelRouter, ChannelStore, GuildChannelStore, GuildStore, MediaEngineStore, MessageActions,
-    MessageStore, ReadStateStore, RelationshipStore, RestAPI, SelectedChannelStore, SelectedGuildStore, UserStore,
+    ChannelActionCreators, ChannelRouter, ChannelStore, Constants, GuildChannelStore, GuildStore, MediaEngineStore, MessageActions,
+    MessageStore, ReadStateStore, RelationshipStore, RestAPI, SelectedChannelStore, SelectedGuildStore, SnowflakeUtils, UserStore,
     VoiceStateStore
 } from "@webpack/common";
 
@@ -22,6 +22,7 @@ const Native = VencordNative.pluginHelpers.ZadeControl as PluginNative<typeof im
 const VoiceActions = findByPropsLazy("toggleSelfMute", "toggleSelfDeaf");
 const { selectVoiceChannel } = findByPropsLazy("selectVoiceChannel", "selectChannel");
 const StatusSetting = getUserSettingLazy<string>("status", "status")!;
+const CloudUpload: any = findLazy(m => m.prototype?.trackUploadFinished);
 const STATUSES = ["online", "idle", "dnd", "invisible"];
 
 type Args = Record<string, any>;
@@ -304,6 +305,28 @@ const tools: Record<string, (a: Args) => Promise<Result> | Result> = {
         if (!STATUSES.includes(status)) return { ok: false, error: `Status can be ${STATUSES.join(", ")}.` };
         await StatusSetting.updateSetting(status);
         return { ok: true, status };
+    },
+
+    // Send a picture (path under ~/Pictures) with optional text, the way the upload button does
+    async send_file(a) {
+        const b64 = await Native.readPicture(String(a.path));
+        const bytes = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+        const name = String(a.path).split("/").pop()!;
+        const type = /\.png$/i.test(name) ? "image/png" : /\.gif$/i.test(name) ? "image/gif" : /\.webp$/i.test(name) ? "image/webp" : "image/jpeg";
+        const upload = new CloudUpload({ file: new File([bytes], name, { type }), isThumbnail: false, platform: 1 }, a.channel_id);
+        await new Promise<void>((resolve, reject) => {
+            upload.on("complete", () => resolve());
+            upload.on("error", () => reject(new Error("Discord didn't take the upload.")));
+            upload.upload();
+        });
+        await RestAPI.post({
+            url: Constants.Endpoints.MESSAGES(a.channel_id),
+            body: {
+                channel_id: a.channel_id, content: String(a.text ?? ""), nonce: SnowflakeUtils.fromTimestamp(Date.now()),
+                sticker_ids: [], type: 0, attachments: [{ id: "0", filename: upload.filename, uploaded_filename: upload.uploadedFilename }]
+            }
+        });
+        return { ok: true };
     },
 
     // What happened since Zade last asked (and it's forgotten here once collected)
