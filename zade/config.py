@@ -88,9 +88,10 @@ DEFAULTS = {
     "learning": {"promote_after": 3},
     "history": {"keep": 1000},
     "weather": {"place": ""},
-    # Replay: keep the last `seconds` of what you hear (system) and/or your mic in RAM; "clip that" saves an
-    # MP3 to ~/Music/Clips. sources: both | system | mic. Nothing is written to disk until you save.
-    "clips": {"enabled": True, "seconds": 30, "sources": "both"},
+    # Replay: keep the last `seconds` of what you hear (system) and/or your mic, and the screen if `screen`
+    # (needs gpu-screen-recorder), in RAM; "clip that" saves them to a folder in ~/Videos/Clips.
+    # sources: both | system | mic. Nothing is written to disk until you save.
+    "clips": {"enabled": True, "seconds": 30, "sources": "both", "screen": True},
     # Discord (ZadeControl plugin): read new messages aloud — off | dms | all (DMs and mentions) — and calls
     "discord": {"announce": "dms", "calls": True},
     # provider: spotify | youtube | youtube music ("play X on youtube" picks one for a single request).

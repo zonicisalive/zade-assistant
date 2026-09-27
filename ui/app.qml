@@ -932,7 +932,7 @@ ShellRoot {
                         }
 
                         Group { visible: root.settingsTab === "sounds"
-                            Row_ { label: "Replay"; hint: "Keeps the last seconds of what you hear and say in memory only (nothing on disk). Say \u201cclip that\u201d to save them to ~/Music/Clips."
+                            Row_ { label: "Replay"; hint: "Keeps the last seconds of what you hear and say in memory only (nothing on disk). Say \u201cclip that\u201d to save them to ~/Videos/Clips."
                                 Switch { checked: root.settings && root.settings.clips ? root.settings.clips.enabled : false
                                          onToggled: v => root.setSetting("clips.enabled", v) } }
                             Row_ { label: "Replay length"; visible: root.settings && root.settings.clips && root.settings.clips.enabled
@@ -941,6 +941,10 @@ ShellRoot {
                                         Chip { required property var modelData; text: modelData[1]
                                                selected: root.settings && root.settings.clips && Number(root.settings.clips.seconds) === modelData[0]
                                                onClicked: root.setSetting("clips.seconds", modelData[0]) } } } }
+                            Row_ { label: "Replay the screen too"; visible: root.settings && root.settings.clips && root.settings.clips.enabled
+                                   hint: "Keeps the screen in memory as well (needs gpu-screen-recorder; tens of MB, encoded on the GPU). A clip then also has screen.mp4."
+                                Switch { checked: root.settings && root.settings.clips ? !!root.settings.clips.screen : false
+                                         onToggled: v => root.setSetting("clips.screen", v) } }
                             Row_ { label: "Replay records"; visible: root.settings && root.settings.clips && root.settings.clips.enabled
                                 RowLayout { spacing: 8
                                     Repeater { model: [["both", "Sound and mic"], ["system", "Only sound"], ["mic", "Only mic"]]

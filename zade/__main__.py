@@ -308,8 +308,9 @@ def sync_replay(ctx):
     from . import replay
 
     c = ctx.cfg.get("clips", {})
-    want = (max(5, min(120, int(c.get("seconds", 30)))), c.get("sources", "both")) if c.get("enabled") else None
-    have = (ctx.replay.seconds, ctx.replay.sources) if ctx.replay else None
+    want = (max(5, min(120, int(c.get("seconds", 30)))), c.get("sources", "both"), bool(c.get("screen"))) \
+        if c.get("enabled") else None
+    have = (ctx.replay.seconds, ctx.replay.sources, ctx.replay.screen_on) if ctx.replay else None
     if want == have:
         return
     if ctx.replay:
@@ -473,11 +474,13 @@ def dispatch(ctx, action, from_model=False):
             if not ctx.replay:
                 return "The replay buffer is off. Turn it on in Settings, under Sounds.", False
             try:
-                path = ctx.replay.save(a.get("seconds"))
+                folder = ctx.replay.save(a.get("seconds"))
             except (RuntimeError, OSError, subprocess.CalledProcessError) as e:
                 return f"I couldn't save it: {e}", False
             seconds = min(int(a.get("seconds") or ctx.replay.seconds), ctx.replay.seconds)
-            return f"Saved the last {seconds} seconds to {path.parent.name}.", True
+            what = " and ".join(filter(None, ["the screen" if (folder / "screen.mp4").exists() else "",
+                                               "the sound" if any(folder.glob("*.mp3")) else ""]))
+            return f"Saved {what} from the last {seconds} seconds.", True
         if name == "whoami":
             if a.get("who") == "assistant":
                 return f"I'm {ctx.cfg['persona']['name'] or 'Zade'}, your voice assistant.", True
