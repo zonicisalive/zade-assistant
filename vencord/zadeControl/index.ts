@@ -25,6 +25,15 @@ const StatusSetting = getUserSettingLazy<string>("status", "status")!;
 const STATUSES = ["online", "idle", "dnd", "invisible"];
 
 type Args = Record<string, any>;
+
+// New DMs, mentions and incoming calls, for Zade to announce: it collects them with the events tool.
+// Nothing is queued for a chat you have open in front of you, or while your status is Do Not Disturb.
+const events: Args[] = [];
+function queue(event: Args) {
+    if (StatusSetting.getSetting() === "dnd") return;
+    events.push({ ...event, at: Date.now() });
+    events.splice(0, Math.max(0, events.length - 20));
+}
 type Result = { ok: boolean; [key: string]: any; };
 
 // "💬│general-chat" and "General Chat" are the same channel when spoken
@@ -238,9 +247,9 @@ const tools: Record<string, (a: Args) => Promise<Result> | Result> = {
     },
 
     async read(a) {
-        const chat = await findChat(a.name ?? "");
+        const chat = await findChat(a.name || "the current chat");
         if (!chat) return { ok: false, error: `I couldn't find ${a.name} on Discord.` };
-        const count = Math.min(Math.max(Number(a.count) || 5, 1), 20);
+        const count = Math.min(Math.max(Number(a.count) || 5, 1), 60);
         if (!MessageStore.getMessages(chat.id)?._array?.length) await MessageActions.fetchMessages?.({ channelId: chat.id, limit: 50 });
         const messages = (MessageStore.getMessages(chat.id)?._array ?? []).slice(-count)
             .map((m: any) => ({ from: userName(m.author.id), text: m.content || (m.attachments?.length ? "(an attachment)" : "(no text)") }));
@@ -291,6 +300,20 @@ const tools: Record<string, (a: Args) => Promise<Result> | Result> = {
         return { ok: true, status };
     },
 
+    // What happened since Zade last asked (and it's forgotten here once collected)
+    events: () => ({ ok: true, events: events.splice(0) }),
+
+    answer(a) {
+        selectVoiceChannel(a.channel_id);
+        return { ok: true };
+    },
+
+    // Stops it ringing for you, like the decline button
+    async decline(a) {
+        await RestAPI.post({ url: `/channels/${a.channel_id}/call/stop-ringing`, body: { recipients: [UserStore.getCurrentUser().id] } });
+        return { ok: true };
+    },
+
     // Server names, to tell apart servers with similar names
     servers: () => ({ ok: true, servers: (Object.values(GuildStore.getGuilds()) as any[]).map(g => g.name) }),
 
@@ -308,6 +331,32 @@ export default definePlugin({
     name: "ZadeControl",
     description: "Lets the Zade voice assistant control Discord: mute, deafen, voice channels, calls, chats and messages",
     authors: [{ name: "Zonic", id: 0n }],
+
+    flux: {
+        MESSAGE_CREATE({ message, optimistic }: { message: any; optimistic: boolean; }) {
+            const me = UserStore.getCurrentUser()?.id;
+            if (optimistic || !message?.author || message.author.id === me) return;
+            if (document.hasFocus() && SelectedChannelStore.getChannelId() === message.channel_id) return; // you're reading it
+            const channel: any = ChannelStore.getChannel(message.channel_id);
+            if (!channel) return;
+            const dm = !channel.guild_id;
+            const mentioned = message.mention_everyone || (message.mentions ?? []).some((u: any) => (u?.id ?? u) === me);
+            if (!dm && !mentioned) return;
+            queue({
+                kind: dm ? "dm" : "mention", channel_id: channel.id, from: userName(message.author.id),
+                where: dm ? (channel.recipients?.length > 1 ? describe(channel) || "a group chat" : "") : describe(channel),
+                text: message.content || (message.attachments?.length ? "sent an attachment" : "sent something")
+            });
+        },
+        CALL_UPDATE({ call }: { call: any; }) {
+            const me = UserStore.getCurrentUser()?.id;
+            if (!call?.ringing?.includes(me) || SelectedChannelStore.getVoiceChannelId() === call.channel_id) return;
+            if (events.some(e => e.kind === "call" && e.channel_id === call.channel_id)) return;
+            const channel: any = ChannelStore.getChannel(call.channel_id);
+            const from = channel?.recipients?.length === 1 ? userName(channel.recipients[0]) : describe(channel ?? { name: "someone" });
+            queue({ kind: "call", channel_id: call.channel_id, from });
+        },
+    },
 
     start() {
         (window as any).__zadeControl = async (name: string, args: Args) => {

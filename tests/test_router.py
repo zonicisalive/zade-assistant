@@ -325,3 +325,11 @@ def test_joining_a_voice_channel_keeps_the_server():
     assert D("join a staff-vc channel in BITNADE not bitnade server") == {"action": "join", "target": "staff vc in bitnade"}
     assert D("join the gaming vc") == {"action": "join", "target": "gaming"}
     assert D("join staff vc voice channel in bitnade") == {"action": "join", "target": "staff vc in bitnade"}
+
+
+def test_catch_me_up_needs_discord_named():
+    D = lambda t: router.parse_discord(router.normalize(t))
+    assert D("what's going on in general on discord") == {"action": "summarize", "target": "general"}
+    assert D("catch me up on discord") == {"action": "summarize"}
+    assert D("summarize the chat with dexorto on discord") == {"action": "summarize", "target": "dexorto"}
+    assert D("what's going on in ukraine") is None      # not a Discord question

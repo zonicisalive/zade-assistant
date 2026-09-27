@@ -78,11 +78,12 @@ TOOLS = [
     _t("discord", "Control Discord: mute or unmute your mic, deafen or undeafen, leave the voice channel, join a "
        "voice channel (target: its name), call a person, open a chat or channel, read the latest messages of a "
        "chat (target: a person or channel), list unread messages, say who is in your voice channel (status), react "
-       "to or reply to the latest message in a chat, edit or delete your own last message, or set your status. "
+       "to or reply to the latest message in a chat, edit or delete your own last message, set your status, or "
+       "summarize what's been said in a chat (\"catch me up\"). "
        "Leave target empty for the chat open on screen.",
        ["action"], action={"type": "string", "enum": ["mute", "unmute", "deafen", "undeafen", "leave", "join", "call",
                                                       "open", "read", "unread", "status", "react", "unreact", "reply",
-                                                      "edit", "delete", "set_status"]},
+                                                      "edit", "delete", "set_status", "summarize"]},
        emoji={"type": "string", "description": "for react: the emoji character, e.g. \U0001f525"},
        text={"type": "string", "description": "for reply/edit: the text; for set_status: online, idle, dnd or invisible"},
        target={"type": "string", "description": "a person, or a channel with its server whenever the user names "
@@ -246,6 +247,20 @@ def leaked_call(reply):
     except (ValueError, AttributeError):
         return None
     return (name, args) if name in tools and isinstance(args, dict) else None
+
+
+SUMMARY = ("Summarize this Discord chat for someone who missed it, in two or three short spoken sentences: who "
+           "talked about what, and anything that needs their answer. Plain text, no lists, no emoji.")
+
+
+def summarize(text, cfg):
+    """A spoken summary of chat messages, from the first brain that answers."""
+    for name, extra in candidates(cfg):
+        try:
+            return providers.chat(name, SUMMARY, text, [], lambda n, a: "", cfg, extra)
+        except providers.ProviderError as e:
+            log.warning("summary with %s failed: %s", name, e)
+    return None
 
 
 FIX_SONG = ("A speech recognizer transcribed a request to play a song. It often mishears names, because the user "

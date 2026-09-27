@@ -115,6 +115,7 @@ class Ctx:
     ask: Callable = brain.ask
     run_action: Callable = actions.run
     alerts: list = field(default_factory=list)  # due reminders, spoken by the main loop when idle
+    discord_events: list = field(default_factory=list)  # new DMs, mentions and calls to announce
     history: list = field(default_factory=list)  # (time, user text, reply) for follow-ups
     turn: list = field(default_factory=list)  # actions done so far in the current request
     tried: bool = False  # the model tried an action this request (even one that failed)
@@ -286,6 +287,26 @@ def needs_confirm(name, level, args=None):
     if level == "risky":
         return name in RISKY or (name == "window" and (args or {}).get("action") == "close")
     return False
+
+
+def pump_discord(ctx):
+    """New Discord messages and calls from the ZadeControl plugin, to announce (kinds as set in discord.*).
+    During quiet hours, Do Not Disturb or a snooze they're dropped: Discord keeps them as unread anyway."""
+    from . import discord
+
+    d = ctx.cfg.get("discord", {})
+    wanted = {"dms": {"dm"}, "all": {"dm", "mention"}}.get(d.get("announce"), set()) | ({"call"} if d.get("calls") else set())
+    if not wanted or not discord.TOKEN.exists():
+        return 0
+    try:
+        events = discord.call("events", timeout=1)["events"]
+    except (discord.Unavailable, discord.Failed):
+        return 0
+    if is_quiet(ctx.cfg) or snoozed():
+        return 0
+    new = [e for e in events if e.get("kind") in wanted]
+    ctx.discord_events.extend(new)
+    return len(new)
 
 
 def pump_reminders(ctx, now=None):
@@ -727,10 +748,44 @@ def main():
     config_file = pathlib.Path("~/.config/zade/config.toml").expanduser()
     config_mtime = [config_file.stat().st_mtime if config_file.exists() else 0]
 
+    last_discord = [0.0]
+
+    def announce(e):
+        """Read a Discord event out, then act on the answer: reply to a message (after a yes), answer or
+        decline a call. Silence leaves it alone."""
+        from . import discord
+
+        say(discord.event_line(e))
+        if barge:
+            return
+        answer = hear(6.0, keep_reply=True) or ""
+        said = router.normalize(answer)
+        try:
+            if e["kind"] == "call":
+                if actions.is_yes(answer):
+                    discord.call("answer", channel_id=e["channel_id"])
+                elif re.search(r"\b(?:no|nope|decline|reject|cut|nahi)\b", said):
+                    discord.call("decline", channel_id=e["channel_id"])
+                return
+            if not said or said in STOP_WORDS or dismissed(said) or re.match(r"(?:no|nope|nah|nahi|later)\b", said):
+                return
+            text = discord.reply_text(answer)
+            if not text:
+                say("What should I say?")
+                text = discord.reply_text(hear(8.0, keep_reply=True) or "")
+            if text and confirm(ask_send(text, f"to {e['from']}")):
+                discord.call("send", channel_id=e["channel_id"], text=text)
+                say(f"Sent to {e['from']}.")
+        except (discord.Unavailable, discord.Failed) as err:
+            log.warning("discord: %s", err)
+
     def poll():
         if time.monotonic() - last_check[0] >= 0.5:  # reminders, typed commands, live settings
             last_check[0] = time.monotonic()
             pump_reminders(ctx)
+            if time.monotonic() - last_discord[0] >= 2:
+                last_discord[0] = time.monotonic()
+                pump_discord(ctx)
             stt.gpu_idle(cfg)  # frees its VRAM after stt.keep_alive_s
             typed.extend(read_inbox(inbox))
             mtime = config_file.stat().st_mtime if config_file.exists() else 0
@@ -746,6 +801,8 @@ def main():
             return "typed"
         if ctx.alerts:
             return "alert"
+        if ctx.discord_events:
+            return "discord"
         if trigger.is_set():
             trigger.clear()
             return "hotkey"
@@ -798,6 +855,12 @@ def main():
             text = typed.pop(0)
             ui.show("thinking", heard=text, reply="")
             respond(text)
+            if not spoke_at:
+                ui.show("idle")
+            continue
+        if source == "discord":
+            while ctx.discord_events and not barge:  # cut in: the rest wait
+                announce(ctx.discord_events.pop(0))
             if not spoke_at:
                 ui.show("idle")
             continue

@@ -993,6 +993,20 @@ ShellRoot {
                                         onEdited: root.setSetting("weather.place", text) } }
                         }
 
+                        Muted { text: "Discord (ZadeControl plugin)"; Layout.topMargin: 8 }
+                        Group {
+                            Row_ { label: "Read new messages aloud"; hint: "Zade reads them out and asks \u201cReply?\u201d. Not for a chat you have open, nor during quiet hours, Do Not Disturb (here or on Discord) or \u201cstop for\u2026\u201d."
+                                RowLayout { spacing: 8
+                                    Repeater { model: [["off", "Off"], ["dms", "DMs"], ["all", "DMs and mentions"]]
+                                        Chip { required property var modelData; text: modelData[1]
+                                               selected: root.settings && root.settings.discord && root.settings.discord.announce === modelData[0]
+                                               onClicked: root.setSetting("discord.announce", modelData[0]) } } } }
+                            Divider {}
+                            Row_ { label: "Announce calls"; hint: "\u201cDEXORTO is calling on Discord. Answer?\u201d Say yes to answer, no to decline."
+                                Switch { checked: root.settings && root.settings.discord ? root.settings.discord.calls : false
+                                         onToggled: v => root.setSetting("discord.calls", v) } }
+                        }
+
                         Muted { text: "Music"; Layout.topMargin: 8 }
                         Group {
                             Row_ { label: "Play songs with"; hint: "Say \u201cplay \u2026 on YouTube\u201d (or Spotify, YouTube Music) to pick one for a single song. YouTube needs no key."

@@ -88,6 +88,8 @@ DEFAULTS = {
     "learning": {"promote_after": 3},
     "history": {"keep": 1000},
     "weather": {"place": ""},
+    # Discord (ZadeControl plugin): read new messages aloud — off | dms | all (DMs and mentions) — and calls
+    "discord": {"announce": "dms", "calls": True},
     # provider: spotify | youtube | youtube music ("play X on youtube" picks one for a single request).
     # mode (Spotify): app = play in the Spotify app | connect = Spotify Connect (Premium, needs login)
     # play_on (Spotify Connect, no device named): this_pc | last_used (wherever Spotify played last)
@@ -97,7 +99,7 @@ DEFAULTS = {
 
 
 # Settings the running Zade picks up without a restart (it re-reads config.toml when it changes).
-LIVE_SECTIONS = ("ui", "sound", "quiet", "safety", "persona", "history", "web", "music", "weather")
+LIVE_SECTIONS = ("ui", "sound", "quiet", "safety", "persona", "history", "web", "music", "weather", "discord")
 LIVE_KEYS = ("llm.personality", "llm.keep_alive", "stt.keep_alive_s", "llm.thinking", "llm.think_model",
              "llm.think_min_words")
 

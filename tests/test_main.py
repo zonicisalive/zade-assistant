@@ -551,3 +551,23 @@ def test_discord_replies_edits_and_deletes_ask_first(monkeypatch):
 def test_names_keep_the_capitals_as_said():
     assert z.as_said("staff vc in bitnade", "join a staff-vc channel in BITNADE not bitnade server") == "staff vc in BITNADE"
     assert z.as_said("gaming", "join GAMING vc") == "GAMING"
+
+
+def test_discord_events_follow_the_settings(monkeypatch, tmp_path):
+    from zade import discord
+
+    (tmp_path / "token").write_text("x")
+    monkeypatch.setattr(discord, "TOKEN", tmp_path / "token")
+    sent = [{"kind": "dm", "from": "A", "text": "hi", "channel_id": "1"},
+            {"kind": "mention", "from": "B", "text": "gg", "channel_id": "2"},
+            {"kind": "call", "from": "C", "channel_id": "3"}]
+    monkeypatch.setattr(discord, "call", lambda tool, timeout=10, **a: {"ok": True, "events": list(sent)})
+    ctx = make([])
+    ctx.cfg["discord"] = {"announce": "dms", "calls": True}
+    assert z.pump_discord(ctx) == 2 and [e["kind"] for e in ctx.discord_events] == ["dm", "call"]
+    ctx.discord_events.clear()
+    ctx.cfg["discord"] = {"announce": "off", "calls": False}
+    assert z.pump_discord(ctx) == 0
+    ctx.cfg["discord"] = {"announce": "all", "calls": False}
+    ctx.cfg["quiet"]["dnd"] = True                     # Do Not Disturb: nothing read out
+    assert z.pump_discord(ctx) == 0 and ctx.discord_events == []

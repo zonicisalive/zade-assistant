@@ -35,3 +35,14 @@ def test_emoji_by_everyday_name():
     assert discord.emoji("fire") == "\U0001f525" and discord.emoji("heart") == "❤️"
     assert discord.emoji("100") == "\U0001f4af" and discord.emoji("thumbs up") == "\U0001f44d"
     assert discord.emoji("\U0001f525") == "\U0001f525" and discord.emoji("zzzqqq") is None
+
+
+def test_announcements_and_replies():
+    assert discord.event_line({"kind": "dm", "from": "DEXORTO", "text": "yo you on?"}) == "DEXORTO on Discord: yo you on?. Reply?"
+    assert discord.event_line({"kind": "mention", "from": "Neel", "where": "the general channel in BITNADE", "text": "@Zonic gg"}) == \
+        "Neel in the general channel in BITNADE on Discord: @Zonic gg. Reply?"
+    assert discord.event_line({"kind": "call", "from": "DEXORTO"}) == "DEXORTO is calling on Discord. Answer?"
+    assert discord.reply_text("Yes, tell him five minutes.") == "five minutes"
+    assert discord.reply_text("say I'm coming") == "I'm coming"
+    assert discord.reply_text("can't talk now") == "can't talk now"
+    assert discord.reply_text("yes") == ""

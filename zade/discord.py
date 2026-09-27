@@ -97,6 +97,26 @@ def emoji(name):
     return best[1] if best else None
 
 
+def event_line(e):
+    """What Zade says for a Discord event: a DM or mention (then asks to reply), or a call (asks to answer)."""
+    if e["kind"] == "call":
+        return f"{e['from']} is calling on Discord. Answer?"
+    words = e["text"].split()
+    text = " ".join(words[:30]) + ("..." if len(words) > 30 else "")
+    where = f" in {e['where']}" if e.get("where") else ""
+    return f"{e['from']}{where} on Discord: {text}. Reply?"
+
+
+def reply_text(answer):
+    """The message in an answer to "Reply?": "yes, tell him five minutes" -> "five minutes"."""
+    import re
+
+    lead = (r"^(?:(?:yes|yeah|yep|ok|okay|sure|haan|han|ha)\b[,.!]?\s*)?"
+            r"(?:(?:reply|reply saying|reply with|say|saying|tell (?:him|her|them)|write|send|bolo|bol do|keh do)\b[,:]?\s*)?"
+            r"(?:that\s+)?")
+    return re.sub(lead, "", answer.strip(), flags=re.I).strip(" .")
+
+
 def run(a):
     """One spoken request (the "discord" tool): returns what to say."""
     act, target = a.get("action", ""), clean_name(a.get("target") or "")
@@ -138,6 +158,17 @@ def run(a):
         return f"Edited your last message in {call('edit_last', name=target, text=a.get('text', ''))['chat']}."
     if act == "delete":
         return f"Deleted your last message in {call('delete_last', name=target)['chat']}."
+    if act == "summarize":
+        out = call("read", name=target, count=50, timeout=20)
+        if not out["messages"]:
+            return f"Nothing has been said in {out['chat']}."
+        from . import brain, config
+
+        lines = "\n".join(f"{m['from']}: {m['text']}" for m in out["messages"])
+        summary = brain.summarize(lines, config.load())
+        if not summary:
+            raise Failed("I couldn't summarize it right now.")
+        return f"In {out['chat']}: {summary}"
     if act == "set_status":
         s = call("set_status", status=STATUS.get((a.get("text") or a.get("status") or "").lower(), a.get("text") or ""))
         return f"Your Discord status is {s['status'].replace('dnd', 'do not disturb')}."

@@ -167,6 +167,10 @@ def parse_discord(text):
     if m := re.fullmatch(r"(?:set|change|make|put) my (?:discord )?status (?:to |as )?(.+?)(?: on discord)?"
                          r"|go (online|idle|invisible|offline) on discord", text):
         return {"action": "set_status", "text": m[1] or m[2]}
+    if m := re.fullmatch(r"(?:(?:what'?s|what is) (?:going on|happening|new|up)|what did i miss|catch me up|summari[sz]e"
+                         r"(?: the)?(?: chat| channel| messages)?)(?: (?:in|on|of|from|with) (.+?))? (?:on|in) discord"
+                         r"|catch me up on discord", text):
+        return {"action": "summarize", **({"target": m[1]} if m and m.lastindex and m[1] else {})}
     if re.fullmatch(rf"who(?:'?s| is| all)? (?:in|on) {_VC}|who(?:'?s| is) talking(?: in {_VC})?|am i (?:muted|deafened)"
                     rf"(?: on discord)?|(?:vc|call) (?:mein|me) kaun (?:hai|h)", t):
         return {"action": "status"}
