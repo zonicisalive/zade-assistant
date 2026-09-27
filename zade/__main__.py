@@ -78,6 +78,11 @@ def after_stop(raw):
     clauses = [c.strip() for c in re.split(r"[.!?,]", raw or "") if c.strip()]
     stops = [i for i, c in enumerate(clauses) if plain(router.normalize(c)) in STOP_WORDS]
     if not stops:
+        # "call B I nothing nothing leave it": ending with a cancelling phrase of two or more words (a lone
+        # "stop" at the end can belong to the request)
+        words = router.normalize(raw or "").split()
+        if any(" ".join(words[-n:]) in STOP_WORDS for n in (2, 3) if len(words) > n):
+            return ""
         return None
     rest = ", ".join(clauses[stops[-1] + 1:])
     words = router.normalize(rest).split()
@@ -183,6 +188,8 @@ CLAIMS = [
      {"close_app", "window", "press_keys"}),
     (re.compile(r"\b(?:is now (?:playing|paused)|now playing|i(?:'ve| have)? (?:paused|played|resumed))\b", re.I),
      {"play_music", "media"}),
+    (re.compile(r"\b(?:disconnected|left the (?:call|vc|voice(?: channel)?)|joined the \w+|calling \w+|"
+                r"i(?:'ve| have)? (?:joined|called|muted|unmuted|deafened))\b", re.I), {"discord"}),
     (re.compile(r"\b(?:is now (?:displayed|showing)|now displayed|i(?:'ve| have)? (?:turned on|turned off|switched))\b",
                 re.I), None),  # any tool will do
 ]

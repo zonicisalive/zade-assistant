@@ -571,3 +571,15 @@ def test_discord_events_follow_the_settings(monkeypatch, tmp_path):
     ctx.cfg["discord"] = {"announce": "all", "calls": False}
     ctx.cfg["quiet"]["dnd"] = True                     # Do Not Disturb: nothing read out
     assert z.pump_discord(ctx) == 0 and ctx.discord_events == []
+
+
+def test_ending_with_a_cancelling_phrase_cancels():
+    assert z.after_stop("Call B I nothing nothing leave it.") == ""
+    assert z.after_stop("open the door never mind") == ""
+    assert z.after_stop("turn the music off stop") is None        # a lone "stop" at the end isn't a cancel
+    assert z.after_stop("play leave it by vance joy") is None
+
+
+def test_discord_claims_need_a_discord_action():
+    assert z.tidy("Disconnected from the call.") == "I couldn't do that."
+    assert z.tidy("Joined the STAFF-VC channel in BITNADE.", ["discord"]) == "Joined the STAFF-VC channel in BITNADE."

@@ -101,7 +101,10 @@ function servers(server: string) {
         const hits = guilds.filter(g => test(g.name));
         if (hits.length) return hits;
     }
-    return [];
+    // misheard ("Bitnet" for BITNADE): the closest spellings, all of them if equally close
+    const scored = guilds.map(g => ({ g, s: likeness(simple(words).replace(/ /g, ""), simple(g.name).replace(/ /g, "")) }));
+    const top = Math.max(0.7, ...scored.map(x => x.s));
+    return scored.filter(x => x.s >= top && x.s > 0.7).map(x => x.g);
 }
 
 function describe(channel: any) {
@@ -220,7 +223,10 @@ const tools: Record<string, (a: Args) => Promise<Result> | Result> = {
 
     // A DM call: joining the DM's voice rings them
     call(a) {
-        const user = findUser(a.name ?? "");
+        const name = String(a.name ?? "");
+        // "user called DEXORTO": the whole phrase first, then its words, longest first
+        const user = findUser(name) ?? name.split(/\s+/).filter(w => w.length >= 3).sort((x, y) => y.length - x.length)
+            .map(w => findUser(w)).find(Boolean);
         const id = user && ChannelStore.getDMFromUserId(user.id);
         if (!id) return { ok: false, error: `I couldn't find ${a.name}.` };
         selectVoiceChannel(id);
