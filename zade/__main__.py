@@ -308,9 +308,9 @@ def sync_replay(ctx):
     from . import replay
 
     c = ctx.cfg.get("clips", {})
-    want = (max(5, min(120, int(c.get("seconds", 30)))), c.get("sources", "both"), bool(c.get("screen"))) \
-        if c.get("enabled") else None
-    have = (ctx.replay.seconds, ctx.replay.sources, ctx.replay.screen_on) if ctx.replay else None
+    want = (max(5, min(120, int(c.get("seconds", 30)))), c.get("sources", "both"), bool(c.get("screen")),
+            bool(c.get("hide_from_shell"))) if c.get("enabled") else None
+    have = (ctx.replay.seconds, ctx.replay.sources, ctx.replay.screen_on, ctx.replay.hidden) if ctx.replay else None
     if want == have:
         return
     if ctx.replay:

@@ -91,7 +91,9 @@ DEFAULTS = {
     # Replay: keep the last `seconds` of what you hear (system) and/or your mic, and the screen if `screen`
     # (wf-recorder, in RAM), in RAM; "clip that" saves them to a folder in ~/Videos/Clips.
     # sources: both | system | mic. Nothing is written to disk until you save.
-    "clips": {"enabled": True, "seconds": 30, "sources": "both", "screen": True},
+    # hide_from_shell: run the screen recorder under Zade's own name, so the desktop shell's recording
+    # indicator (which looks for "wf-recorder") doesn't show for the replay. Off: the indicator shows.
+    "clips": {"enabled": True, "seconds": 30, "sources": "both", "screen": True, "hide_from_shell": False},
     # Discord (ZadeControl plugin): read new messages aloud — off | dms | all (DMs and mentions) — and calls
     "discord": {"announce": "dms", "calls": True},
     # provider: spotify | youtube | youtube music ("play X on youtube" picks one for a single request).

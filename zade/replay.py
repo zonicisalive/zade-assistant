@@ -78,15 +78,30 @@ def screen_output():
         return None
 
 
+def recorder(hidden):
+    """The wf-recorder to run. hidden (the user's clips.hide_from_shell setting, off by default): Zade's own
+    copy named zade-screen, which the desktop shell's `pidof wf-recorder` recording indicator doesn't match
+    (a symlink still would). The copy is refreshed whenever the system's wf-recorder changes."""
+    src = shutil.which("wf-recorder")
+    if not src or not hidden:
+        return src
+    dest = pathlib.Path("~/.local/share/zade/bin/zade-screen").expanduser()
+    s = pathlib.Path(src).stat()
+    if not dest.exists() or (dest.stat().st_size, int(dest.stat().st_mtime)) != (s.st_size, int(s.st_mtime)):
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(src, dest)  # keeps the mtime, so the check above sees it's current
+    return str(dest)
+
+
 class Screen:
     """The screen, GPU-encoded by wf-recorder (VAAPI) into FFmpeg, which keeps it as 5-second chunks in
     /dev/shm (RAM) and overwrites the oldest: always the last `seconds`, never anything on the disk."""
 
     CHUNK = 5
 
-    def __init__(self, seconds):
+    def __init__(self, seconds, binary="wf-recorder"):
         self.dir = pathlib.Path(tempfile.mkdtemp(prefix="zade-screen-", dir="/dev/shm"))
-        rec = ["wf-recorder", "-c", "h264_vaapi", "-F", "scale_vaapi=format=nv12", "-r", "60", "-m", "mpegts", "-f", "/dev/stdout"]
+        rec = [binary, "-c", "h264_vaapi", "-F", "scale_vaapi=format=nv12", "-r", "60", "-m", "mpegts", "-f", "/dev/stdout"]
         if device := gpu_device():
             rec[1:1] = ["-d", device]
         if output := screen_output():
@@ -122,14 +137,14 @@ def mp3(samples, path):
 
 
 class Replay:
-    def __init__(self, seconds=30, sources="both", screen=False):
-        self.seconds, self.sources, self.screen_on = seconds, sources, screen
+    def __init__(self, seconds=30, sources="both", screen=False, hidden=False):
+        self.seconds, self.sources, self.screen_on, self.hidden = seconds, sources, screen, hidden
         names = ["system", "mic"] if sources == "both" else [sources]
         self.rings = {n: Ring(*SOURCES[n], seconds) for n in names if n in SOURCES}
         self.screen = None
         if screen:
-            if shutil.which("wf-recorder"):
-                self.screen = Screen(seconds)
+            if binary := recorder(hidden):
+                self.screen = Screen(seconds, binary)
             else:
                 log.warning("screen replay off: wf-recorder isn't installed")
 

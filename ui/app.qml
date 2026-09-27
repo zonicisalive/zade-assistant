@@ -945,6 +945,11 @@ ShellRoot {
                                    hint: "Keeps the screen in memory as well (wf-recorder, encoded on the GPU, kept in RAM). A clip then also has screen.mp4 (picture only; the sound has its own files)."
                                 Switch { checked: root.settings && root.settings.clips ? !!root.settings.clips.screen : false
                                          onToggled: v => root.setSetting("clips.screen", v) } }
+                            Row_ { label: "Hide replay from the shell's recording indicator"
+                                   visible: root.settings && root.settings.clips && root.settings.clips.enabled && root.settings.clips.screen
+                                   hint: "The screen replay runs under Zade's own name, so your desktop shell doesn't show its “recording” panel for it. Off: the panel shows while the screen replay runs."
+                                Switch { checked: root.settings && root.settings.clips ? !!root.settings.clips.hide_from_shell : false
+                                         onToggled: v => root.setSetting("clips.hide_from_shell", v) } }
                             Row_ { label: "Replay records"; visible: root.settings && root.settings.clips && root.settings.clips.enabled
                                 RowLayout { spacing: 8
                                     Repeater { model: [["both", "Sound and mic"], ["system", "Only sound"], ["mic", "Only mic"]]
