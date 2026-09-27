@@ -2,9 +2,9 @@
 "clip that".
 
 Two parec recorders (PipeWire) feed ring buffers in memory: the default output's monitor (games, calls,
-music) and the default mic; 30 s of both is about 9 MB. The screen is gpu-screen-recorder's own replay mode,
-encoded on the GPU and kept in RAM too (tens of MB). Nothing touches the disk until a clip is saved: then
-one folder in ~/Videos/Clips gets "mic and sound.mp3", "sound.mp3" and "screen.mp4".
+music) and the default mic; 30 s of both is about 9 MB. The screen is recorded by wf-recorder on the GPU
+into 5-second chunks in /dev/shm (RAM), the oldest overwritten. Nothing touches the disk until a clip is
+saved: then one folder in ~/Videos/Clips gets "mic and sound.mp3", "sound.mp3" and "screen.mp4".
 """
 
 import collections
@@ -12,11 +12,9 @@ import datetime
 import logging
 import pathlib
 import shutil
-import signal
 import subprocess
 import tempfile
 import threading
-import time
 
 import numpy as np
 
@@ -57,33 +55,67 @@ class Ring:
         self.proc.terminate()
 
 
+def gpu_device():
+    """The render node of the GPU with the most VRAM (the graphics card, not the CPU's built-in one)."""
+    def vram(node):
+        try:
+            return int((node / "device" / "mem_info_vram_total").read_text())
+        except (OSError, ValueError):
+            return 0
+    nodes = sorted(pathlib.Path("/sys/class/drm").glob("renderD*"), key=vram)
+    return f"/dev/dri/{nodes[-1].name}" if nodes else None
+
+
+def screen_output():
+    """The monitor to record: the focused one (niri)."""
+    import json
+
+    try:
+        out = subprocess.run(["niri", "msg", "-j", "focused-output"], capture_output=True, text=True, timeout=3).stdout
+        return (json.loads(out) or {}).get("name")
+    except (OSError, ValueError, subprocess.SubprocessError):
+        return None
+
+
 class Screen:
-    """gpu-screen-recorder in replay mode: the last `seconds` of the screen (with both sounds) in RAM; SIGUSR1
-    makes it write them to its folder, which is a temporary one: the file is moved into the clip's folder."""
+    """The screen, GPU-encoded by wf-recorder (VAAPI) into FFmpeg, which keeps it as 5-second chunks in
+    /dev/shm (RAM) and overwrites the oldest: always the last `seconds`, never anything on the disk."""
+
+    CHUNK = 5
 
     def __init__(self, seconds):
-        self.dir = pathlib.Path(tempfile.mkdtemp(prefix="zade-screen-"))
-        self.proc = subprocess.Popen(
-            ["gpu-screen-recorder", "-w", "screen", "-f", "60", "-c", "mp4", "-q", "high", "-k", "auto",
-             "-a", "default_output|default_input", "-r", str(seconds), "-replay-storage", "ram", "-o", str(self.dir)],
-            stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+        self.dir = pathlib.Path(tempfile.mkdtemp(prefix="zade-screen-", dir="/dev/shm"))
+        rec = ["wf-recorder", "-c", "h264_vaapi", "-F", "scale_vaapi=format=nv12", "-r", "60", "-m", "mpegts", "-f", "/dev/stdout"]
+        if device := gpu_device():
+            rec[1:1] = ["-d", device]
+        if output := screen_output():
+            rec[1:1] = ["-o", output]
+        self.rec = subprocess.Popen(rec, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+        self.seg = subprocess.Popen(
+            ["ffmpeg", "-loglevel", "error", "-f", "mpegts", "-i", "-", "-c", "copy", "-f", "segment",
+             "-segment_time", str(self.CHUNK), "-segment_wrap", str(seconds // self.CHUNK + 3), "-reset_timestamps", "1",
+             str(self.dir / "seg%03d.ts")], stdin=self.rec.stdout, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+        self.rec.stdout.close()  # ffmpeg owns the pipe now
 
-    def save(self, dest, timeout=15):
-        if self.proc.poll() is not None:
-            raise RuntimeError("the screen recorder stopped: " + (self.proc.stderr.read() or b"").decode()[-200:].strip())
-        before = set(self.dir.glob("*"))
-        self.proc.send_signal(signal.SIGUSR1)
-        deadline = time.monotonic() + timeout
-        while time.monotonic() < deadline:
-            new = [p for p in set(self.dir.glob("*.mp4")) - before]
-            if new and time.monotonic() - new[0].stat().st_mtime > 0.5:  # finished writing
-                shutil.move(new[0], dest)
-                return dest
-            time.sleep(0.2)
-        raise RuntimeError("the screen recorder didn't save in time")
+    def save(self, dest, seconds, sound=None):
+        """The newest `seconds` of screen into `dest` (MP4), with `sound` (stereo int16 at RATE) as its audio."""
+        if self.seg.poll() is not None or self.rec.poll() is not None:
+            raise RuntimeError("the screen recorder stopped")
+        chunks = sorted(self.dir.glob("seg*.ts"), key=lambda p: p.stat().st_mtime)
+        chunks = chunks[-(seconds // self.CHUNK + 2):]  # a little more, then cut to the last `seconds`
+        if not chunks:
+            raise RuntimeError("no screen recorded yet")
+        cmd = ["ffmpeg", "-loglevel", "error", "-y", "-sseof", f"-{seconds}", "-i", "concat:" + "|".join(map(str, chunks))]
+        if sound is not None and len(sound):
+            cmd += ["-f", "s16le", "-ar", str(RATE), "-ac", "2", "-i", "-", "-map", "0:v", "-map", "1:a",
+                    "-c:a", "aac", "-b:a", "192k", "-shortest"]
+        cmd += ["-c:v", "copy", "-movflags", "+faststart", str(dest)]
+        subprocess.run(cmd, input=sound.tobytes() if sound is not None else None, check=True)
+        return dest
 
     def stop(self):
-        self.proc.terminate()
+        for proc in (self.rec, self.seg):
+            proc.terminate()
         shutil.rmtree(self.dir, ignore_errors=True)
 
 
@@ -99,10 +131,10 @@ class Replay:
         self.rings = {n: Ring(*SOURCES[n], seconds) for n in names if n in SOURCES}
         self.screen = None
         if screen:
-            if shutil.which("gpu-screen-recorder"):
+            if shutil.which("wf-recorder"):
                 self.screen = Screen(seconds)
             else:
-                log.warning("screen replay off: gpu-screen-recorder isn't installed")
+                log.warning("screen replay off: wf-recorder isn't installed")
 
     def save(self, seconds=None, folder=FOLDER):
         """Save the newest `seconds` (at most what's kept) into a new folder: "mic and sound.mp3" (mixed),
@@ -114,14 +146,16 @@ class Replay:
             raise RuntimeError("There's nothing recorded yet.")
         out = folder / f"{datetime.datetime.now():%Y-%m-%d %H-%M-%S}"
         out.mkdir(parents=True, exist_ok=True)
-        if self.screen:  # first: its buffer keeps moving
-            try:
-                self.screen.save(out / "screen.mp4")
-            except RuntimeError as e:
-                log.warning("screen replay: %s", e)
+        mix = None
         if n >= RATE // 2:
+            mix = np.clip(sum(p[-n:].astype(np.int32) for p in parts.values()), -32768, 32767).astype(np.int16)
+        if self.screen:
+            try:
+                self.screen.save(out / "screen.mp4", seconds, mix)
+            except (RuntimeError, subprocess.CalledProcessError) as e:
+                log.warning("screen replay: %s", e)
+        if mix is not None:
             if len(parts) > 1:
-                mix = np.clip(sum(p[-n:].astype(np.int32) for p in parts.values()), -32768, 32767).astype(np.int16)
                 mp3(mix, out / "mic and sound.mp3")
             if "system" in parts:
                 mp3(parts["system"][-n:], out / "sound.mp3")

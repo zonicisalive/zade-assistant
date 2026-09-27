@@ -89,7 +89,7 @@ DEFAULTS = {
     "history": {"keep": 1000},
     "weather": {"place": ""},
     # Replay: keep the last `seconds` of what you hear (system) and/or your mic, and the screen if `screen`
-    # (needs gpu-screen-recorder), in RAM; "clip that" saves them to a folder in ~/Videos/Clips.
+    # (wf-recorder, in RAM), in RAM; "clip that" saves them to a folder in ~/Videos/Clips.
     # sources: both | system | mic. Nothing is written to disk until you save.
     "clips": {"enabled": True, "seconds": 30, "sources": "both", "screen": True},
     # Discord (ZadeControl plugin): read new messages aloud — off | dms | all (DMs and mentions) — and calls
