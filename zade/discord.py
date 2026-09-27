@@ -14,6 +14,10 @@ URL = "http://127.0.0.1:47823/tool"
 TOKEN = pathlib.Path("~/.config/zade/discord-token").expanduser()
 
 
+STATUS = {"online": "online", "idle": "idle", "away": "idle", "dnd": "dnd", "do not disturb": "dnd", "busy": "dnd",
+          "invisible": "invisible", "offline": "invisible", "hidden": "invisible"}
+
+
 class Unavailable(Exception):
     """Discord isn't running, or the plugin isn't installed or enabled."""
 
@@ -67,6 +71,31 @@ def clean_name(name):
     return re.sub(r"\b[a-z](?: [a-z]\b)+", lambda m: m[0].replace(" ", ""), " ".join(name.lower().split()))
 
 
+def emoji(name):
+    """An emoji from what was said: the character itself, or its everyday name or alias ("fire", "red heart",
+    "heart", "100", "thumbs up"), from the emoji package's CLDR names, so any emoji works without a list here."""
+    import unicodedata
+
+    import emoji as emoji_data
+
+    name = (name or "").strip()
+    if any(unicodedata.category(c) == "So" for c in name):
+        return name
+    said = " ".join(name.lower().replace("emoji", "").replace("-", " ").split())
+    if not said:
+        return None
+    best = None
+    for char, data in emoji_data.EMOJI_DATA.items():
+        if data.get("status", 2) > 2:  # skewed variants and components, not emoji to send
+            continue
+        names = [n.strip(":").replace("_", " ").lower() for n in [data.get("en", ""), *data.get("alias", [])]]
+        for n in names:
+            score = 3 if n == said else 2 if n.startswith(said + " ") else 1 if all(w in n.split() for w in said.split()) else 0
+            if score and (best is None or (score, -len(n)) > best[0]):
+                best = ((score, -len(n)), char)
+    return best[1] if best else None
+
+
 def run(a):
     """One spoken request (the "discord" tool): returns what to say."""
     act, target = a.get("action", ""), clean_name(a.get("target") or "")
@@ -96,4 +125,19 @@ def run(a):
         return "Unread: " + ", ".join(f"{c['from']} {c['count']}" for c in chats[:6]) + "."
     if act == "status":
         return _voice_line(call("status"))
+    if act in ("react", "unreact"):
+        e = emoji(a.get("emoji") or "")
+        if not e:
+            raise Failed(f"I don't know the {a.get('emoji')} emoji.")
+        out = call("react", name=target, emoji=e, remove=act == "unreact")
+        return f"{'Removed' if act == 'unreact' else 'Reacted'} {e} on {out['author']}'s message."
+    if act == "reply":
+        return f"Replied to {call('reply', name=target, text=a.get('text', ''))['author']}."
+    if act == "edit":
+        return f"Edited your last message in {call('edit_last', name=target, text=a.get('text', ''))['chat']}."
+    if act == "delete":
+        return f"Deleted your last message in {call('delete_last', name=target)['chat']}."
+    if act == "set_status":
+        s = call("set_status", status=STATUS.get((a.get("text") or a.get("status") or "").lower(), a.get("text") or ""))
+        return f"Your Discord status is {s['status'].replace('dnd', 'do not disturb')}."
     raise Failed(f"I can't do {act} on Discord.")

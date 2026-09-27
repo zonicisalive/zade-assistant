@@ -308,6 +308,34 @@ def spoken(text):
     return " ".join("".join(out).split())
 
 
+def discord_confirm(ctx, a):
+    """A yes before a reply, edit, delete (or a reaction the model chose), naming the message it's for."""
+    from . import discord
+
+    act, text = a["action"], a.get("text", "")
+    try:
+        t = discord.call("peek", name=discord.clean_name(a.get("target") or ""), mine=act in ("edit", "delete"))
+    except (discord.Unavailable, discord.Failed):
+        return True  # the action itself will say what's wrong
+    if act == "delete":
+        return ctx.confirm(f"Delete your last message in {t['chat']}?\n{t['text']}")
+    if act == "edit":
+        return ctx.confirm(ask_send(text, f"as your new last message in {t['chat']}").replace("Send", "Change it to", 1)
+                           .replace("Do I really send it", "Do I really change your last message", 1))
+    if act == "reply":
+        return ctx.confirm(ask_send(text, f"as a reply to {t['author']}"))
+    return ctx.confirm(f"React {spoken(a.get('emoji', ''))} on {t['author']}'s message?\n{t['text']}")
+
+
+def ask_send(text, where):
+    """The yes-or-no before something goes to other people: a short message is read out, a long one only
+    shown (reading a whole story back was tiring): "Send hello to DEXORTO?" / "Do I really send it to ...?"."""
+    words = spoken(text)
+    if len(words.split()) <= 6:
+        return f"Send {words} {where}?"
+    return f"Do I really send it {where}?\n{text}"
+
+
 def dispatch(ctx, action, from_model=False):
     name, a = action["name"], action.get("args", {})
     try:
@@ -328,11 +356,15 @@ def dispatch(ctx, action, from_model=False):
             except discord.Failed as e:
                 return str(e), False
             to = found["label"] if found else a.get("to", "")
-            if not ctx.confirm(f"Send {spoken(a.get('text', ''))} to {to} on Discord?"):
+            if not ctx.confirm(ask_send(a.get("text", ""), f"to {to} on Discord")):
                 return "Cancelled.", False
             if found:
                 discord.call("send", channel_id=found["channel_id"], text=a.get("text", ""))
                 return f"Sent to {to}.", True
+        elif name == "discord" and a.get("action") in ("reply", "edit", "delete") or \
+                name == "discord" and from_model and a.get("action") in ("react", "unreact"):
+            if not discord_confirm(ctx, a):
+                return "Cancelled.", False
         elif model_close or model_keys or needs_confirm(name, ctx.cfg["safety"]["confirm"], a):
             detail = next((str(v) for v in a.values() if isinstance(v, (str, int))), "")
             if not ctx.confirm(f"{name.replace('_', ' ').capitalize()}{' ' + detail if detail else ''}?"):

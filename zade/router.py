@@ -149,6 +149,21 @@ def parse_discord(text):
                     r"(?: on discord)?|(?:any|check)(?: my)? discord(?: messages| dms)?|who (?:messaged|texted|dmed|pinged) me"
                     r"(?: on discord)?|kisne message kiya", text):
         return {"action": "unread"}
+    msg = r"(?:last |latest )?(?:message|msg|text)"
+    if m := re.fullmatch(rf"react(?: with| using)? (?:a |an |the )?(.+?)(?: emoji)?(?: (?:to|on) (?:(.+?)(?:'s|s) )?{msg})?"
+                         rf"(?: (?:on|in) discord)?", t):
+        return {"action": "react", "emoji": m[1], **({"target": m[2]} if m[2] else {})}
+    if m := re.fullmatch(r"reply (?:to )?(.+?) (?:on|in) discord (?:saying|with|that) (.+)", text):
+        return {"action": "reply", "target": m[1], "text": m[2]}
+    if m := re.fullmatch(r"reply (?:saying |with )?(.+?) (?:on|in) discord", text):
+        return {"action": "reply", "text": m[1]}
+    if m := re.fullmatch(rf"(?:edit|change) my {msg}(?: on discord)? to(?: say)? (.+)", text):
+        return {"action": "edit", "text": m[1]}
+    if m := re.fullmatch(rf"(?:delete|remove|unsend) my {msg}(?: (?:to|in|from|with) (.+?))?(?: on discord)?", text):
+        return {"action": "delete", **({"target": m[1]} if m[1] else {})}
+    if m := re.fullmatch(r"(?:set|change|make|put) my (?:discord )?status (?:to |as )?(.+?)(?: on discord)?"
+                         r"|go (online|idle|invisible|offline) on discord", text):
+        return {"action": "set_status", "text": m[1] or m[2]}
     if re.fullmatch(rf"who(?:'?s| is| all)? (?:in|on) {_VC}|who(?:'?s| is) talking(?: in {_VC})?|am i (?:muted|deafened)"
                     rf"(?: on discord)?|(?:vc|call) (?:mein|me) kaun (?:hai|h)", t):
         return {"action": "status"}

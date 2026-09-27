@@ -525,3 +525,24 @@ def test_messages_go_through_the_discord_plugin_after_a_yes(monkeypatch):
 def test_emoji_are_read_back_by_name():
     assert z.spoken("\U0001f600") == "grinning face emoji"
     assert z.spoken("gg \U0001f525\ufe0f") == "gg fire emoji"
+
+
+def test_a_long_message_is_not_read_back_in_full():
+    assert z.ask_send("hi there", "to DEXORTO on Discord") == "Send hi there to DEXORTO on Discord?"
+    story = "In a small village a curious cat named Whiskers stumbled upon an ancient door."
+    assert z.ask_send(story, "to DEXORTO on Discord") == f"Do I really send it to DEXORTO on Discord?\n{story}"
+
+
+def test_discord_replies_edits_and_deletes_ask_first(monkeypatch):
+    from zade import discord
+
+    asked, ran = [], []
+    monkeypatch.setattr(discord, "call", lambda tool, timeout=10, **a: {"ok": True, "chat": "DEXORTO", "author": "DEXORTO", "text": "yo"})
+    ctx = make([], run_action=lambda a, c: ran.append(a) or "")
+    ctx.confirm = lambda q: asked.append(q) or False
+    for act in ("reply", "edit", "delete"):
+        assert z.dispatch(ctx, {"name": "discord", "args": {"action": act, "text": "ok"}}) == ("Cancelled.", False)
+    assert asked == ["Send ok as a reply to DEXORTO?", "Change it to ok as your new last message in DEXORTO?",
+                     "Delete your last message in DEXORTO?\nyo"] and ran == []
+    z.dispatch(ctx, {"name": "discord", "args": {"action": "react", "emoji": "fire"}})   # said by the user: no question
+    assert len(asked) == 3 and ran[-1]["args"]["action"] == "react"

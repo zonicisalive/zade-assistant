@@ -71,7 +71,10 @@ Without keys, Zade opens Spotify's search instead.
 With the ZadeControl plugin in `vencord/zadeControl`, Zade controls Discord directly instead of pressing keys:
 "mute me on discord", "deafen", "leave the vc", "join the gaming vc", "call dexorto on discord", "open general in
 bitnade on discord", "read the last 3 messages from dexorto", "who messaged me on discord", "who's in the vc", and
-"message dexorto on discord saying I'm late" (always read back for a yes first, with the name as Discord knows it).
+"message dexorto on discord saying I'm late", "react fire to dexorto's message", "reply to dexorto on discord saying
+on my way", "edit my last message to ...", "delete my last message", "set my discord status to do not disturb".
+Messages, replies, edits and deletes always ask for a yes first, naming the person or channel as Discord knows it
+(a long message is shown, not read out).
 
 ```bash
 cp -r ~/Zade/vencord/zadeControl ~/path/to/Vencord/src/userplugins/

@@ -77,9 +77,14 @@ TOOLS = [
     _t("clipboard_copy", "Copy text to the clipboard.", ["text"], text=S),
     _t("discord", "Control Discord: mute or unmute your mic, deafen or undeafen, leave the voice channel, join a "
        "voice channel (target: its name), call a person, open a chat or channel, read the latest messages of a "
-       "chat (target: a person or channel), list unread messages, or say who is in your voice channel (status).",
+       "chat (target: a person or channel), list unread messages, say who is in your voice channel (status), react "
+       "to or reply to the latest message in a chat, edit or delete your own last message, or set your status. "
+       "Leave target empty for the chat open on screen.",
        ["action"], action={"type": "string", "enum": ["mute", "unmute", "deafen", "undeafen", "leave", "join", "call",
-                                                      "open", "read", "unread", "status"]},
+                                                      "open", "read", "unread", "status", "react", "unreact", "reply",
+                                                      "edit", "delete", "set_status"]},
+       emoji={"type": "string", "description": "for react: the emoji character, e.g. \U0001f525"},
+       text={"type": "string", "description": "for reply/edit: the text; for set_status: online, idle, dnd or invisible"},
        target={"type": "string", "description": "a person, or a channel (\"general in bitnade\")"},
        count={"type": "integer", "description": "how many messages to read (default 5)"}),
     _t("send_message", "Send a message to a person on Discord (opens Discord, finds them, types it, sends it). "

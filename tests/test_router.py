@@ -305,3 +305,15 @@ def test_saying_something_in_the_open_discord_chat():
     assert M("send gg in the chat on discord") == ("the current chat", "gg")
     assert M("say hi to neel on discord") == ("neel", "hi")
     assert M("Send hello in the chat of Discord.") == ("the current chat", "hello")
+
+
+def test_discord_reactions_replies_and_status():
+    D = lambda t: router.parse_discord(router.normalize(t))
+    assert D("react fire to dexorto's message") == {"action": "react", "emoji": "fire", "target": "dexorto"}
+    assert D("react with thumbs up on discord") == {"action": "react", "emoji": "thumbs up"}
+    assert D("reply to dexorto on discord saying on my way") == {"action": "reply", "target": "dexorto", "text": "on my way"}
+    assert D("edit my last message to see you at 5") == {"action": "edit", "text": "see you at 5"}
+    assert D("delete my last message on discord") == {"action": "delete"}
+    assert D("set my discord status to do not disturb") == {"action": "set_status", "text": "do not disturb"}
+    assert D("go invisible on discord") == {"action": "set_status", "text": "invisible"}
+    assert D("turn on do not disturb") is None      # Zade's own do not disturb stays Zade's

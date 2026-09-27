@@ -8,17 +8,21 @@
 // Discord's own stores and actions do the work, so nothing depends on the window being focused or on
 // clicking. Only what you ask Zade for runs; Zade reads a message back and asks before sending it.
 
+import { getUserSettingLazy } from "@api/UserSettings";
 import { sendMessage } from "@utils/discord";
 import definePlugin, { PluginNative } from "@utils/types";
 import { findByPropsLazy } from "@webpack";
 import {
     ChannelActionCreators, ChannelRouter, ChannelStore, GuildChannelStore, GuildStore, MediaEngineStore, MessageActions,
-    MessageStore, ReadStateStore, RelationshipStore, SelectedChannelStore, SelectedGuildStore, UserStore, VoiceStateStore
+    MessageStore, ReadStateStore, RelationshipStore, RestAPI, SelectedChannelStore, SelectedGuildStore, UserStore,
+    VoiceStateStore
 } from "@webpack/common";
 
 const Native = VencordNative.pluginHelpers.ZadeControl as PluginNative<typeof import("./native")>;
 const VoiceActions = findByPropsLazy("toggleSelfMute", "toggleSelfDeaf");
 const { selectVoiceChannel } = findByPropsLazy("selectVoiceChannel", "selectChannel");
+const StatusSetting = getUserSettingLazy<string>("status", "status")!;
+const STATUSES = ["online", "idle", "dnd", "invisible"];
 
 type Args = Record<string, any>;
 type Result = { ok: boolean; [key: string]: any; };
@@ -131,6 +135,22 @@ function voiceStatus() {
     };
 }
 
+async function messagesIn(channelId: string) {
+    if (!MessageStore.getMessages(channelId)?._array?.length) await MessageActions.fetchMessages?.({ channelId, limit: 50 });
+    return (MessageStore.getMessages(channelId)?._array ?? []) as any[];
+}
+
+// The message a reaction or reply is for, in the named chat (or the one open): the latest from someone else, or
+// with mine, my own latest (to edit or delete).
+async function target(a: Args, mine = false) {
+    const chat = a.name ? await findChat(a.name, false) : await findChat("the current chat", false);
+    if (!chat) throw new Error(`I couldn't find ${a.name} on Discord.`);
+    const me = UserStore.getCurrentUser().id;
+    const message = (await messagesIn(chat.id)).filter(m => (m.author.id === me) === mine).at(-1);
+    if (!message) throw new Error(mine ? `You have no message in ${chat.label}.` : `There's no message to answer in ${chat.label}.`);
+    return { chat, message, author: userName(message.author.id), text: message.content || "(an attachment)" };
+}
+
 const tools: Record<string, (a: Args) => Promise<Result> | Result> = {
     status: () => ({ ok: true, ...voiceStatus() }),
 
@@ -193,6 +213,50 @@ const tools: Record<string, (a: Args) => Promise<Result> | Result> = {
         const messages = (MessageStore.getMessages(chat.id)?._array ?? []).slice(-count)
             .map((m: any) => ({ from: userName(m.author.id), text: m.content || (m.attachments?.length ? "(an attachment)" : "(no text)") }));
         return { ok: true, chat: chat.label, messages };
+    },
+
+    // What a reply, reaction, edit or delete would act on, without doing anything: for Zade's question first
+    async peek(a) {
+        const t = await target(a, !!a.mine);
+        return { ok: true, chat: t.chat.label, author: t.author, text: t.text.slice(0, 200) };
+    },
+
+    // emoji: a character ("🔥"); remove: take the reaction back
+    async react(a) {
+        const t = await target(a);
+        const url = `/channels/${t.chat.id}/messages/${t.message.id}/reactions/${encodeURIComponent(String(a.emoji))}/@me`;
+        await (a.remove ? RestAPI.del({ url }) : RestAPI.put({ url }));
+        return { ok: true, author: t.author, chat: t.chat.label };
+    },
+
+    async reply(a) {
+        const t = await target(a);
+        if (!String(a.text ?? "").trim()) return { ok: false, error: "Nothing to reply." };
+        sendMessage(t.chat.id, { content: String(a.text) }, true, {
+            messageReference: { channel_id: t.chat.id, message_id: t.message.id, guild_id: (ChannelStore.getChannel(t.chat.id) as any)?.guild_id }
+        } as any);
+        return { ok: true, author: t.author, chat: t.chat.label };
+    },
+
+    async edit_last(a) {
+        const t = await target(a, true);
+        if (!String(a.text ?? "").trim()) return { ok: false, error: "Nothing to change it to." };
+        await MessageActions.editMessage(t.chat.id, t.message.id, { content: String(a.text) });
+        return { ok: true, chat: t.chat.label };
+    },
+
+    async delete_last(a) {
+        const t = await target(a, true);
+        await MessageActions.deleteMessage(t.chat.id, t.message.id);
+        return { ok: true, chat: t.chat.label };
+    },
+
+    // online, idle, dnd (do not disturb) or invisible
+    async set_status(a) {
+        const status = String(a.status ?? "").toLowerCase();
+        if (!STATUSES.includes(status)) return { ok: false, error: `Status can be ${STATUSES.join(", ")}.` };
+        await StatusSetting.updateSetting(status);
+        return { ok: true, status };
     },
 
     // DMs and group DMs with unread messages

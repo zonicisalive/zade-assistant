@@ -28,3 +28,9 @@ def test_spoken_names_are_cleaned_up():
     assert discord.clean_name("D E X O R T O user") == "dexorto user"   # letters joined, words kept
     assert discord.clean_name("the dexorto guy") == "the dexorto guy"
     assert discord.clean_name("general in bitnade") == "general in bitnade"
+
+
+def test_emoji_by_everyday_name():
+    assert discord.emoji("fire") == "\U0001f525" and discord.emoji("heart") == "❤️"
+    assert discord.emoji("100") == "\U0001f4af" and discord.emoji("thumbs up") == "\U0001f44d"
+    assert discord.emoji("\U0001f525") == "\U0001f525" and discord.emoji("zzzqqq") is None
