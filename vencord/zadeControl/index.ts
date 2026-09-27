@@ -61,6 +61,13 @@ function describe(channel: any) {
 
 // A person's DM, else a text channel, by what was said ("dexorto", "general", "general in bitnade").
 async function findChat(name: string): Promise<{ id: string; label: string; } | undefined> {
+    // "the current chat", "this channel", "here": what's open on screen (small models misspell it: "current chant")
+    if (/^(?:the )?(?:current|this|here|open|opened|same)\b/.test(simple(name))) {
+        const channel = ChannelStore.getChannel(SelectedChannelStore.getChannelId());
+        if (!channel) return;
+        const other = channel.recipients?.length === 1 ? userName(channel.recipients[0]) : null;
+        return { id: channel.id, label: other ?? describe(channel) };
+    }
     const user = findUser(name);
     if (user) {
         let id = ChannelStore.getDMFromUserId(user.id);

@@ -177,6 +177,9 @@ def ask(text, facts, cfg, run_tool, history=(), vram=vram_free_gb, resident=resi
     for name, extra in candidates(cfg, vram, resident):
         try:
             reply = providers.chat(name, system, text, TOOLS, tracked, cfg, extra, history)
+            if leaked := leaked_call(reply):  # the call written out as text instead of made: make it (confirmations apply)
+                result = tracked(*leaked)
+                return result if result and result != "done" else "Done."
             # The model tends to paraphrase a music result into "I started playing <what you asked>",
             # even when a different song played or nothing did, so say what really happened.
             if [n for n, _ in ran] == ["play_music"]:
@@ -188,6 +191,32 @@ def ask(text, facts, cfg, run_tool, history=(), vram=vram_free_gb, resident=resi
             if ran:  # retrying elsewhere would repeat actions that already happened
                 return "I did part of that, then lost my connection."
     return "My brain is offline right now."
+
+
+def _loads(text):
+    """JSON, also when a small model wrote Python-style escapes ("\\U0001f600" for an emoji)."""
+    try:
+        return json.loads(text)
+    except ValueError:
+        return json.loads(re.sub(r"\\U([0-9a-fA-F]{8})", lambda m: chr(int(m[1], 16)), text))
+
+
+def leaked_call(reply):
+    """(tool, args) when the reply is a tool call written as text: 'send_message {"to": ...}' or
+    '{"name": "remember", "arguments": {...}}'. Small models do this now and then; None otherwise."""
+    tools = {t["name"] for t in TOOLS}
+    t = re.sub(r"^\s*(?:\[\w+\]\s*)?`*(?:json)?\s*|\s*`*\s*(?:\[\w+\])?\s*$", "", reply or "")
+    try:
+        if m := re.fullmatch(r"(\w+)\s*(\{.*\})", t, re.S):
+            name, args = m[1], _loads(m[2])
+        elif t.startswith("{"):
+            obj = _loads(t)
+            name, args = obj.get("name"), obj.get("arguments") or obj.get("parameters") or {}
+        else:
+            return None
+    except (ValueError, AttributeError):
+        return None
+    return (name, args) if name in tools and isinstance(args, dict) else None
 
 
 FIX_SONG = ("A speech recognizer transcribed a request to play a song. It often mishears names, because the user "

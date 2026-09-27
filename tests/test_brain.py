@@ -161,3 +161,20 @@ def test_a_repeated_tool_call_runs_once(monkeypatch):
     cfg = copy.deepcopy(config.DEFAULTS)
     brain.ask("louder", [], cfg, lambda n, a: ran.append((n, a)) or "done")
     assert ran == [("volume", {"delta": 10})]
+
+
+def test_a_tool_call_written_as_text_is_made():
+    assert brain.leaked_call('send_message {"app": "discord", "text": "\\U0001f600", "to": "current_chant"}') == \
+        ("send_message", {"app": "discord", "text": "\U0001f600", "to": "current_chant"})
+    assert brain.leaked_call('[neutral] {"name": "remember", "arguments": {"fact": "I like tea"}}') == \
+        ("remember", {"fact": "I like tea"})
+    assert brain.leaked_call("I opened Discord.") is None
+    assert brain.leaked_call('rm_rf {"path": "/"}') is None          # not one of Zade's tools
+
+
+def test_the_leaked_call_runs_through_the_normal_path(monkeypatch):
+    ran = []
+    monkeypatch.setattr(brain.providers, "chat", lambda *a, **k: 'send_message {"to": "dexorto", "text": "hi"}')
+    monkeypatch.setattr(brain, "candidates", lambda cfg, vram, resident: [("ollama", {})])
+    out = brain.ask("send hi to dexorto", [], copy.deepcopy(config.DEFAULTS), lambda n, a: ran.append((n, a)) or "Sent to DEXORTO.")
+    assert ran == [("send_message", {"to": "dexorto", "text": "hi"})] and out == "Sent to DEXORTO."

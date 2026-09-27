@@ -519,3 +519,8 @@ def test_messages_go_through_the_discord_plugin_after_a_yes(monkeypatch):
     assert z.dispatch(ctx, {"name": "send_message", "args": {"to": "dexoto", "text": "hi"}}) == ("Sent to DEXORTO.", True)
     assert asked == ["Send hi to DEXORTO on Discord?"]                  # the real name, from Discord
     assert calls[-1] == ("send", {"channel_id": "42", "text": "hi"}) and ran == []  # no key presses
+
+
+def test_emoji_are_read_back_by_name():
+    assert z.spoken("\U0001f600") == "grinning face emoji"
+    assert z.spoken("gg \U0001f525\ufe0f") == "gg fire emoji"

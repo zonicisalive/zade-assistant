@@ -299,6 +299,15 @@ def wants_followup(reply):
     return bool(reply) and reply.rstrip().endswith("?")
 
 
+def spoken(text):
+    """Emoji by name, so a read-back says what will be sent ("😀" -> "grinning face emoji"); voices skip them."""
+    import unicodedata
+
+    out = [f" {unicodedata.name(c, 'an').lower()} emoji " if unicodedata.category(c) == "So" else c
+           for c in text if c != "\ufe0f"]
+    return " ".join("".join(out).split())
+
+
 def dispatch(ctx, action, from_model=False):
     name, a = action["name"], action.get("args", {})
     try:
@@ -319,7 +328,7 @@ def dispatch(ctx, action, from_model=False):
             except discord.Failed as e:
                 return str(e), False
             to = found["label"] if found else a.get("to", "")
-            if not ctx.confirm(f"Send {a.get('text', '')} to {to} on Discord?"):
+            if not ctx.confirm(f"Send {spoken(a.get('text', ''))} to {to} on Discord?"):
                 return "Cancelled.", False
             if found:
                 discord.call("send", channel_id=found["channel_id"], text=a.get("text", ""))
