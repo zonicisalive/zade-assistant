@@ -1,16 +1,17 @@
 """Discord through the ZadeControl Vencord plugin (vencord/zadeControl in this repo).
 
-The plugin runs a small JSON API inside Discord on 127.0.0.1, guarded by a secret token it writes to
-~/.config/zade/discord-token, and does each request with Discord's own actions: mute, deafen, voice
-channels, calls, chats, messages. No window focus or key presses are involved.
+The plugin runs a small JSON API inside Discord on a Unix socket only you can open ($XDG_RUNTIME_DIR/zade),
+guarded by a secret token it writes to ~/.config/zade/discord-token, and does each request with Discord's
+own actions: mute, deafen, voice channels, calls, chats, messages. No window focus or key presses are involved.
 """
 
+import http.client
 import json
+import os
 import pathlib
-import urllib.error
-import urllib.request
+import socket
 
-URL = "http://127.0.0.1:47823/tool"
+SOCKET = pathlib.Path(os.environ.get("XDG_RUNTIME_DIR", "/tmp")) / "zade" / "discord.sock"
 TOKEN = pathlib.Path("~/.config/zade/discord-token").expanduser()
 
 
@@ -26,20 +27,32 @@ class Failed(Exception):
     """The plugin couldn't do it; the message is for the user."""
 
 
+class _Connection(http.client.HTTPConnection):
+    """HTTP over the plugin's Unix socket."""
+
+    def connect(self):
+        self.sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        self.sock.settimeout(self.timeout)
+        self.sock.connect(str(SOCKET))
+
+
 def call(tool, timeout=10, **args):
     try:
         token = TOKEN.read_text().strip()
     except OSError:
         raise Unavailable("the ZadeControl plugin hasn't run yet") from None
-    req = urllib.request.Request(URL, json.dumps({"name": tool, "args": args}).encode(),
-                                 {"Content-Type": "application/json", "Authorization": f"Bearer {token}"})
+    conn = _Connection("localhost", timeout=timeout)
     try:
-        with urllib.request.urlopen(req, timeout=timeout) as r:
-            out = json.load(r)
-    except urllib.error.HTTPError as e:
-        raise Unavailable(f"Discord answered {e.code}") from None
-    except (urllib.error.URLError, OSError, ValueError) as e:
+        conn.request("POST", "/tool", json.dumps({"name": tool, "args": args}),
+                     {"Content-Type": "application/json", "Authorization": f"Bearer {token}"})
+        r = conn.getresponse()
+        status, out = r.status, json.loads(r.read() or b"{}")
+    except (OSError, http.client.HTTPException, ValueError) as e:
         raise Unavailable(str(e)) from None
+    finally:
+        conn.close()
+    if status in (401, 503):  # an old token, or no Discord window
+        raise Unavailable(f"Discord answered {status}")
     if not out.get("ok"):
         import re
 
@@ -159,6 +172,11 @@ def reply_text(answer):
     return re.sub(lead, "", answer.strip(), flags=re.I).strip(" .")
 
 
+def pinned(a):
+    """The message a yes was given for (from peek), so the action can't land on a newer one."""
+    return {k: a[k] for k in ("channel_id", "message_id") if a.get(k)}
+
+
 def run(a):
     """One spoken request (the "discord" tool): returns what to say."""
     act, target = a.get("action", ""), clean_name(a.get("target") or "")
@@ -171,8 +189,8 @@ def run(a):
         return "Left the voice channel."
     if act == "join":
         return f"Joined {call('join_voice', name=target)['channel']}."
-    if act == "call":
-        return f"Calling {call('call', name=target)['calling']}."
+    if act == "call":  # channel_id: the person Zade checked first (see __main__.discord_confirm)
+        return f"Calling {call('call', name=target, channel_id=a.get('channel_id'))['calling']}."
     if act == "open":
         return f"Opened {call('open', name=target)['opened']}."
     if act == "read":
@@ -196,14 +214,14 @@ def run(a):
             e = brain.pick_emoji(a.get("emoji") or "", config.load())
         if not e:
             raise Failed(f"I don't know the {a.get('emoji')} emoji.")
-        out = call("react", name=target, emoji=e, remove=act == "unreact")
+        out = call("react", name=target, emoji=e, remove=act == "unreact", **pinned(a))
         return f"{'Removed' if act == 'unreact' else 'Reacted'} {e} on {out['author']}'s message."
     if act == "reply":
-        return f"Replied to {call('reply', name=target, text=a.get('text', ''))['author']}."
+        return f"Replied to {call('reply', name=target, text=a.get('text', ''), **pinned(a))['author']}."
     if act == "edit":
-        return f"Edited your last message in {call('edit_last', name=target, text=a.get('text', ''))['chat']}."
+        return f"Edited your last message in {call('edit_last', name=target, text=a.get('text', ''), **pinned(a))['chat']}."
     if act == "delete":
-        return f"Deleted your last message in {call('delete_last', name=target)['chat']}."
+        return f"Deleted your last message in {call('delete_last', name=target, **pinned(a))['chat']}."
     if act == "summarize":
         out = call("read", name=target, count=50, timeout=20)
         if not out["messages"]:

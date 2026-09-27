@@ -672,3 +672,65 @@ def test_a_mistyped_setting_does_not_crash_the_loop(caplog):
     for _ in range(3):
         z.guarded(z.sync_replay, ctx)
     assert sum("sync_replay failed" in r.message for r in caplog.records) == 1
+
+
+def test_discord_asks_fail_closed_and_act_on_the_message_asked_about(monkeypatch):
+    from zade import discord
+
+    ran, asked = [], []
+
+    def down(tool, timeout=10, **a):
+        raise discord.Unavailable("timed out")
+
+    monkeypatch.setattr(discord, "call", down)
+    ctx = make([], run_action=lambda a, c: ran.append(a) or "")
+    ctx.confirm = lambda q: asked.append(q) or True
+    out = z.dispatch(ctx, {"name": "discord", "args": {"action": "delete"}})
+    assert out == ("Discord isn't open, or the ZadeControl plugin is off.", False) and ran == [] and asked == []
+
+    monkeypatch.setattr(discord, "call", lambda tool, timeout=10, **a: {"ok": True, "chat": "general", "author": "Bob",
+                                                                         "text": "gg", "channel_id": "5", "message_id": "77"})
+    z.dispatch(ctx, {"name": "discord", "args": {"action": "reply", "text": "ok"}})
+    assert ran[-1]["args"] == {"action": "reply", "text": "ok", "channel_id": "5", "message_id": "77"}
+
+
+def test_calls_ask_unless_the_name_was_said_exactly(monkeypatch):
+    from zade import discord
+
+    ran, asked = [], []
+    found = {"ok": True, "calling": "Nick", "channel_id": "8", "exact": False}
+    monkeypatch.setattr(discord, "call", lambda tool, timeout=10, **a: found)
+    ctx = make([], run_action=lambda a, c: ran.append(a) or "")
+    ctx.confirm = lambda q: asked.append(q) or False
+    assert z.dispatch(ctx, {"name": "discord", "args": {"action": "call", "target": "rick"}}) == ("Cancelled.", False)
+    assert asked == ["Call Nick on Discord?"] and ran == []
+    found.update(calling="Rick", exact=True)
+    z.dispatch(ctx, {"name": "discord", "args": {"action": "call", "target": "rick"}})
+    assert len(asked) == 1 and ran[-1]["args"]["channel_id"] == "8"   # said exactly: rings with no question
+    z.dispatch(ctx, {"name": "discord", "args": {"action": "call", "target": "rick"}}, from_model=True)
+    assert asked[-1] == "Call Rick on Discord?" and len(ran) == 1     # the model's own idea: always asks
+
+
+def test_the_model_cannot_put_the_mic_live_unasked():
+    asked, ran = [], []
+    ctx = make([], run_action=lambda a, c: ran.append(a) or "")
+    ctx.confirm = lambda q: asked.append(q) or False
+    for args in [{"action": "join", "target": "gaming"}, {"action": "unmute"}, {"action": "set_status", "text": "online"}]:
+        assert z.dispatch(ctx, {"name": "discord", "args": args}, from_model=True) == ("Cancelled.", False)
+    assert asked == ["Join gaming on Discord?", "Unmute your mic on Discord?", "Set your Discord status to online?"]
+    z.dispatch(ctx, {"name": "discord", "args": {"action": "unmute"}})  # said by the user: no question
+    assert len(asked) == 3 and len(ran) == 1
+
+
+def test_a_message_without_words_asks_what_to_say(monkeypatch):
+    from zade import discord
+
+    calls = []
+    monkeypatch.setattr(discord, "call", lambda tool, timeout=10, **a: calls.append((tool, a)) or
+                        {"ok": True, "channel_id": "42", "label": "DEXORTO"})
+    said = []
+    ctx = make(said, answers=[True])
+    ctx.ask_user = lambda q: said.append(q) or "tell him I'm on my way"
+    out = z.dispatch(ctx, {"name": "send_message", "args": {"to": "dexorto", "text": "a message"}})
+    assert out == ("Sent to DEXORTO.", True) and said[0] == "What should I say to DEXORTO?"
+    assert calls[-1] == ("send", {"channel_id": "42", "text": "I'm on my way"})

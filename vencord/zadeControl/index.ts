@@ -30,6 +30,7 @@ type Args = Record<string, any>;
 // New DMs, mentions and incoming calls, for Zade to announce: it collects them with the events tool.
 // Nothing is queued for a chat you have open in front of you, or while your status is Do Not Disturb.
 const events: Args[] = [];
+const ringing = new Map<string, number>(); // DM calls ringing you: channel id -> when it started
 function queue(event: Args) {
     if (StatusSetting.getSetting() === "dnd") return;
     events.push({ ...event, at: Date.now() });
@@ -78,11 +79,23 @@ function userName(id: string) {
     return u ? (u as any).globalName || u.username : "someone";
 }
 
-function findUser(name: string) {
+// Friends and everyone you have a DM with
+function people() {
     const ids = new Set<string>(RelationshipStore.getFriendIDs());
     for (const c of ChannelStore.getSortedPrivateChannels()) (c.recipients ?? []).forEach(r => ids.add(r));
-    const users = [...ids].map(id => UserStore.getUser(id)).filter(Boolean);
-    return best(users, u => [u.username, (u as any).globalName ?? "", RelationshipStore.getNickname?.(u.id) ?? ""], name);
+    return [...ids].map(id => UserStore.getUser(id)).filter(Boolean) as any[];
+}
+
+const personNames = (u: any) => [u.username, u.globalName ?? "", RelationshipStore.getNickname?.(u.id) ?? ""];
+const isNamed = (u: any, said: string) => personNames(u).some(n => simple(n) === simple(said));
+
+function findUser(name: string) {
+    return best(people(), personNames, name);
+}
+
+async function dmWith(userId: string) {
+    if (!ChannelStore.getDMFromUserId(userId)) await ChannelActionCreators.openPrivateChannel(userId);
+    return ChannelStore.getDMFromUserId(userId);
 }
 
 // Channels to search: the server on screen first, then every other server.
@@ -109,8 +122,13 @@ function servers(server: string) {
 }
 
 function describe(channel: any) {
-    const name = channel.name.replace(/^[^a-z0-9]+/i, "");
-    return channel.guild_id ? `the ${name} channel in ${GuildStore.getGuild(channel.guild_id)?.name ?? "a server"}` : name;
+    const name = (channel.name || "").replace(/^[^a-z0-9]+/i, "");
+    return channel.guild_id ? `the ${name} channel in ${GuildStore.getGuild(channel.guild_id)?.name ?? "a server"}` : name || "a group chat";
+}
+
+// What a chat is called when read back: the person for a DM, else the channel or group
+function label(channel: any) {
+    return channel.recipients?.length === 1 ? userName(channel.recipients[0]) : describe(channel);
 }
 
 // A person's DM, else a text channel, by what was said ("dexorto", "general", "general in bitnade"). If the
@@ -119,7 +137,8 @@ function describe(channel: any) {
 // the one named, is searched: a message must never go to a same-named channel in some random server.
 async function findChat(name: string, anywhere = true): Promise<{ id: string; label: string; } | undefined> {
     const whole = await findChatExactly(name, anywhere);
-    if (whole || !name.includes(" ")) return whole;
+    // a server was named ("general in bit net"): one of the words alone could be a channel in any server
+    if (whole || !name.includes(" ") || / (?:in|on|from) /i.test(name)) return whole;
     for (const word of name.split(/\s+/).filter(w => w.length >= 3).sort((a, b) => b.length - a.length)) {
         const hit = await findChatExactly(word, anywhere);
         if (hit) return hit;
@@ -127,21 +146,12 @@ async function findChat(name: string, anywhere = true): Promise<{ id: string; la
 }
 
 async function findChatExactly(name: string, anywhere: boolean): Promise<{ id: string; label: string; } | undefined> {
-    // "the current chat", "this channel", "here": what's open on screen (small models misspell it: "current chant")
-    if (/^(?:the )?(?:current|this|here|open|opened|same)\b/.test(simple(name))) {
+    // "the current chat", "this channel", "here": what's open on screen (small models misspell it: "current
+    // chant"). The whole name: #open-mic, #this-week or a friend called Here are not the open chat.
+    if (/^(?:the )?(?:(?:current|this|open|opened|same)(?: (?:chat|chant|channel|dm|conversation|convo|one|server))?|here)$/.test(simple(name))) {
         const channel = ChannelStore.getChannel(SelectedChannelStore.getChannelId());
         if (!channel) throw new Error("No chat is open in Discord right now.");
-        const other = channel.recipients?.length === 1 ? userName(channel.recipients[0]) : null;
-        return { id: channel.id, label: other ?? describe(channel) };
-    }
-    const user = findUser(name);
-    if (user) {
-        let id = ChannelStore.getDMFromUserId(user.id);
-        if (!id) {
-            await ChannelActionCreators.openPrivateChannel(user.id);
-            id = ChannelStore.getDMFromUserId(user.id);
-        }
-        if (id) return { id, label: userName(user.id) };
+        return { id: channel.id, label: label(channel) };
     }
     const [channelName, guildName] = name.split(/ (?:in|on|from) /i);
     let channels = guildChannels("SELECTABLE");
@@ -150,7 +160,14 @@ async function findChatExactly(name: string, anywhere: boolean): Promise<{ id: s
         channels = channels.filter(c => ids.has(c.guild_id));
     }
     else if (!anywhere) channels = channels.filter(c => c.guild_id === SelectedGuildStore.getGuildId());
-    const channel = best(channels, c => [c.name], channelName);
+    // An exact name first, a person's or a channel's ("chat" is #chat, not a friend called Chad), then the
+    // closest of either. With a server named it's a channel there.
+    const users = guildName ? [] : people();
+    const exactChannel = channels.find(c => simple(c.name) === simple(channelName));
+    const user = users.find(u => isNamed(u, name)) ?? (exactChannel ? undefined : best(users, personNames, name));
+    const id = user && await dmWith(user.id);
+    if (user && id) return { id, label: userName(user.id) };
+    const channel = exactChannel ?? best(channels, c => [c.name], channelName);
     return channel && { id: channel.id, label: describe(channel) };
 }
 
@@ -168,9 +185,16 @@ async function messagesIn(channelId: string) {
     return (MessageStore.getMessages(channelId)?._array ?? []) as any[];
 }
 
-// The message a reaction or reply is for, in the named chat (or the one open): the latest from someone else, or
-// with mine, my own latest (to edit or delete).
+// The message a reaction or reply is for: the one Zade asked you about (channel_id and message_id from peek,
+// not whatever is newest by the time you said yes), else in the named chat (or the one open) the latest from
+// someone else, or with mine, my own latest (to edit or delete).
 async function target(a: Args, mine = false) {
+    if (a.channel_id && a.message_id) {
+        const channel: any = ChannelStore.getChannel(a.channel_id);
+        const message: any = MessageStore.getMessage(a.channel_id, a.message_id);
+        if (!channel || !message) throw new Error("That message isn't there any more.");
+        return { chat: { id: channel.id, label: label(channel) }, message, author: userName(message.author.id), text: message.content || "(an attachment)" };
+    }
     const chat = a.name ? await findChat(a.name, false) : await findChat("the current chat", false);
     if (!chat) throw new Error(`I couldn't find ${a.name} on Discord.`);
     const me = UserStore.getCurrentUser().id;
@@ -222,16 +246,26 @@ const tools: Record<string, (a: Args) => Promise<Result> | Result> = {
         return { ok: true, channel: describe(channel) };
     },
 
-    // A DM call: joining the DM's voice rings them
-    call(a) {
-        const name = String(a.name ?? "");
-        // "user called DEXORTO": the whole phrase first, then its words, longest first
-        const user = findUser(name) ?? name.split(/\s+/).filter(w => w.length >= 3).sort((x, y) => y.length - x.length)
-            .map(w => findUser(w)).find(Boolean);
-        const id = user && ChannelStore.getDMFromUserId(user.id);
-        if (!id) return { ok: false, error: `I couldn't find ${a.name}.` };
+    // A DM call: joining the DM's voice rings them. dry: only who it would ring (channel_id to call next), and
+    // whether that name was said exactly; if not, Zade asks first ("call Rick" must never ring Nick unasked).
+    async call(a) {
+        let id = a.channel_id;
+        if (!id) {
+            const name = String(a.name ?? "");
+            const words = name.split(/\s+/).filter(w => w.length >= 3).sort((x, y) => y.length - x.length);
+            const all = people();
+            // "user called DEXORTO", "my brother Sam": the whole phrase said exactly, then one of its words,
+            // then the closest spelling of the phrase, then of its words (longest first)
+            const user = all.find(u => isNamed(u, name)) ?? words.map(w => all.find(u => isNamed(u, w))).find(Boolean)
+                ?? findUser(name) ?? words.map(w => findUser(w)).find(Boolean);
+            id = user && await dmWith(user.id);
+            if (!user || !id) return { ok: false, error: `I couldn't find ${a.name}.` };
+            if (a.dry) return { ok: true, calling: userName(user.id), channel_id: id, exact: isNamed(user, name) || words.some(w => isNamed(user, w)) };
+        }
+        const channel = ChannelStore.getChannel(id);
+        if (!channel || channel.guild_id) return { ok: false, error: "That isn't a DM." };
         selectVoiceChannel(id);
-        return { ok: true, calling: userName(user.id) };
+        return { ok: true, calling: label(channel) };
     },
 
     async open(a) {
@@ -247,9 +281,9 @@ const tools: Record<string, (a: Args) => Promise<Result> | Result> = {
         return chat ? { ok: true, channel_id: chat.id, label: chat.label } : { ok: false, error: `I couldn't find ${a.name} on Discord.` };
     },
 
-    send(a) {
+    async send(a) {
         if (!a.channel_id || !String(a.text ?? "").trim()) return { ok: false, error: "Nothing to send." };
-        sendMessage(a.channel_id, { content: String(a.text) });
+        await sendMessage(a.channel_id, { content: String(a.text) }); // a rejected message fails here, not "Sent"
         return { ok: true };
     },
 
@@ -266,7 +300,7 @@ const tools: Record<string, (a: Args) => Promise<Result> | Result> = {
     // What a reply, reaction, edit or delete would act on, without doing anything: for Zade's question first
     async peek(a) {
         const t = await target(a, !!a.mine);
-        return { ok: true, chat: t.chat.label, author: t.author, text: t.text.slice(0, 200) };
+        return { ok: true, chat: t.chat.label, channel_id: t.chat.id, message_id: t.message.id, author: t.author, text: t.text.slice(0, 200) };
     },
 
     // emoji: a character ("🔥"); remove: take the reaction back
@@ -280,7 +314,7 @@ const tools: Record<string, (a: Args) => Promise<Result> | Result> = {
     async reply(a) {
         const t = await target(a);
         if (!String(a.text ?? "").trim()) return { ok: false, error: "Nothing to reply." };
-        sendMessage(t.chat.id, { content: String(a.text) }, true, {
+        await sendMessage(t.chat.id, { content: String(a.text) }, true, {
             messageReference: { channel_id: t.chat.id, message_id: t.message.id, guild_id: (ChannelStore.getChannel(t.chat.id) as any)?.guild_id }
         } as any);
         return { ok: true, author: t.author, chat: t.chat.label };
@@ -329,10 +363,13 @@ const tools: Record<string, (a: Args) => Promise<Result> | Result> = {
         return { ok: true };
     },
 
-    // What happened since Zade last asked (and it's forgotten here once collected)
-    events: () => ({ ok: true, events: events.splice(0) }),
+    // What happened since Zade last asked (and it's forgotten here once collected). A call that started
+    // ringing over 30 s ago is left out: by the time it's read out it has stopped.
+    events: () => ({ ok: true, events: events.splice(0).filter(e => e.kind !== "call" || Date.now() - e.at < 30000) }),
 
+    // Only a call still ringing you: joining an ended one would ring the other person instead
     answer(a) {
+        if (Date.now() - (ringing.get(a.channel_id) ?? 0) > 60000) return { ok: false, error: "The call has ended." };
         selectVoiceChannel(a.channel_id);
         return { ok: true };
     },
@@ -383,18 +420,24 @@ export default definePlugin({
             const mentioned = message.mention_everyone || (message.mentions ?? []).some((u: any) => (u?.id ?? u) === me);
             if (!dm && !mentioned) return;
             queue({
-                kind: dm ? "dm" : "mention", channel_id: channel.id, from: userName(message.author.id),
+                kind: dm ? "dm" : "mention", channel_id: channel.id, message_id: message.id, from: userName(message.author.id),
                 where: dm ? (channel.recipients?.length > 1 ? describe(channel) || "a group chat" : "") : describe(channel),
                 text: message.content || (message.attachments?.length ? "sent an attachment" : "sent something")
             });
         },
         CALL_UPDATE({ call }: { call: any; }) {
             const me = UserStore.getCurrentUser()?.id;
-            if (!call?.ringing?.includes(me) || SelectedChannelStore.getVoiceChannelId() === call.channel_id) return;
-            if (events.some(e => e.kind === "call" && e.channel_id === call.channel_id)) return;
+            if (!call?.ringing?.includes(me)) return void ringing.delete(call?.channel_id);
+            if (SelectedChannelStore.getVoiceChannelId() === call.channel_id) return;
+            // updates keep coming while it rings: announce it once (a new call a minute later is new)
+            if (Date.now() - (ringing.get(call.channel_id) ?? 0) < 60000) return;
+            ringing.set(call.channel_id, Date.now());
             const channel: any = ChannelStore.getChannel(call.channel_id);
             const from = channel?.recipients?.length === 1 ? userName(channel.recipients[0]) : describe(channel ?? { name: "someone" });
             queue({ kind: "call", channel_id: call.channel_id, from });
+        },
+        CALL_DELETE({ channelId }: { channelId: string; }) {
+            ringing.delete(channelId);
         },
     },
 

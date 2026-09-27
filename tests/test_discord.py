@@ -24,6 +24,43 @@ def test_without_the_plugin_it_says_so():
         discord.call("status")
 
 
+def test_calls_go_over_the_plugins_socket(monkeypatch, tmp_path):
+    import http.server
+    import json
+    import socketserver
+    import threading
+
+    (tmp_path / "token").write_text("t" * 48)
+    monkeypatch.setattr(discord, "SOCKET", tmp_path / "d.sock")
+    monkeypatch.setattr(discord, "TOKEN", tmp_path / "token")
+    seen = []
+
+    class Handler(http.server.BaseHTTPRequestHandler):
+        def do_POST(self):
+            body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+            seen.append((self.headers["Authorization"], body))
+            status, out = (401, {"ok": False}) if body["name"] == "old" else (200, {"ok": body["name"] == "status", "error": "nope"})
+            self.send_response(status)
+            self.end_headers()
+            self.wfile.write(json.dumps(out).encode())
+
+        def log_message(self, *a):
+            pass
+
+    srv = socketserver.UnixStreamServer(str(tmp_path / "d.sock"), Handler)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    try:
+        assert discord.call("status")["ok"]
+        with pytest.raises(discord.Failed, match="nope"):
+            discord.call("mute")
+        with pytest.raises(discord.Unavailable):  # a token Discord no longer takes
+            discord.call("old")
+    finally:
+        srv.shutdown()
+        srv.server_close()
+    assert seen[0] == ("Bearer " + "t" * 48, {"name": "status", "args": {}})
+
+
 def test_spoken_names_are_cleaned_up():
     assert discord.clean_name("D E X O R T O user") == "DEXORTO user"   # letters joined, words and capitals kept
     assert discord.clean_name("the dexorto guy") == "the dexorto guy"

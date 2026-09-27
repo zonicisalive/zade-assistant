@@ -7,3 +7,4 @@ def no_real_discord(monkeypatch, tmp_path):
     from zade import discord
 
     monkeypatch.setattr(discord, "TOKEN", tmp_path / "no-discord-token")
+    monkeypatch.setattr(discord, "SOCKET", tmp_path / "no-discord.sock")

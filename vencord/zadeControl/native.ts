@@ -4,36 +4,41 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-// Runs in Discord's main process: a small JSON API on 127.0.0.1 for Zade. Each request is passed to the page
-// (index.ts), where Discord's own stores and actions do the work. A secret token in
-// ~/.config/zade/discord-token (only you can read it) guards it: no token, no access. Browsers can't use it
-// either (they can't send the Authorization header to a server that doesn't answer CORS).
+// Runs in Discord's main process: a small JSON API for Zade on a Unix socket in $XDG_RUNTIME_DIR/zade. Only
+// you can open it: unlike a TCP port, no other program can take it over while Discord is closed and collect
+// Zade's token. Each request is passed to the page (index.ts), where Discord's own stores and actions do the
+// work. A secret token in ~/.config/zade/discord-token (only you can read it) guards it too.
 
 import { randomBytes, timingSafeEqual } from "crypto";
-import { BrowserWindow, IpcMainInvokeEvent } from "electron";
-import { existsSync, mkdirSync, readFileSync, realpathSync, statSync, writeFileSync } from "fs";
+import { IpcMainInvokeEvent } from "electron";
+import { chmodSync, mkdirSync, readFileSync, realpathSync, statSync, unlinkSync, writeFileSync } from "fs";
 import { createServer, Server } from "http";
 import { homedir } from "os";
-import { join } from "path";
+import { dirname, join } from "path";
 
-const PORT = 47823;
+const SOCKET = join(process.env.XDG_RUNTIME_DIR || "/tmp", "zade", "discord.sock");
 const TOKEN_FILE = join(homedir(), ".config", "zade", "discord-token");
 let server: Server | null = null;
 
+// Made once, readable only by you. A short or empty one (Discord closed while writing it) is replaced: an
+// empty token would let every request in.
 function token() {
-    if (!existsSync(TOKEN_FILE)) {
-        mkdirSync(join(homedir(), ".config", "zade"), { recursive: true });
-        writeFileSync(TOKEN_FILE, randomBytes(24).toString("hex") + "\n", { mode: 0o600 });
+    mkdirSync(dirname(TOKEN_FILE), { recursive: true });
+    try {
+        writeFileSync(TOKEN_FILE, randomBytes(24).toString("hex") + "\n", { mode: 0o600, flag: "wx" });
+    } catch { } // it exists already
+    chmodSync(TOKEN_FILE, 0o600);
+    let secret = readFileSync(TOKEN_FILE, "utf8").trim();
+    if (secret.length < 32) {
+        secret = randomBytes(24).toString("hex");
+        writeFileSync(TOKEN_FILE, secret + "\n", { mode: 0o600 });
     }
-    return readFileSync(TOKEN_FILE, "utf8").trim();
+    return secret;
 }
 
-function mainWindow() {
-    return BrowserWindow.getAllWindows().find(w => !w.webContents.isDestroyed() && /discord\.com/.test(w.webContents.getURL()));
-}
-
-export function start(_: IpcMainInvokeEvent) {
+export function start(event: IpcMainInvokeEvent) {
     if (server) return;
+    const page = event.sender; // the main window, where index.ts runs (a popout window has no __zadeControl)
     const secret = Buffer.from(token());
     server = createServer((req, res) => {
         const reply = (status: number, body: unknown) => {
@@ -46,12 +51,11 @@ export function start(_: IpcMainInvokeEvent) {
         let body = "";
         req.on("data", chunk => { body += chunk; if (body.length > 65536) req.destroy(); });
         req.on("end", async () => {
-            const win = mainWindow();
-            if (!win) return reply(503, { ok: false, error: "Discord isn't open" });
+            if (page.isDestroyed()) return reply(503, { ok: false, error: "Discord isn't open" });
             try {
                 const { name, args } = JSON.parse(body || "{}");
                 // JSON.stringify makes the call safe to build as code: the page gets plain data, never script
-                const result = await win.webContents.executeJavaScript(
+                const result = await page.executeJavaScript(
                     `window.__zadeControl(${JSON.stringify(String(name))}, ${JSON.stringify(args ?? {})})`);
                 reply(200, result);
             } catch (e) {
@@ -59,8 +63,13 @@ export function start(_: IpcMainInvokeEvent) {
             }
         });
     });
-    server.on("error", e => console.error("[ZadeControl]", e));
-    server.listen(PORT, "127.0.0.1");
+    server.on("error", e => {
+        console.error("[ZadeControl] Zade can't reach Discord: no socket at", SOCKET, e);
+        server = null;
+    });
+    mkdirSync(dirname(SOCKET), { recursive: true, mode: 0o700 });
+    try { unlinkSync(SOCKET); } catch { } // left by a Discord that didn't close cleanly
+    server.listen(SOCKET, () => chmodSync(SOCKET, 0o600));
 }
 
 // A picture for Zade to send (a screenshot), as base64. Only image files inside ~/Pictures, up to 25 MB:
@@ -75,4 +84,5 @@ export function readPicture(_: IpcMainInvokeEvent, path: string) {
 export function stop(_: IpcMainInvokeEvent) {
     server?.close();
     server = null;
+    try { unlinkSync(SOCKET); } catch { }
 }

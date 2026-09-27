@@ -137,6 +137,7 @@ class Ctx:
     app_words: list = field(default_factory=list)  # installed app names, given to Whisper as hotwords
     discord_words: list = field(default_factory=list)  # Discord servers, people, voice channels (ZadeControl)
     show: Callable = lambda **fields: None  # overlay updates (emotion); ui.set in the real app
+    ask_user: Callable[[str], str] = lambda question: ""  # says a question, returns the answer heard
     route: str = ""  # how the last request was handled (shortcut, pattern, llm, ...), for History
 
 
@@ -405,23 +406,46 @@ def spoken(text):
     return " ".join("".join(out).split())
 
 
-def discord_confirm(ctx, a):
-    """A yes before a reply, edit, delete (or a reaction the model chose), naming the message it's for."""
+# Discord actions the model may start only after a yes: they ring people, put the mic live or show you online.
+MODEL_ASKS = {"join": "Join {} on Discord?", "unmute": "Unmute your mic on Discord?", "undeafen": "Undeafen on Discord?",
+              "set_status": "Set your Discord status to {}?"}
+
+
+def discord_asks(a, from_model):
+    act = a.get("action")
+    return act in ("call", "reply", "edit", "delete") or from_model and act in ("react", "unreact", *MODEL_ASKS)
+
+
+def discord_confirm(ctx, a, from_model):
+    """The yes before a Discord action that needs one. Returns the action's args pinned to what was asked
+    about (the message from peek, the person a call rings), so a newer message or another chat opened in the
+    meantime isn't what's acted on; None if the answer was no. Raises actions.Failed if Discord can't tell."""
     from . import discord
 
-    act, text = a["action"], a.get("text", "")
+    act, text, name = a["action"], a.get("text", ""), discord.clean_name(a.get("target") or "")
     try:
-        t = discord.call("peek", name=discord.clean_name(a.get("target") or ""), mine=act in ("edit", "delete"))
-    except (discord.Unavailable, discord.Failed):
-        return True  # the action itself will say what's wrong
+        if act == "call":  # "call Rick" must not ring Nick: a name that was only close is asked about
+            p = discord.call("call", name=name, dry=True)
+            if (from_model or not p["exact"]) and not ctx.confirm(f"Call {p['calling']} on Discord?"):
+                return None
+            return {**a, "channel_id": p["channel_id"]}
+        if act in MODEL_ASKS:
+            return a if ctx.confirm(MODEL_ASKS[act].format(a.get("target") or text).replace(" ?", "?")) else None
+        t = discord.call("peek", name=name, mine=act in ("edit", "delete"))
+    except discord.Unavailable:
+        raise actions.Failed("Discord isn't open, or the ZadeControl plugin is off.") from None
+    except discord.Failed as e:
+        raise actions.Failed(str(e)) from None
     if act == "delete":
-        return ctx.confirm(f"Delete your last message in {t['chat']}?\n{t['text']}")
-    if act == "edit":
-        return ctx.confirm(ask_send(text, f"as your new last message in {t['chat']}").replace("Send", "Change it to", 1)
-                           .replace("Do I really send it", "Do I really change your last message", 1))
-    if act == "reply":
-        return ctx.confirm(ask_send(text, f"as a reply to {t['author']}"))
-    return ctx.confirm(f"React {spoken(a.get('emoji', ''))} on {t['author']}'s message?\n{t['text']}")
+        ok = ctx.confirm(f"Delete your last message in {t['chat']}?\n{t['text']}")
+    elif act == "edit":
+        ok = ctx.confirm(ask_send(text, f"as your new last message in {t['chat']}").replace("Send", "Change it to", 1)
+                         .replace("Do I really send it", "Do I really change your last message", 1))
+    elif act == "reply":
+        ok = ctx.confirm(ask_send(text, f"as a reply to {t['author']}"))
+    else:
+        ok = ctx.confirm(f"React {spoken(a.get('emoji', ''))} on {t['author']}'s message?\n{t['text']}")
+    return {**a, "channel_id": t["channel_id"], "message_id": t["message_id"]} if ok else None
 
 
 def ask_send(text, where):
@@ -470,6 +494,13 @@ def dispatch(ctx, action, from_model=False):
             except discord.Failed as e:
                 return str(e), False
             to = found["label"] if found else a.get("to", "")
+            if re.fullmatch(r"(?:(?:a|the|my|this) )?(?:message|msg|text|dm)?", a.get("text", "").strip(" .").lower()):
+                # "send a message to dexorto": "a message" isn't what to send, so ask
+                text = discord.reply_text(ctx.ask_user(f"What should I say to {to}?"))
+                if not text:
+                    return "Cancelled.", False
+                a = {**a, "text": text}
+                action = {**action, "args": a}
             if found and discord.screenshot_meant(a.get("text", "")):  # "send the screenshot to ...": attach it
                 shot = discord.latest_screenshot()
                 if not shot:
@@ -483,10 +514,11 @@ def dispatch(ctx, action, from_model=False):
             if found:
                 discord.call("send", channel_id=found["channel_id"], text=a.get("text", ""))
                 return f"Sent to {to}.", True
-        elif name == "discord" and a.get("action") in ("reply", "edit", "delete") or \
-                name == "discord" and from_model and a.get("action") in ("react", "unreact"):
-            if not discord_confirm(ctx, a):
+        elif name == "discord" and discord_asks(a, from_model):
+            a = discord_confirm(ctx, a, from_model)
+            if a is None:
                 return "Cancelled.", False
+            action = {**action, "args": a}
         elif model_close or model_keys or needs_confirm(name, ctx.cfg["safety"]["confirm"], a):
             if not ctx.confirm(ask_do(name, a)):
                 return "Cancelled.", False
@@ -837,7 +869,11 @@ def main():
         log.info("asked %r, heard %r", question.split("\n")[0], answer)
         return actions.is_yes(answer)
 
-    ctx = Ctx(cfg, conn, say, confirm, predict=laya_predictor(cfg))
+    def ask_user(question):
+        say(question)
+        return "" if barge else hear(8.0, keep_reply=True) or ""
+
+    ctx = Ctx(cfg, conn, say, confirm, predict=laya_predictor(cfg), ask_user=ask_user)
     atexit.register(lambda: ctx.replay and ctx.replay.stop())  # on exit or restart: stop recorders, free the RAM
     ctx.show = ui.set
     ctx.app_words = actions.app_names()  # your installed apps and games, so Whisper expects their names
@@ -860,6 +896,8 @@ def main():
         decline a call. Silence leaves it alone."""
         from . import discord
 
+        if e["kind"] == "call" and time.time() - e.get("at", 0) / 1000 > 30:  # it has stopped ringing by now
+            return
         say(discord.event_line(e))
         if barge:
             return
@@ -874,14 +912,23 @@ def main():
                 return
             if not said or said in STOP_WORDS or dismissed(said) or re.match(r"(?:no|nope|nah|nahi|later)\b", said):
                 return
-            text = discord.reply_text(answer)
+            # a plain "yes please" to "Reply?" isn't the message: ask what to say
+            text = "" if actions.is_yes(answer) else discord.reply_text(answer)
             if not text:
-                say("What should I say?")
-                text = discord.reply_text(hear(8.0, keep_reply=True) or "")
-            if text and confirm(ask_send(text, f"to {e['from']}")):
-                discord.call("send", channel_id=e["channel_id"], text=text)
-                say(f"Sent to {e['from']}.")
-        except (discord.Unavailable, discord.Failed) as err:
+                text = discord.reply_text(ask_user("What should I say?"))
+            # a mention is answered as a reply in its channel, where everyone there sees it: say so
+            mention = e["kind"] == "mention" and e.get("message_id")
+            where = f"as a reply to {e['from']} in {e['where']}" if mention else f"in {e['where']}" if e.get("where") \
+                else f"to {e['from']}"
+            if text and confirm(ask_send(text, where)):
+                if mention:
+                    discord.call("reply", channel_id=e["channel_id"], message_id=e["message_id"], text=text)
+                else:
+                    discord.call("send", channel_id=e["channel_id"], text=text)
+                say(f"{'Replied' if mention else 'Sent'} to {e['from']}.")
+        except discord.Failed as err:
+            say(str(err))
+        except discord.Unavailable as err:
             log.warning("discord: %s", err)
 
     def discord_names():
