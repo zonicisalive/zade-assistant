@@ -113,11 +113,12 @@ class Screen:
 
     CHUNK = 5
 
-    def __init__(self, seconds, binary="wf-recorder"):
+    def __init__(self, seconds, binary="wf-recorder", fps=30):
         for old in pathlib.Path("/dev/shm").glob("zade-screen-*"):  # left by a Zade that was killed: RAM held for nothing
             shutil.rmtree(old, ignore_errors=True)
         self.dir = pathlib.Path(tempfile.mkdtemp(prefix="zade-screen-", dir="/dev/shm"))
-        rec = [binary, "-c", "h264_vaapi", "-F", "scale_vaapi=format=nv12", "-r", "60", "-m", "mpegts", "-f", "/dev/stdout"]
+        # fps: every frame is copied off the desktop by the compositor, so 60 costs about twice the GPU of 30
+        rec = [binary, "-c", "h264_vaapi", "-F", "scale_vaapi=format=nv12", "-r", str(fps), "-m", "mpegts", "-f", "/dev/stdout"]
         if device := gpu_device():
             rec[1:1] = ["-d", device]
         if output := screen_output():  # the monitor focused now: a restart after it went off picks again
@@ -164,8 +165,8 @@ def mp3(samples, path):
 
 
 class Replay:
-    def __init__(self, seconds=30, sources="both", screen=False, hidden=False):
-        self.seconds, self.sources, self.screen_on, self.hidden = seconds, sources, screen, hidden
+    def __init__(self, seconds=30, sources="both", screen=False, hidden=False, fps=30):
+        self.seconds, self.sources, self.screen_on, self.hidden, self.fps = seconds, sources, screen, hidden, fps
         names = ["system", "mic"] if sources == "both" else [sources]
         self.rings, self.screen, self.binary = {}, None, None
         try:  # a part that fails to start (ffmpeg missing, /dev/shm full) stops the ones already running
@@ -175,7 +176,7 @@ class Replay:
             if screen:
                 self.binary = recorder(hidden)
                 if self.binary:
-                    self.screen = Screen(seconds, self.binary)
+                    self.screen = Screen(seconds, self.binary, fps)
                 else:
                     log.warning("screen replay off: wf-recorder isn't installed")
         except BaseException:
@@ -192,7 +193,7 @@ class Replay:
         if self.screen and not self.screen.alive():
             dead.append("screen")
             self.screen.stop()
-            self.screen = Screen(self.seconds, self.binary)
+            self.screen = Screen(self.seconds, self.binary, self.fps)
         return dead
 
     def save(self, seconds=None, folder=FOLDER):

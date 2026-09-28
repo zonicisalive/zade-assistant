@@ -660,7 +660,7 @@ def test_replay_start_failure_is_not_retried_and_dead_recorders_restart(monkeypa
 
     class Fine:
         def __init__(self, *a):
-            self.seconds, self.sources, self.screen_on, self.hidden = a
+            self.seconds, self.sources, self.screen_on, self.hidden, self.fps = a
 
         def heal(self):
             healed.append(1)

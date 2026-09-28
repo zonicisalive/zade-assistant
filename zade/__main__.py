@@ -357,8 +357,9 @@ def sync_replay(ctx, now=None):
     now = time.monotonic() if now is None else now
     c = ctx.cfg.get("clips", {})
     want = (max(5, min(120, int(c.get("seconds", 30)))), c.get("sources", "both"), bool(c.get("screen")),
-            bool(c.get("hide_from_shell"))) if c.get("enabled") else None
-    have = (ctx.replay.seconds, ctx.replay.sources, ctx.replay.screen_on, ctx.replay.hidden) if ctx.replay else None
+            bool(c.get("hide_from_shell")), int(c.get("fps", 30))) if c.get("enabled") else None
+    have = (ctx.replay.seconds, ctx.replay.sources, ctx.replay.screen_on, ctx.replay.hidden,
+            ctx.replay.fps) if ctx.replay else None
     if want == have:
         if ctx.replay and now >= ctx.replay_check_at:
             ctx.replay_check_at = now + 30
