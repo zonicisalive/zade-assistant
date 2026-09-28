@@ -760,3 +760,11 @@ def test_messages_and_typing_keep_every_word_as_said(monkeypatch):
     z.handle(ctx, "type hi and press enter")
     assert [a["args"] for a in ran] == [{"text": "Hello Zade, please review my PR."}, {"text": "hi"}, {"keys": "enter"}]
     assert z.said_text("what's up", "Say hey, what's up to Dexorto on Discord.") == "hey, what's up"
+
+
+def test_hindi_goes_to_the_model_in_hindi_and_to_patterns_in_english_letters():
+    got, ran = [], []
+    ctx = make([], ask=lambda text, *a, **k: got.append(text) or "ठीक है।", run_action=lambda a, c: ran.append(a) or "")
+    z.handle(ctx, "तू पागल है क्या")
+    assert got == ["तू पागल है क्या"]                       # the model answers in Hindi: the Hindi voice speaks it
+    assert z.handle(ctx, "रुको") == "" and len(got) == 1      # "ruko": Zade's own stop phrase, in Devanagari

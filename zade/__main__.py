@@ -691,6 +691,8 @@ def offer(ctx, text, acts):
 def handle(ctx, raw):
     """Handle one utterance; return what Zade replied (for follow-up listening)."""
     ctx.turn, ctx.tried, ctx.request = [], False, raw  # before any early return: a taught "goodnight" must not save older actions
+    heard = raw  # as heard, for the model: Hindi in Devanagari, so it answers in Hindi
+    raw = hinglish.to_latin(raw)  # Zade's own phrases, names and messages work in English letters
     text = router.normalize(raw)
     snooze = router.parse_snooze(text) is not None  # "stop for 10 minutes" is a command, not a plain stop
     if not snooze and (after := after_stop(raw)) is not None:
@@ -698,6 +700,7 @@ def handle(ctx, raw):
             text = "stop"  # "Hey, stop." "Stop. Cancel." "Nobody will listen. Hey, stop."
         else:
             raw, text = after, router.normalize(after)  # "Stop. Play the next song.": the correction counts
+            heard = after
     if not snooze and (text in STOP_WORDS or dismissed(text)):
         return ""
     if taught := router.parse_teach(text):
@@ -721,7 +724,7 @@ def handle(ctx, raw):
         if action["name"] == "discord" and action["args"].get("target"):
             action["args"]["target"] = as_said(action["args"]["target"], raw)
         if action["name"] == "look_at_screen" and r.source == "pattern":  # the question in the user's own words
-            action["args"]["question"] = raw
+            action["args"]["question"] = heard
         # and messages and typed text exactly as said, words normalizing drops included
         if (action["name"] in ("send_message", "type_text") or action["name"] == "discord" and
                 action["args"].get("action") in ("reply", "edit")) and action["args"].get("text"):
@@ -758,7 +761,7 @@ def handle(ctx, raw):
 
         # the words as heard: normalizing drops "can you" and the like for matching commands, which turns
         # "What can you do?" into "what do"
-        said = " ".join((raw or "").split()) or text
+        said = " ".join((heard or "").split()) or text
         if brain.should_think(said, ctx.cfg):  # thinking takes a while: say so, instead of a long silence
             ctx.say("Let me think.")
         answer = ctx.ask(said, memory.facts(ctx.conn), ctx.cfg, run_tool, recent(ctx))
@@ -771,7 +774,7 @@ def handle(ctx, raw):
         if executed:
             memory.log(ctx.conn, text, executed, "llm", True)
             offer(ctx, text, executed)
-    ctx.history.append((time.monotonic(), " ".join((raw or "").split()) or text, reply))  # as heard, for the model
+    ctx.history.append((time.monotonic(), " ".join((heard or "").split()) or text, reply))  # as heard, for the model
     del ctx.history[:-20]
     return reply
 
@@ -878,10 +881,10 @@ def main():
             except Exception as e:  # never lose the request over it
                 log.warning("voice focus failed: %s", e)
         words = [*memory.shortcuts(conn), *fact_words(memory.facts(conn)), *ctx.app_words, *ctx.discord_words]
-        # Hindi comes back in Devanagari: in English letters from here on, as Zade's phrases, yes/no answers
-        # and the overlay expect ("band karo", "haan")
-        text = hinglish.to_latin(stt.transcribe(a, cfg, hotwords=words))
-        ui.show("thinking", heard=text.strip())
+        # Hindi comes back in Devanagari. It stays so for the model (which then answers in Hindi, spoken by
+        # the Hindi voice); the overlay, Zade's phrases and yes/no answers get English letters ("band karo").
+        text = stt.transcribe(a, cfg, hotwords=words)
+        ui.show("thinking", heard=hinglish.to_latin(text).strip())
         return text
 
     spoke_at = []
@@ -918,13 +921,13 @@ def main():
         say(question)
         if barge:  # interrupted instead of answering: treat as no
             return False
-        answer = hear(5.0, keep_reply=True) or ""
+        answer = hinglish.to_latin(hear(5.0, keep_reply=True) or "")
         log.info("asked %r, heard %r", question.split("\n")[0], answer)
         return actions.is_yes(answer)
 
     def ask_user(question):
         say(question)
-        return "" if barge else hear(8.0, keep_reply=True) or ""
+        return "" if barge else hinglish.to_latin(hear(8.0, keep_reply=True) or "")
 
     ctx = Ctx(cfg, conn, say, confirm, predict=laya_predictor(cfg), ask_user=ask_user)
     atexit.register(lambda: ctx.replay and ctx.replay.stop())  # on exit or restart: stop recorders, free the RAM
@@ -954,7 +957,7 @@ def main():
         say(discord.event_line(e))
         if barge:
             return
-        answer = hear(6.0, keep_reply=True) or ""
+        answer = hinglish.to_latin(hear(6.0, keep_reply=True) or "")
         said = router.normalize(answer)
         try:
             if e["kind"] == "call":
@@ -1061,7 +1064,7 @@ def main():
         if source == "dictate":  # voice typing: record while the key is held, type it, no model
             audio.cue(stream, soft=True, cfg=cfg)
             text = hear(released=lambda: not typer.held(), cancelled=typer.cancelled)
-            if text and (typed := dictation_text(text)):
+            if text and (typed := dictation_text(hinglish.to_latin(text))):
                 try:
                     actions._call(["wtype", "--", typed])
                     log.info("typed %r", typed)
