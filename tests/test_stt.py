@@ -252,3 +252,18 @@ def test_unused_speech_servers_are_stopped(monkeypatch):
     monkeypatch.setattr(S.subprocess, "run", lambda cmd, **kw: ran.append((cmd[2], cmd[-1])))
     S.stop_unused(c)
     assert ran == [("stop", "zade-whisper")]
+
+
+def test_the_speech_model_is_stopped_once_it_has_listened(monkeypatch):
+    import zade.stt as S
+
+    c = copy.deepcopy(config.DEFAULTS)
+    c["stt"]["provider"] = "qwen"
+    ran = []
+    monkeypatch.setattr(S.subprocess, "run", lambda cmd, **kw: ran.append(cmd[2:]))
+    S.gpu_start(c)
+    S.gpu_stop(c)
+    assert ran == [["start", "--no-block", "zade-qwen-asr"], ["stop", "--no-block", "zade-qwen-asr"]]
+    c["stt"]["provider"] = "whisper"  # the CPU model: nothing to stop
+    S.gpu_stop(c)
+    assert len(ran) == 2

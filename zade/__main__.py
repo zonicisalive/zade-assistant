@@ -885,6 +885,7 @@ def main():
         # Hindi comes back in Devanagari. It stays so for the model (which then answers in Hindi, spoken by
         # the Hindi voice); the overlay, Zade's phrases and yes/no answers get English letters ("band karo").
         text = stt.transcribe(a, cfg, hotwords=words)
+        stt.gpu_stop(cfg)  # the brain runs now: the speech model's VRAM is free until the next listen
         ui.show("thinking", heard=hinglish.to_latin(text).strip())
         return text
 

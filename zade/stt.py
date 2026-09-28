@@ -62,6 +62,14 @@ def gpu_idle(cfg, now=None):
         subprocess.run(["systemctl", "--user", "stop", "--no-block", service], capture_output=True)
 
 
+def gpu_stop(cfg):
+    """Free the speech model's VRAM now: what was said is written down, and the brain is about to run (both
+    together took ~8 GB). The next listen starts it again while the user talks (it loads in under a second)."""
+    if service := SERVICES.get(cfg["stt"]["provider"]):
+        _gpu["used"] = 0.0
+        subprocess.run(["systemctl", "--user", "stop", "--no-block", service], capture_output=True)
+
+
 def _qwen(audio, cfg, prompt):
     """Qwen3-ASR through llama.cpp's llama-server (on the GPU through Vulkan). The hint words go in as
     context. With stt.language = english the reply is started as "language English" (Hindi is then translated);
