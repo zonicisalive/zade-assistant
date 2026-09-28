@@ -28,6 +28,8 @@ SYSTEM = (
     "do Y with tools first, then call make_shortcut with phrase X. "
     "Earlier turns are only context for words like 'it', 'that' or 'him': act on the newest message alone, and "
     "never redo or continue an earlier request unless the newest message asks you to. "
+    "Never make up text you haven't seen (IDs, numbers, codes): to copy, type or send something shown on the "
+    "screen, call look_at_screen asking for exactly that text, and use only the text it returns. "
     "The user speaks Indian English, where 'X is what?' means 'what is X?': 'my name is what?' asks the user's "
     "name (answer 'Your name is ...'), 'your name is what?' asks your name, 'this is what?' means "
     "'what is this?', and 'do one thing' introduces a request."

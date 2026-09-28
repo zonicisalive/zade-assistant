@@ -87,6 +87,7 @@ DEFAULTS = {
                 "mouth": "smile", "color": "", "blush": True},
     "quiet": {"enabled": False, "start": "23:00", "end": "08:00", "dnd": False},
     "safety": {"confirm": "commands"},  # commands | risky | everything
+    # model: what looks at the screen; "" = the brain itself (llm.model), when it can see images (qwen3.5 can)
     "vision": {"model": "qwen2.5vl:3b"},
     "learning": {"promote_after": 3},
     "history": {"keep": 1000},

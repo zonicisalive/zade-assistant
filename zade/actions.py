@@ -171,7 +171,15 @@ def typed(text):
 
 
 def _feed(cmd, text):
-    subprocess.run(cmd, input=text, text=True, check=False, capture_output=True)
+    """Send text to a command's input. Its output isn't read: wl-copy leaves a helper running to hold the
+    clipboard, and waiting for that helper's output to close hung Zade forever."""
+    try:
+        subprocess.run(cmd, input=text, text=True, check=False, stdout=subprocess.DEVNULL,
+                       stderr=subprocess.DEVNULL, timeout=5)
+    except FileNotFoundError:
+        raise Failed(f"{cmd[0]} isn't installed, so I can't do that.") from None
+    except subprocess.TimeoutExpired:
+        raise Failed(f"{cmd[0]} didn't answer, so that may not have worked.") from None
 
 
 def _output(cmd):

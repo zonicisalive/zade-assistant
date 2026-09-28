@@ -470,3 +470,11 @@ def test_a_discord_request_opens_discord_first_when_it_is_closed(monkeypatch):
     monkeypatch.setattr(discord, "run", lambda a: "Joined the STAFF-VC channel in BITNADE.")
     assert actions.run({"name": "discord", "args": {"action": "join", "target": "staff vc"}}, lambda q: True).startswith("Joined")
     assert calls == [["gtk-launch", "discord"]]
+
+
+def test_a_command_that_leaves_a_helper_running_does_not_hang_zade():
+    import time
+
+    t = time.monotonic()  # like wl-copy: reads the text, leaves a child behind holding its output, exits
+    actions._feed(["sh", "-c", "cat >/dev/null; (sleep 3 &); exit 0"], "text")
+    assert time.monotonic() - t < 2
