@@ -26,6 +26,8 @@ SYSTEM = (
     "into the current window, call type_text. If open_app cannot find an app, tell the user and pass on "
     "its suggestion; never open a web search for it instead. When the user teaches a command (\"when I say X, do Y\"), "
     "do Y with tools first, then call make_shortcut with phrase X. "
+    "Earlier turns are only context for words like 'it', 'that' or 'him': act on the newest message alone, and "
+    "never redo or continue an earlier request unless the newest message asks you to. "
     "The user speaks Indian English, where 'X is what?' means 'what is X?': 'my name is what?' asks the user's "
     "name (answer 'Your name is ...'), 'your name is what?' asks your name, 'this is what?' means "
     "'what is this?', and 'do one thing' introduces a request."
