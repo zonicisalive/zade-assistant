@@ -49,7 +49,9 @@ def look(question, cfg):
                        "and never guess."}],
             think=False if own else None,
             keep_alive=cfg["llm"]["keep_alive"] if own else 0,
-            options={"num_ctx": 8192 if own else 4096},  # a 3/4-size 1440p screenshot is ~3,000 tokens
+            # the brain's own context size: a different one makes Ollama reload the model (twice per question,
+            # ~1.5 s each, and a bigger copy in VRAM). A 3/4-size 1440p screenshot is ~2,000 tokens.
+            options={"num_ctx": cfg["llm"]["num_ctx"] if own else 4096},
         )
         return (r.message.content or "").strip() or "I couldn't make out anything on the screen."
     except (OSError, subprocess.SubprocessError, ollama.ResponseError, httpx.HTTPError) as e:
