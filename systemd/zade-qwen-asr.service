@@ -1,11 +1,13 @@
 [Unit]
-Description=Zade speech recognition (Qwen3-ASR-0.6B via llama.cpp on the GPU through Vulkan, ~1.5 GB VRAM)
+Description=Zade speech recognition (Qwen3-ASR-0.6B via llama.cpp on the GPU through Vulkan, ~1 GB VRAM)
 # Stopping Zade stops this too, so its VRAM is freed (a restart doesn't start it early).
 StopPropagatedFrom=zade.service
 # Build: see README ("Qwen3-ASR"). Zade starts this when it listens and stops it after stt.keep_alive_s
 # idle; it falls back to its CPU model when this isn't running.
 
 [Service]
-ExecStart=%h/.local/share/zade/llama.cpp/build/bin/llama-server -m %h/.local/share/zade/qwen3-asr/Qwen3-ASR-0.6B-Q8_0.gguf --mmproj %h/.local/share/zade/qwen3-asr/mmproj-Qwen3-ASR-0.6B-Q8_0.gguf --host 127.0.0.1 --port 8182 -ngl 99 -c 6144 -np 1
+# 8-bit cache and the small audio encoder on the CPU: 1.0 GB of VRAM instead of 2.0, the same transcripts,
+# +70 ms on a short request (2 s more per minute of speech).
+ExecStart=%h/.local/share/zade/llama.cpp/build/bin/llama-server -m %h/.local/share/zade/qwen3-asr/Qwen3-ASR-0.6B-Q8_0.gguf --mmproj %h/.local/share/zade/qwen3-asr/mmproj-Qwen3-ASR-0.6B-Q8_0.gguf --host 127.0.0.1 --port 8182 -ngl 99 -c 6144 -np 1 -fa on -ctk q8_0 -ctv q8_0 --no-mmproj-offload
 Restart=on-failure
 RestartSec=5
