@@ -103,7 +103,7 @@ Then pick **Settings → Listening → Speech recognition → Large (GPU)** and 
 service when it starts listening (the model loads in ~0.5 s, while you talk) and stops it after
 `stt.keep_alive_s` (30 s) without a request, so it uses no VRAM while idle.
 
-## Qwen3-ASR (optional, ~1 GB VRAM while listening)
+## Qwen3-ASR (optional, ~0.8 GB VRAM while listening)
 
 What I ended up using: Qwen3-ASR-0.6B through llama.cpp's Vulkan backend. On recordings of me and my friends
 (Indian accents) it made ~20% fewer word errors than Whisper large-v3-turbo, and answers in ~0.06 s once loaded

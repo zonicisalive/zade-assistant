@@ -16,7 +16,7 @@ def rms(frame):
     return float(np.sqrt(np.mean(frame.astype(np.float32) ** 2)))
 
 
-SAFETY_S = 180  # with no limit set, a recording still stops after 3 minutes, so a TV can't hold Zade forever
+SAFETY_S = 60  # with no limit set, a recording still stops after a minute (the speech model is sized for that)
 
 
 def limit_s(a):
