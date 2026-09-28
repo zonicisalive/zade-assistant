@@ -810,7 +810,8 @@ def safe_handle(ctx, text):
     try:
         reply = handle(ctx, text)
         if ctx.route or reply:  # silence and "stop" are not worth a history entry
-            memory.log_request(ctx.conn, text.strip(), reply, ctx.route or "none",
+            # the app's History page shows Hindi in English letters, like the overlay
+            memory.log_request(ctx.conn, hinglish.to_latin(text.strip()), hinglish.to_latin(reply), ctx.route or "none",
                                (time.perf_counter() - t) * 1000, ctx.cfg["history"]["keep"])
         return reply
     except Exception:  # one bad request must not kill the assistant
