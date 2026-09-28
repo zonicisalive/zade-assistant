@@ -267,3 +267,20 @@ def test_a_model_without_the_right_tool_gets_all_of_them(monkeypatch):
     monkeypatch.setattr(brain, "candidates", lambda cfg, vram, resident: [("ollama", {})])
     brain.ask("frobnicate the thing", [], cfg(), lambda n, a: "")
     assert sent == [len(brain.tools_for("frobnicate the thing")), len(brain.TOOLS)]
+
+
+def test_a_reply_that_only_says_it_acted_is_asked_again(monkeypatch):
+    calls, ran = [], []
+
+    def chat(name, system, text, tools, run_tool, cfg, extra, history=(), **kw):
+        calls.append(system)
+        if len(calls) == 1:
+            return "[happy] I'll turn the volume up a bit for you."
+        run_tool("volume", {"delta": 10})
+        return "[happy] Turned it up."
+
+    monkeypatch.setattr(brain.providers, "chat", chat)
+    monkeypatch.setattr(brain, "candidates", lambda cfg, vram, resident: [("ollama", {})])
+    assert brain.ask("turn it up", [], cfg(), lambda n, a: ran.append(n) or "") == "[happy] Turned it up."
+    assert ran == ["volume"] and brain.NUDGE in calls[1]
+    assert not brain.PROMISE.search("Let me know if you need anything.") and not brain.PROMISE.search("I'll be here.")

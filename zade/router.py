@@ -388,6 +388,14 @@ def parse_pattern(text, find_app):
         return {"name": "date", "args": {}}
     if re.fullmatch(r"lock(?: the| my)?(?: screen| computer| pc| system)?", text):
         return {"name": "lock_screen", "args": {}}
+    # "what's on the screen", "tum screen dekho aur batao ...", "screen pe kya dikh raha hai": look first, with the
+    # whole request as the question (the model sometimes answered without looking). Copying or sending what's
+    # there takes more than one step: the model does those.
+    if re.search(r"\bscreen\b", text) and re.search(r"\b(?:see|look|read|what|whats|what's|tell|check|who|which|how|"
+                                                    r"dekh\w*|dikh\w*|bata\w*|padh\w*|kya|kaun|kiske|kitne)\b", text) \
+            and not re.search(r"\b(?:copy|send|type|paste|share|bhej\w*|screenshot|record\w*|clip|brightness|lock|"
+                              r"on|off|full|time)\b", text):
+        return {"name": "look_at_screen", "args": {"question": text}}
     if re.fullmatch(r"(?:take a |take )?screenshot", text):
         return {"name": "screenshot", "args": {}}
     # "screenshot discord", "take a screenshot of the firefox window", "discord ka ss lo": only that app's

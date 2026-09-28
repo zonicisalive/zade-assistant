@@ -8,6 +8,16 @@ def find(name):
     return ("firefox", "firefox") if name == "firefox" else None
 
 
+def test_questions_about_the_screen_look_first():
+    look = lambda text: router.parse_pattern(router.normalize(text), lambda n: None)
+    for text in ["What's on the screen?", "tum screen dekho aur batao sabse zyada vouches kiske hain",
+                 "screen pe kya dikh raha hai", "Just see the screen."]:
+        assert look(text) == {"name": "look_at_screen", "args": {"question": router.normalize(text)}}, text
+    for text in ["see on the screen and copy the transaction id", "take a screenshot", "turn the screen off",
+                 "make it full screen", "lock the screen"]:
+        assert (look(text) or {}).get("name") != "look_at_screen", text
+
+
 def test_hindi_as_spoken_is_kept():
     assert router.normalize("तू पागल है।") == "तू पागल है"
 

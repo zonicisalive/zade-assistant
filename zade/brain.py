@@ -28,6 +28,9 @@ SYSTEM = (
     "do Y with tools first, then call make_shortcut with phrase X. "
     "Earlier turns are only context for words like 'it', 'that' or 'him': act on the newest message alone, and "
     "never redo or continue an earlier request unless the newest message asks you to. "
+    "Act instead of asking: if a tool can find something out (look_at_screen for anything on the screen, "
+    "web_answer for facts), use it; ask the user only when no tool can get what you need. Never say you looked, "
+    "checked or searched unless you called the tool for it. "
     "Never make up text you haven't seen (IDs, numbers, codes): to copy, type or send something shown on the "
     "screen, call look_at_screen asking for exactly that text, and use only the text it returns. "
     "The user speaks Indian English, where 'X is what?' means 'what is X?': 'my name is what?' asks the user's "
@@ -124,6 +127,12 @@ GROUPS = [
      r"power|log ?out|sleep|unload|\block|bright|\bdim|dark|disturb|\bdnd\b|clip|replay|record|last \d+ ?(?:sec|min)"),
     ({"clipboard_read", "clipboard_copy"}, r"clipboard|\bcop(?:y|ied)|paste"),
 ]
+# A reply that says it did or will do something ("I'll turn it up", "Got it", "Done") while no tool ran: small
+# models do this now and then, more so with a chatty persona. Asked once more, they usually make the call.
+PROMISE = re.compile(r"\b(?:i'?ll(?! be)|i will|i'?m going to|let me(?! know)|got it|noted|done|sure thing|on it|"
+                     r"(?:i'?ve|i have) (?:set|turned|changed|saved|added|noted|remembered|opened|played|started))\b", re.I)
+NUDGE = ("\nYour answer must do what it says: if the request asks you to do, change, save or check something, "
+         "call the tool for it now instead of only saying so.")
 NAMES = []  # Discord servers, people and voice channels (set by the main loop): saying one brings the Discord tools
 CANT = re.compile(r"\b(?:can'?t|cannot|unable|not able|don'?t have (?:a |the |any )?(?:way|tool|access|ability)|"
                   r"no (?:way|tool)|isn'?t possible|not possible)\b", re.I)
@@ -238,6 +247,10 @@ def ask(text, facts, cfg, run_tool, history=(), vram=vram_free_gb, resident=resi
                 log.info("no tool fit (%d of %d sent), asking again with all", len(tools), len(TOOLS))
                 reply = providers.chat(name, system + (THINK_BRIEFLY if think else ""), text, TOOLS, tracked, cfg,
                                        extra, history, **({"think": True} if think else {}))
+            elif not ran and not leaked_call(reply) and PROMISE.search(reply or ""):
+                log.info("the model said it acted but called no tool, asking again")
+                reply = providers.chat(name, system + NUDGE + (THINK_BRIEFLY if think else ""), text, TOOLS, tracked,
+                                       cfg, extra, history, **({"think": True} if think else {}))
             if leaked := leaked_call(reply):  # the call written out as text instead of made: make it (confirmations apply)
                 result = tracked(*leaked)
                 return result if result and result != "done" else "Done."

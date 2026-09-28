@@ -160,6 +160,7 @@ class Ctx:
     discord_words: list = field(default_factory=list)  # Discord servers, people, voice channels (ZadeControl)
     show: Callable = lambda **fields: None  # overlay updates (emotion); ui.set in the real app
     ask_user: Callable[[str], str] = lambda question: ""  # says a question, returns the answer heard
+    request: str = ""  # what the user said this turn, as heard
     route: str = ""  # how the last request was handled (shortcut, pattern, llm, ...), for History
 
 
@@ -588,7 +589,11 @@ def dispatch(ctx, action, from_model=False):
         if name == "look_at_screen":
             from . import vision
 
-            return vision.look(a.get("question") or "What's on the screen?", ctx.cfg), True
+            q = a.get("question") or "What's on the screen?"
+            # the model's summary of the question can lose what to find ("the transition text"): add the user's words
+            if ctx.request and router.normalize(ctx.request) not in router.normalize(q):
+                q += f"\n(The user said: {ctx.request})"
+            return vision.look(q, ctx.cfg), True
         if name == "clip":
             if not ctx.replay:
                 if ctx.replay_failed:
@@ -685,7 +690,7 @@ def offer(ctx, text, acts):
 
 def handle(ctx, raw):
     """Handle one utterance; return what Zade replied (for follow-up listening)."""
-    ctx.turn, ctx.tried = [], False  # before any early return: a taught "goodnight" must not save older actions
+    ctx.turn, ctx.tried, ctx.request = [], False, raw  # before any early return: a taught "goodnight" must not save older actions
     text = router.normalize(raw)
     snooze = router.parse_snooze(text) is not None  # "stop for 10 minutes" is a command, not a plain stop
     if not snooze and (after := after_stop(raw)) is not None:
@@ -715,6 +720,8 @@ def handle(ctx, raw):
     for action in r.actions or []:  # routing lower-cases; names go to Discord with the capitals as said
         if action["name"] == "discord" and action["args"].get("target"):
             action["args"]["target"] = as_said(action["args"]["target"], raw)
+        if action["name"] == "look_at_screen" and r.source == "pattern":  # the question in the user's own words
+            action["args"]["question"] = raw
         # and messages and typed text exactly as said, words normalizing drops included
         if (action["name"] in ("send_message", "type_text") or action["name"] == "discord" and
                 action["args"].get("action") in ("reply", "edit")) and action["args"].get("text"):
