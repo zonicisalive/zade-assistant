@@ -137,16 +137,6 @@ def test_music_reply_says_what_really_played(monkeypatch):
                      vram=lambda: 8.0) == "[embarrassed] I couldn't reach Spotify right now."
 
 
-def test_warm_up_skips_when_the_model_unloads_instantly(monkeypatch):
-    loads = []
-    monkeypatch.setattr(brain, "_load", lambda c, keep: loads.append(keep))
-    monkeypatch.setattr(brain, "vram_free_gb", lambda: 12.0)
-    brain.warm_up(cfg(keep_alive="0"))
-    assert loads == []
-    brain.warm_up(cfg(keep_alive="5m"))
-    assert loads == ["5m"]
-
-
 def test_fix_song_returns_one_clean_line(monkeypatch):
     monkeypatch.setattr(providers, "chat", lambda *a, **k: '[happy] "Business by Eminem"\nextra')
     assert brain.fix_song("business by amine am", cfg(), vram=lambda: 8.0) == "Business by Eminem"

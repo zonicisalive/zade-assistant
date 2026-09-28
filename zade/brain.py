@@ -162,7 +162,7 @@ def vram_free_gb(root="/sys/class/drm"):
 
 
 def resident_on_gpu(cfg):
-    """True when our model is already loaded on the GPU (e.g. by warm_up), so its own VRAM use does not count.
+    """True when our model is already loaded on the GPU (by an earlier request), so its own VRAM use does not count.
     The thinking model counts too: only one of the two is ever loaded, the other unloaded before it runs."""
     ours = {cfg["llm"]["model"], cfg["llm"].get("think_model") or cfg["llm"]["model"]}
     try:
@@ -357,14 +357,6 @@ def _load(cfg, keep_alive):
             model=llm["model"], prompt="", keep_alive=keep_alive, options={"num_ctx": llm["num_ctx"]})
     except (ollama.ResponseError, httpx.HTTPError, ConnectionError) as e:
         log.warning("ollama load/unload failed: %s", e)
-
-
-def warm_up(cfg):
-    if cfg["llm"]["provider"] != "ollama" or str(cfg["llm"]["keep_alive"]) in ("0", "0s"):
-        return  # nothing to warm: with keep_alive 0 the model would unload again straight away
-    free = vram_free_gb()
-    if free is None or free >= cfg["llm"]["vram_min_free_gb"]:
-        _load(cfg, cfg["llm"]["keep_alive"])
 
 
 def unload(cfg):

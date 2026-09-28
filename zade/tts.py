@@ -20,6 +20,26 @@ def _piper(voice, data):
     return PiperVoice.load(str(pathlib.Path(data).expanduser() / "voices" / f"{voice}.onnx"))
 
 
+_kokoro_used = [0.0]
+
+
+def idle(seconds=30, now=None):
+    """Drop the Kokoro voice model from RAM (~300 MB) once unused for `seconds`; the next reply loads it again
+    (well under a second)."""
+    now = time.monotonic() if now is None else now
+    if _kokoro_used[0] and now - _kokoro_used[0] > seconds:
+        _kokoro_used[0] = 0.0
+        _kokoro.cache_clear()
+        import ctypes
+        import gc
+
+        gc.collect()
+        try:  # hand the freed memory back to the system, not just to Python's allocator
+            ctypes.CDLL("libc.so.6").malloc_trim(0)
+        except OSError:
+            pass
+
+
 @functools.cache
 def _kokoro(data):
     from kokoro_onnx import Kokoro
@@ -96,6 +116,7 @@ def _speak_sentences(text, synth, interrupt, done):
 def _speak_kokoro(text, cfg, interrupt=None, done=None):
     t = cfg["tts"]
     k = _kokoro(cfg["paths"]["data"])
+    _kokoro_used[0] = time.monotonic()
     lang = "hi" if t["voice"][:1] == "h" else "en-gb" if t["voice"].startswith("b") else "en-us"
     return _speak_sentences(text, lambda s: k.create(s, voice=t["voice"], speed=t["speed"], lang=lang), interrupt,
                             [] if done is None else done)

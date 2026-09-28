@@ -31,7 +31,7 @@ What I used on my own desktop. Nothing here is required; swap in whatever suits 
 
 - Arch Linux with the niri compositor and the Quickshell-based inir shell (Zade's overlay lives inside it)
 - AMD Radeon RX 9060 XT 16 GB and a Ryzen 5 7600X; the GPU parts run on Vulkan or ROCm
-- Brain: qwen3.5:9b through Ollama (thinking off unless asked), unloaded 30 s after the last request
+- Brain: qwen3.5:4b through Ollama (thinking off unless asked), unloaded 30 s after the last request
 - Hearing: Qwen3-ASR-0.6B through llama.cpp on the GPU (see below), with the small.en Whisper model on the CPU
   as a fallback
 - Wake word: my own "hey Zade", trained on recordings of me and three friends plus synthetic Indian-accented voices

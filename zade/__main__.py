@@ -1011,6 +1011,7 @@ def main():
                 last_names[0] = time.monotonic()  # every 10 min (every 30 s until Discord is up)
                 guarded(discord_names)
             guarded(stt.gpu_idle, cfg)  # frees its VRAM after stt.keep_alive_s
+            guarded(tts.idle)  # and the voice model's RAM, 30 s after the last reply
             guarded(read_typed)
             mtime = config_file.stat().st_mtime if config_file.exists() else 0
             if mtime != config_mtime[0]:  # changed in the app: overlay, sounds, quiet hours, safety apply now
@@ -1093,7 +1094,6 @@ def main():
                 say("Reminder: " + ctx.alerts.pop(0))
             continue
         audio.cue(stream, cfg=cfg)
-        threading.Thread(target=brain.warm_up, args=(cfg,), daemon=True).start()
         # Push-to-talk: while the key is still held, record until it is released.
         ptt_active = source == "hotkey" and ptt and ptt.held()
         if cfg["sound"]["wake_reply"] and not ptt_active:  # e.g. "Yes?" before listening

@@ -115,3 +115,17 @@ def test_a_hindi_reply_uses_the_hindi_voice(monkeypatch):
     tts.speak("श्रेयसिंग के पास सबसे ज़्यादा वाउचर्स हैं।", cfg)
     assert used == ["af_heart", "hf_alpha"]
     assert tts.sentences("पहला। दूसरा।") == ["पहला।", "दूसरा।"]
+
+
+def test_the_voice_model_leaves_ram_when_idle(monkeypatch):
+    from zade import tts
+
+    loads = []
+    monkeypatch.setattr(tts, "_kokoro_used", [100.0])
+    tts._kokoro.cache_clear()
+    monkeypatch.setattr(tts, "_kokoro", __import__("functools").cache(lambda data: loads.append(1) or object()))
+    tts._kokoro("x")
+    tts.idle(30, now=120.0)             # used 20 s ago: kept
+    assert tts._kokoro.cache_info().currsize == 1
+    tts.idle(30, now=131.0)             # 31 s: dropped, loaded again on the next reply
+    assert tts._kokoro.cache_info().currsize == 0 and tts._kokoro_used[0] == 0.0
