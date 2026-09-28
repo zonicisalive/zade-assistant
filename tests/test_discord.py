@@ -76,8 +76,10 @@ def test_waits_while_discord_starts(monkeypatch):
     monkeypatch.setattr(discord, "_running", lambda: True)
     real_wait_ready()
     assert answers == []
-    monkeypatch.setattr(discord, "_running", lambda: False)  # not running at all: no waiting
-    answers.append(discord.Unavailable("closed"))
+    monkeypatch.setattr(discord, "_running", lambda: False)  # not running at all: only a short grace
+    clock = iter(range(0, 100, 2))
+    monkeypatch.setattr("time.monotonic", lambda: next(clock))
+    answers.extend([discord.Unavailable("closed")] * 5)
     with pytest.raises(discord.Unavailable):
         real_wait_ready()
 
@@ -93,6 +95,7 @@ def test_emoji_by_everyday_name():
     assert discord.emoji("fire") == "\U0001f525" and discord.emoji("heart") == "❤️"
     assert discord.emoji("100") == "\U0001f4af" and discord.emoji("thumbs up") == "\U0001f44d"
     assert discord.emoji("\U0001f525") == "\U0001f525" and discord.emoji("zzzqqq") is None
+    assert discord.emoji(":fire:") == "\U0001f525" and discord.emoji(":thumbs_up:") == "\U0001f44d"
 
 
 def test_announcements_and_replies():

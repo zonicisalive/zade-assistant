@@ -73,16 +73,17 @@ def _running():
 
 def wait_ready(seconds=30):
     """Wait while Discord is starting ("open discord and join staff vc": the plugin comes up seconds after the
-    window, and the servers a little later). Raises Unavailable at once if Discord isn't running."""
+    window, and the servers a little later). Raises Unavailable after 5 s if Discord isn't running."""
     import time
 
-    deadline = time.monotonic() + seconds
+    start = time.monotonic()
     while True:
         try:
-            if call("servers", timeout=2)["servers"] or time.monotonic() > deadline:
+            if call("servers", timeout=2)["servers"] or time.monotonic() > start + seconds:
                 return
         except Unavailable:
-            if not _running() or time.monotonic() > deadline:
+            # a Discord just launched ("open discord and ...") may not be a process yet: a few seconds' grace
+            if time.monotonic() > start + seconds or not _running() and time.monotonic() > start + 5:
                 raise
         time.sleep(1)
 
@@ -124,7 +125,7 @@ def emoji(name):
     name = (name or "").strip()
     if any(unicodedata.category(c) == "So" for c in name):
         return name
-    said = " ".join(name.lower().replace("emoji", "").replace("-", " ").split())
+    said = " ".join(name.lower().replace("emoji", "").replace("-", " ").replace(":", " ").replace("_", " ").split())
     if not said:
         return None
     best = None

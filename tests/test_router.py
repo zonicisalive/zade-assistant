@@ -355,6 +355,7 @@ def test_everyday_sentences_are_not_discord_actions():
     assert D("react fire to alex message on discord") is None  # the model sorts out who "alex" is
     assert D("reply to dexorto saying hi on discord") == {"action": "reply", "target": "dexorto", "text": "hi"}
     assert D("reply to that on discord") is None
+    assert D("react mad emoji with latest message on discord") == {"action": "react", "emoji": "mad"}
 
 
 def test_react_to_the_message_with_an_emoji():

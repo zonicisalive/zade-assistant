@@ -172,7 +172,7 @@ def parse_discord(text):
     # or on Discord ("react or vue, which is better?" is a question). No " to "/" on " inside the emoji: "react
     # fire to alex message" (no 's) goes to the model instead of reacting "fire to alex message" to the open chat.
     if (m := re.fullmatch(rf"react(?: with| using)? (?:a |an |the )?((?:(?! to | on ).)+?)( emoji| emote| reaction)?"
-                          rf"(?: (?:to|on) (?:(.+?)(?:'s|s) )?({msg}))?(?: (?:on|in) discord)?", t)) \
+                          rf"(?: (?:to|on|with) (?:the )?(?:(.+?)(?:'s|s) )?({msg}))?(?: (?:on|in) discord)?", t)) \
             and (m[2] or m[4] or said_discord or discord.emoji(m[1])):
         return {"action": "react", "emoji": m[1], **({"target": m[3]} if m[3] else {})}
     if m := re.fullmatch(r"reply (?:to )?(.+?) (?:on|in) discord (?:saying|with|that) (.+)"
