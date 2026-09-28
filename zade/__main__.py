@@ -977,6 +977,7 @@ def main():
         from . import discord
 
         ctx.discord_words = discord.names()
+        brain.NAMES[:] = ctx.discord_words  # saying a Discord name brings the Discord tools
 
     def read_typed():
         typed.extend(read_inbox(inbox))

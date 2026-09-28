@@ -242,3 +242,28 @@ def test_only_one_chat_model_stays_in_vram():
     unloaded.clear()
     providers._only_one(Client(), "qwen2.5:7b-instruct", {"qwen2.5:7b-instruct", "qwen3:8b"})
     assert unloaded == []                             # it's the one needed
+
+
+def test_rare_tools_are_sent_only_when_they_come_up(monkeypatch):
+    names = lambda text, history=(): {t["name"] for t in brain.tools_for(text, history)}
+    assert "discord" not in names("open firefox") and "power" not in names("open firefox")
+    assert {"open_app", "volume", "play_music", "remember"} <= names("open firefox")
+    assert {"discord", "send_message"} <= names("message dexorto hi")
+    assert "set_reminder" in names("remind me at 5 pm to call mom")
+    assert "power" in names("shut down the pc") and "clipboard_read" in names("what's in my clipboard")
+    assert "discord" in names("yes", [("dexorto on discord: you on?", "Reply?")])   # the conversation counts
+    monkeypatch.setattr(brain, "NAMES", ["BITNADE"])
+    assert "discord" in names("what's going on in bitnade")
+
+
+def test_a_model_without_the_right_tool_gets_all_of_them(monkeypatch):
+    sent = []
+
+    def chat(name, system, text, tools, run_tool, cfg, extra, history=(), **kw):
+        sent.append(len(tools))
+        return "[neutral] I can't do that." if len(sent) == 1 else "[neutral] Done it."
+
+    monkeypatch.setattr(brain.providers, "chat", chat)
+    monkeypatch.setattr(brain, "candidates", lambda cfg, vram, resident: [("ollama", {})])
+    brain.ask("frobnicate the thing", [], cfg(), lambda n, a: "")
+    assert sent == [len(brain.tools_for("frobnicate the thing")), len(brain.TOOLS)]

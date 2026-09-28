@@ -103,6 +103,42 @@ TOOLS = [
 ]
 
 
+# Tools sent only when the request, or the conversation so far, is about them: every tool's description goes
+# with each request (~2,500 tokens for all), and fewer is faster and less for a small model to mix up. The
+# rest are always sent. If the model then says it can't, ask() tries again with every tool.
+GROUPS = [
+    ({"discord", "send_message"},
+     r"discord|\bdms?\b|\bvc\b|voice|call|\bring|messag|\bmsg|\btext|chat|channel|server|react|emoji|reply|ping|"
+     r"mention|deafen|\bmic\b|status|online|offline|invisible|summar|catch me up|unread|\btell|\bsend|\bjoin|"
+     r"\bleave|\bsay\b|bhej|\bbol|\bkeh"),
+    ({"set_reminder", "list_reminders", "cancel_reminder", "note_add", "notes_read"},
+     r"remind|alarm|\bnotes?\b|yaad|wake me|schedule|o'?clock|\b\d{1,2}(?::\d\d)? ?(?:am|pm)\b|\bat \d|tomorrow|tonight|"
+     r"morning|evening|every day|daily|write (?:it |that )?down|likh"),
+    ({"forget", "list_facts", "make_shortcut"},
+     r"forget|know about me|what do you know|who am i|my name|when (?:i|we) say|whenever i say|shortcut|"
+     r"save (?:that|this|it)|bhool"),
+    ({"system_status", "sync_apps", "power", "sleep", "lock_screen", "brightness", "dnd", "clip"},
+     r"cpu|gpu|\bram\b|memory|temp|\bhot\b|usage|load|status|sync|rescan|install|suspend|reboot|restart|shut|"
+     r"power|log ?out|sleep|unload|\block|bright|\bdim|dark|disturb|\bdnd\b|clip|replay|record|last \d+ ?(?:sec|min)"),
+    ({"clipboard_read", "clipboard_copy"}, r"clipboard|\bcop(?:y|ied)|paste"),
+]
+NAMES = []  # Discord servers, people and voice channels (set by the main loop): saying one brings the Discord tools
+CANT = re.compile(r"\b(?:can'?t|cannot|unable|not able|don'?t have (?:a |the |any )?(?:way|tool|access|ability)|"
+                  r"no (?:way|tool)|isn'?t possible|not possible)\b", re.I)
+
+
+def tools_for(text, history=()):
+    """The tools for this request: GROUPS whose words (or a Discord name) come up in it or the recent turns."""
+    said = " ".join([text, *(f"{u} {a}" for u, a in history)]).lower()
+    names = [n.lower() for n in NAMES if n]
+    skip = set()
+    for tools, words in GROUPS:
+        if re.search(words, said) or "discord" in tools and any(re.search(rf"\b{re.escape(n)}\b", said) for n in names):
+            continue
+        skip |= tools
+    return [t for t in TOOLS if t["name"] not in skip]
+
+
 def vram_free_gb(root="/sys/class/drm"):
     best = None
     for dev in pathlib.Path(root).glob("card*/device"):
@@ -192,8 +228,14 @@ def ask(text, facts, cfg, run_tool, history=(), vram=vram_free_gb, resident=resi
     for name, extra in candidates(cfg, vram, resident):
         try:
             think = should_think(text, cfg) and extra.get("num_gpu") != 0  # not on the slow CPU fallback
-            reply = providers.chat(name, system + (THINK_BRIEFLY if think else ""), text, TOOLS, tracked, cfg, extra,
+            tools = tools_for(text, history)
+            reply = providers.chat(name, system + (THINK_BRIEFLY if think else ""), text, tools, tracked, cfg, extra,
                                    history, **({"think": True} if think else {}))
+            if len(tools) < len(TOOLS) and not ran and not leaked_call(reply) and CANT.search(reply or ""):
+                # maybe it needed a tool that wasn't sent: once more with all of them
+                log.info("no tool fit (%d of %d sent), asking again with all", len(tools), len(TOOLS))
+                reply = providers.chat(name, system + (THINK_BRIEFLY if think else ""), text, TOOLS, tracked, cfg,
+                                       extra, history, **({"think": True} if think else {}))
             if leaked := leaked_call(reply):  # the call written out as text instead of made: make it (confirmations apply)
                 result = tracked(*leaked)
                 return result if result and result != "done" else "Done."
