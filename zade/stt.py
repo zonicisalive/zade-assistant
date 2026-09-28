@@ -64,15 +64,17 @@ def gpu_idle(cfg, now=None):
 
 def _qwen(audio, cfg, prompt):
     """Qwen3-ASR through llama.cpp's llama-server (on the GPU through Vulkan). The hint words go in as
-    context, and the reply is started as "language English" so short phrases aren't written in Hindi."""
+    context. With stt.language = english the reply is started as "language English" (Hindi is then translated);
+    with auto the model says which language it heard and writes it as spoken."""
     import base64
     import json
     import urllib.request
 
     msgs = ([{"role": "system", "content": prompt}] if prompt else []) + [
         {"role": "user", "content": [{"type": "input_audio", "input_audio": {
-            "data": base64.b64encode(to_wav(audio)).decode(), "format": "wav"}}]},
-        {"role": "assistant", "content": "language English<asr_text>"}]
+            "data": base64.b64encode(to_wav(audio)).decode(), "format": "wav"}}]}]
+    if cfg["stt"].get("language", "auto") == "english":
+        msgs.append({"role": "assistant", "content": "language English<asr_text>"})
     # room for what can be said in the recording (~3 words a second, speaking fast): a fixed cap cut long
     # requests off after about 50 s
     seconds = len(audio) / 16000

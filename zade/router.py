@@ -16,7 +16,8 @@ HALLUCINATIONS = {
 
 
 def normalize(text):
-    t = re.sub(r"[^a-z0-9' ]+", " ", text.lower())
+    # Devanagari letters and signs are kept (Hindi as spoken), its danda punctuation isn't
+    t = re.sub(r"[^a-z0-9'\u0900-\u0963\u0966-\u097f ]+", " ", text.lower())
     t = " ".join(FILLER.sub(" ", t).split())
     return "" if t in HALLUCINATIONS else t
 

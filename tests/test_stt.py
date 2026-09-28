@@ -215,7 +215,10 @@ def test_qwen_asr_provider(monkeypatch):
     assert S.transcribe(np.zeros(16000, np.int16), c, hotwords=("Discord",)) == "Open Firefox."
     msgs = sent["body"]["messages"]
     assert sent["url"].endswith(":8182/v1/chat/completions")
-    assert "Discord" in msgs[0]["content"] and msgs[-1] == {"role": "assistant", "content": "language English<asr_text>"}
+    assert "Discord" in msgs[0]["content"] and msgs[-1]["role"] == "user"  # auto: the language as spoken
+    c["stt"]["language"] = "english"
+    S.transcribe(np.zeros(16000, np.int16), c)
+    assert sent["body"]["messages"][-1] == {"role": "assistant", "content": "language English<asr_text>"}
     assert sent["body"]["max_tokens"] == 72  # 1 s of audio: room grows with the recording, 2 min get 1024
 
 

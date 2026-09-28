@@ -8,6 +8,10 @@ def find(name):
     return ("firefox", "firefox") if name == "firefox" else None
 
 
+def test_hindi_as_spoken_is_kept():
+    assert router.normalize("तू पागल है।") == "तू पागल है"
+
+
 def test_normalize():
     assert router.normalize("Zade, could you please Open Firefox?") == "open firefox"
     assert router.normalize("  Thank you.  ") == ""
