@@ -9,3 +9,4 @@ def no_real_discord(monkeypatch, tmp_path):
     monkeypatch.setattr(discord, "TOKEN", tmp_path / "no-discord-token")
     monkeypatch.setattr(discord, "SOCKET", tmp_path / "no-discord.sock")
     monkeypatch.setattr(discord, "wait_ready", lambda seconds=30: None)  # Discord on this machine: never waited for
+    monkeypatch.setattr(discord, "_running", lambda: True)  # and never started by a test

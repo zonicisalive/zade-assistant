@@ -71,8 +71,8 @@ TOOLS = [
     _t("press_keys", "Press keys, e.g. \"ctrl+c\", \"enter\"; several comma-separated.", ["keys"], keys=S),
     _t("clipboard_read", "Read the clipboard."),
     _t("clipboard_copy", "Copy text to the clipboard.", ["text"], text=S),
-    _t("discord", "Discord: mic, deafen, voice channels, calls, chats, messages, reactions, status, summaries. "
-       "Empty target = the open chat.",
+    _t("discord", "Discord: mic, deafen, voice channels, calls, reading chats, reactions, replies, status, summaries "
+       "(opens Discord if needed). To message someone use send_message. Empty target = the open chat.",
        ["action"], action={"type": "string", "enum": ["mute", "unmute", "deafen", "undeafen", "leave", "join", "call",
                                                       "open", "read", "unread", "status", "react", "unreact", "reply",
                                                       "edit", "delete", "set_status", "summarize"]},

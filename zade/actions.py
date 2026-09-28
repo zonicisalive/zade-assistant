@@ -580,7 +580,9 @@ def run(action, confirm):
         from . import discord
 
         try:
-            discord.wait_ready()
+            if not discord._running():  # "join staff vc" with Discord closed: open it first, then wait for it
+                _spawn(["gtk-launch", (find_app("discord") or ("discord",))[0]])
+            discord.wait_ready(45)
             return discord.run(a)
         except discord.Unavailable:
             raise Failed("Discord isn't open, or the ZadeControl plugin is off.") from None

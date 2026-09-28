@@ -459,3 +459,14 @@ def test_app_volume_never_changes_other_apps(monkeypatch):
     actions.app_volume("chrome", 40)                 # the word chrome: Google Chrome, not Chromium
     actions.app_volume("spotif", 30)                 # cut short, but only one app is that close
     assert calls == [["pactl", "set-sink-input-volume", "2", "40%"], ["pactl", "set-sink-input-volume", "3", "30%"]]
+
+
+def test_a_discord_request_opens_discord_first_when_it_is_closed(monkeypatch):
+    from zade import discord
+
+    calls = _calls(monkeypatch)
+    monkeypatch.setattr(discord, "_running", lambda: False)
+    monkeypatch.setattr(actions, "find_app", lambda name: ("discord", "Discord"))
+    monkeypatch.setattr(discord, "run", lambda a: "Joined the STAFF-VC channel in BITNADE.")
+    assert actions.run({"name": "discord", "args": {"action": "join", "target": "staff vc"}}, lambda q: True).startswith("Joined")
+    assert calls == [["gtk-launch", "discord"]]
