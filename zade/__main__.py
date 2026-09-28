@@ -855,11 +855,12 @@ def main():
     ptt = next(detectors) if bindings[0] else None    # push-to-talk key detector
     typer = next(detectors) if bindings[1] else None  # voice-typing key detector
 
-    def hear(timeout=None, released=None, cancelled=None, keep_reply=False):
+    def hear(timeout=None, released=None, cancelled=None, keep_reply=False, hands_free_if_early=False):
         stt.gpu_start(cfg)  # the GPU speech model (if used) loads while the user talks
         # keep_reply: while answering a question, keep it (e.g. a command to approve) on screen
         ui.show("listening", heard="", emotion="neutral", **({} if keep_reply else {"reply": ""}))
-        a = audio.record(stream, cfg, timeout, released, cancelled, on_level=ui.level)
+        a = audio.record(stream, cfg, timeout, released, cancelled, on_level=ui.level,
+                         hands_free_if_early=hands_free_if_early)
         if a is None:
             ui.show("idle")
             return None
@@ -1083,7 +1084,7 @@ def main():
             tts.speak(cfg["sound"]["wake_reply"], cfg)
             audio.drain(stream)
         text = hear(released=(lambda: not ptt.held()) if ptt_active else None,
-                    cancelled=ptt.cancelled if ptt_active else None)
+                    cancelled=ptt.cancelled if ptt_active else None, hands_free_if_early=True)
         if text is None:
             audio.drain(stream)
             continue

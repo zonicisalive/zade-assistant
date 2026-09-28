@@ -226,3 +226,42 @@ def test_a_sure_wake_skips_the_check(monkeypatch):
     polls = iter([None, None, "hotkey"])
     assert audio.wait_for_wake(object(), Model(0.3), 0.2, poll=lambda: next(polls), verify=veto, sure=0.5) == "hotkey"
     assert checked  # an unsure wake was checked (and vetoed)
+
+
+def _stream(levels):
+    frames = iter([np.full(audio.FRAME, v, np.int16) for v in levels])
+    return type("S", (), {"read": lambda self, n: (next(frames)[:, None], False)})()
+
+
+def test_steady_non_speech_sound_ends_the_recording(monkeypatch):
+    import copy
+
+    from zade import config
+
+    cfg = copy.deepcopy(config.DEFAULTS)
+    monkeypatch.setattr(audio, "noise", [100] * 50)  # a quiet room: threshold 500
+    # you talk for 2 s, then a game or music keeps playing loudly: loudness alone would wait for the safety stop
+    levels = [3000] * 25 + [1500] * 2000
+    heard = []
+
+    def speech_at_end(window, silence_s):
+        heard.append(1)
+        return len(heard) < 3  # the voice detector hears you at first, then only the music
+
+    out = audio.record(_stream(levels), cfg, speech_at_end=speech_at_end)
+    assert out is not None and len(out) < 6 * audio.RATE
+
+
+def test_letting_go_of_the_hotkey_before_speaking_keeps_listening(monkeypatch):
+    import copy
+
+    from zade import config
+
+    cfg = copy.deepcopy(config.DEFAULTS)
+    monkeypatch.setattr(audio, "noise", [100] * 50)
+    levels = [0] * 5 + [3000] * 20 + [0] * 15  # released at once; then you talk and pause
+    out = audio.record(_stream(levels), cfg, released=lambda: True, hands_free_if_early=True,
+                       speech_at_end=lambda w, s: True)
+    assert out is not None and len(out) > 20 * audio.FRAME  # your words were recorded, not an empty clip
+    out = audio.record(_stream([0] * 5), cfg, released=lambda: True, speech_at_end=lambda w, s: True)
+    assert len(out) == audio.FRAME  # dictation (no hands-free): letting go ends it

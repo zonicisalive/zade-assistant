@@ -131,12 +131,32 @@ def wait_for_wake(stream, model, threshold, poll=None, verify=None, sure=1.01):
             cooldown = COOLDOWN_FRAMES
 
 
-def record(stream, cfg, start_timeout_s=None, released=None, cancelled=None, on_level=None):
-    """Record one utterance. With `released` (push-to-talk), stop when it returns True, not on silence.
-    `cancelled` returning True drops the recording (returns None)."""
+def _speech_at_end(window, silence_s):
+    """Whether Silero VAD hears speech in the last `silence_s` of `window` (a TV's music, a fan or keys aren't)."""
+    from faster_whisper.vad import VadOptions, get_speech_timestamps
+
+    ts = get_speech_timestamps(window.astype(np.float32) / 32768, VadOptions(threshold=0.3, min_speech_duration_ms=150))
+    return any(t["end"] > len(window) - silence_s * RATE for t in ts)
+
+
+VAD_EVERY = 4  # frames (~0.3 s) between voice checks while waiting for the end
+
+
+def record(stream, cfg, start_timeout_s=None, released=None, cancelled=None, on_level=None, hands_free_if_early=False,
+           speech_at_end=_speech_at_end):
+    """Record one utterance. With `released` (push-to-talk), stop when it returns True, not on silence; with
+    hands_free_if_early, letting go before saying anything (holding only until the chime) keeps listening and
+    ends on silence instead. `cancelled` returning True drops the recording (returns None).
+    Besides loudness, it ends when the voice detector hears no speech for silence_s: steady sound louder than
+    the room (music, a fan, a game) kept recordings open until the safety stop."""
     a = cfg["audio"]
     thr = speech_threshold(noise, a["rms_threshold"], a["noise_factor"])
     frames, levels = [], []
+
+    def done(why):
+        log.info("recorded %.1fs, ended by %s (speech threshold %d)", len(frames) * FRAME_S, why, thr)
+        return np.concatenate(frames)
+
     while True:
         f = read(stream)
         frames.append(f)
@@ -147,15 +167,28 @@ def record(stream, cfg, start_timeout_s=None, released=None, cancelled=None, on_
         if released is not None:
             if cancelled is not None and cancelled():
                 return None
-            if released() or len(frames) >= round(limit_s(a) / FRAME_S):
-                return np.concatenate(frames)
-            continue
+            let_go = released()
+            if let_go and hands_free_if_early and max(levels) <= thr:
+                released = None  # let go before speaking: listen hands-free from here
+                log.info("key released before speech, listening hands-free")
+            elif let_go or len(frames) >= round(limit_s(a) / FRAME_S):
+                return done("the key")
+            else:
+                continue
         d = decide(levels, thr, a["silence_s"], limit_s(a), start_timeout_s or a["start_timeout_s"],
                    a.get("end_ratio", 0.25))
         if d == "abort":
             return None
         if d == "stop":
-            return np.concatenate(frames)
+            return done("the time limit" if len(frames) >= round(limit_s(a) / FRAME_S) else "silence")
+        first = next((i for i, level in enumerate(levels) if level > thr), len(levels))
+        if len(frames) - first >= round(1.2 / FRAME_S) and len(frames) % VAD_EVERY == 0:
+            window = np.concatenate(frames[-round(2.0 / FRAME_S):])
+            try:
+                if not speech_at_end(window, a["silence_s"]):
+                    return done("no more speech")
+            except Exception as e:  # the voice detector is a help, never a reason to lose the recording
+                log.warning("voice check failed: %s", e)
 
 
 def drain(stream):
