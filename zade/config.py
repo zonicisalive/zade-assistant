@@ -67,7 +67,9 @@ DEFAULTS = {
             "tts_voice": "alloy",
         },
     },
-    "tts": {"provider": "kokoro", "voice": "af_heart", "speed": 1.2, "piper_voice": "en_US-lessac-medium"},
+    # hindi_voice: Kokoro's voice for replies in Hindi (hf_alpha, hf_beta: female; hm_omega, hm_psi: male)
+    "tts": {"provider": "kokoro", "voice": "af_heart", "speed": 1.2, "piper_voice": "en_US-lessac-medium",
+            "hindi_voice": "hf_alpha"},
     "hotkey": {"enabled": True, "key": "KEY_LEFTMETA", "hold_s": 2.0},
     "dictation": {"enabled": True, "key": "KEY_RIGHTALT", "hold_s": 0.3},  # hold to type what you say
     # Questions that need the web: read results from SearXNG, or (disabled) open a search in the browser.

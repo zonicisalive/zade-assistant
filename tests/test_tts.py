@@ -101,3 +101,17 @@ def test_a_fallback_voice_goes_on_from_where_the_first_one_failed(monkeypatch):
     cfg = {"tts": {"provider": "kokoro", "voice": "en-IN-NeerjaNeural", "speed": 1.0}, "paths": {"data": "/tmp"}}
     tts.speak("First sentence. Second sentence. Third.", cfg)
     assert spoken == ["edge: First sentence.", "kokoro: Second sentence.", "kokoro: Third."]
+
+
+def test_a_hindi_reply_uses_the_hindi_voice(monkeypatch):
+    import copy
+
+    from zade import config, tts
+
+    used = []
+    monkeypatch.setattr(tts, "_speak_kokoro", lambda text, cfg, interrupt=None, done=None: used.append(cfg["tts"]["voice"]))
+    cfg = copy.deepcopy(config.DEFAULTS)
+    tts.speak("Hello there.", cfg)
+    tts.speak("श्रेयसिंग के पास सबसे ज़्यादा वाउचर्स हैं।", cfg)
+    assert used == ["af_heart", "hf_alpha"]
+    assert tts.sentences("पहला। दूसरा।") == ["पहला।", "दूसरा।"]

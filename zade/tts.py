@@ -66,8 +66,11 @@ def clean(text):
     return " ".join(text.split())
 
 
+HINDI = re.compile(r"[\u0900-\u097f]")
+
+
 def sentences(text):
-    return [s for s in re.split(r"(?<=[.!?])\s+", text.strip()) if s]
+    return [s for s in re.split(r"(?<=[.!?\u0964])\s+", text.strip()) if s]  # \u0964: Hindi's full stop
 
 
 def _speak_sentences(text, synth, interrupt, done):
@@ -93,7 +96,7 @@ def _speak_sentences(text, synth, interrupt, done):
 def _speak_kokoro(text, cfg, interrupt=None, done=None):
     t = cfg["tts"]
     k = _kokoro(cfg["paths"]["data"])
-    lang = "en-gb" if t["voice"].startswith("b") else "en-us"
+    lang = "hi" if t["voice"][:1] == "h" else "en-gb" if t["voice"].startswith("b") else "en-us"
     return _speak_sentences(text, lambda s: k.create(s, voice=t["voice"], speed=t["speed"], lang=lang), interrupt,
                             [] if done is None else done)
 
@@ -153,6 +156,9 @@ def speak(text, cfg, interrupt=None):
             log.warning("cloud TTS failed, using piper: %s", e)
     done = []  # sentences already spoken: a fallback voice goes on from there, never from the start
     rest = lambda: " ".join(sentences(text)[len(done):])
+    if HINDI.search(text) and t["provider"] == "kokoro":  # a reply in Hindi: Kokoro's Hindi voice reads it
+        t = {**t, "voice": t.get("hindi_voice") or "hf_alpha"}
+        cfg = {**cfg, "tts": t}
     if t["provider"] == "kokoro" and t["voice"].endswith("Neural"):  # an online Indian voice (Edge)
         try:
             return _speak_edge(text, cfg, interrupt, done)

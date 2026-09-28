@@ -16,7 +16,7 @@ from typing import Callable
 
 import numpy as np
 
-from . import actions, brain, config, info, memory, router
+from . import actions, brain, config, hinglish, info, memory, router
 
 log = logging.getLogger("zade")
 # Said as a whole clause ("stop", "Hey, stop.", "bas, rehne do"): stop talking and listening. Only words that
@@ -871,7 +871,9 @@ def main():
             except Exception as e:  # never lose the request over it
                 log.warning("voice focus failed: %s", e)
         words = [*memory.shortcuts(conn), *fact_words(memory.facts(conn)), *ctx.app_words, *ctx.discord_words]
-        text = stt.transcribe(a, cfg, hotwords=words)
+        # Hindi comes back in Devanagari: in English letters from here on, as Zade's phrases, yes/no answers
+        # and the overlay expect ("band karo", "haan")
+        text = hinglish.to_latin(stt.transcribe(a, cfg, hotwords=words))
         ui.show("thinking", heard=text.strip())
         return text
 
@@ -899,7 +901,8 @@ def main():
         spoke_at.append(time.perf_counter())
         wake.reset()
         spoken, _, detail = text.partition("\n")  # text after a newline is shown, not spoken
-        ui.show("speaking", reply=tts.clean(spoken) + (f"\n{detail}" if detail else ""))
+        # a Hindi reply is spoken in Devanagari (by the Hindi voice) and shown in English letters
+        ui.show("speaking", reply=hinglish.to_latin(tts.clean(spoken)) + (f"\n{detail}" if detail else ""))
         if not tts.speak(spoken, cfg, interrupt=interrupted):
             audio.drain(stream)
         ui.show("done")
