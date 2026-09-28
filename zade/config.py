@@ -99,8 +99,10 @@ DEFAULTS = {
     # sources: both | system | mic. Nothing is written to disk until you save.
     # hide_from_shell: run the screen recorder under Zade's own name, so the desktop shell's recording
     # indicator (which looks for "wf-recorder") doesn't show for the replay. Off: the indicator shows.
-    # fps: the screen replay's frame rate. 60 is smoother in fast games but costs the compositor about twice the GPU.
-    "clips": {"enabled": True, "seconds": 30, "sources": "both", "screen": True, "hide_from_shell": False, "fps": 30},
+    # fps: the screen replay's frame rate (the recorder still copies every frame the monitor draws; this is what's
+    # kept). height: its resolution, scaled on the GPU (1080 = 1080p; 0 = the screen's own).
+    "clips": {"enabled": True, "seconds": 30, "sources": "both", "screen": True, "hide_from_shell": False, "fps": 30,
+              "height": 1080},
     # Discord (ZadeControl plugin): read new messages aloud — off | dms | all (DMs and mentions) — and calls
     "discord": {"announce": "dms", "calls": True},
     # provider: spotify | youtube | youtube music ("play X on youtube" picks one for a single request).
