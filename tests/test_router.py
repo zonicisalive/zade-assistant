@@ -348,6 +348,8 @@ def test_everyday_sentences_are_not_discord_actions():
     assert D("go to the general channel on discord") is None or D("go to the general channel on discord")["action"] == "open"
     assert D("join the general channel on discord") == {"action": "join", "target": "general"}
     assert D("join the gaming vc on discord") == {"action": "join", "target": "gaming"}
+    assert D("join voice channel in bitnade called to staff vc") == {"action": "join", "target": "staff vc in bitnade"}
+    assert D("join the vc called staff vc in bitnade") == {"action": "join", "target": "staff vc in bitnade"}
     assert D("react or vue which is better") is None
     assert D("react fire") == {"action": "react", "emoji": "fire"}
     assert D("react fire to alex message on discord") is None  # the model sorts out who "alex" is

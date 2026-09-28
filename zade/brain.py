@@ -217,13 +217,16 @@ def _loads(text):
 
 
 def leaked_call(reply):
-    """(tool, args) when the reply is a tool call written as text: 'send_message {"to": ...}' or
-    '{"name": "remember", "arguments": {...}}'. Small models do this now and then; None otherwise."""
+    """(tool, args) when the reply is a tool call written as text: 'send_message {"to": ...}',
+    'Discord:join {"target": ...}' (tool:action) or '{"name": "remember", "arguments": {...}}'. Small models do
+    this now and then; None otherwise."""
     tools = {t["name"] for t in TOOLS}
     t = re.sub(r"^\s*(?:\[\w+\]\s*)?`*(?:json)?\s*|\s*`*\s*(?:\[\w+\])?\s*$", "", reply or "")
     try:
-        if m := re.fullmatch(r"(\w+)\s*(\{.*\})", t, re.S):
-            name, args = m[1], _loads(m[2])
+        if m := re.fullmatch(r"(\w+)(?:[:.](\w+))?\s*(\{.*\})", t, re.S):
+            name, args = m[1].lower(), _loads(m[3])
+            if m[2] and isinstance(args, dict):
+                args.setdefault("action", m[2].lower())
         elif t.startswith("{"):
             obj = _loads(t)
             name, args = obj.get("name"), obj.get("arguments") or obj.get("parameters") or {}

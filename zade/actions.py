@@ -580,6 +580,7 @@ def run(action, confirm):
         from . import discord
 
         try:
+            discord.wait_ready()
             return discord.run(a)
         except discord.Unavailable:
             raise Failed("Discord isn't open, or the ZadeControl plugin is off.") from None

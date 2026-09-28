@@ -177,6 +177,8 @@ def test_a_tool_call_written_as_text_is_made():
     assert brain.leaked_call('[neutral] {"name": "remember", "arguments": {"fact": "I like tea"}}') == \
         ("remember", {"fact": "I like tea"})
     assert brain.leaked_call("I opened Discord.") is None
+    assert brain.leaked_call('Discord:join {"target": "staff-vc in Bitnade"}') == \
+        ("discord", {"target": "staff-vc in Bitnade", "action": "join"})
     assert brain.leaked_call('rm_rf {"path": "/"}') is None          # not one of Zade's tools
 
 

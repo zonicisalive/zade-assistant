@@ -1,6 +1,7 @@
 import pytest
 
 from zade import discord
+from zade.discord import wait_ready as real_wait_ready  # conftest stubs discord.wait_ready
 
 
 def test_spoken_replies(monkeypatch):
@@ -59,6 +60,26 @@ def test_calls_go_over_the_plugins_socket(monkeypatch, tmp_path):
         srv.shutdown()
         srv.server_close()
     assert seen[0] == ("Bearer " + "t" * 48, {"name": "status", "args": {}})
+
+
+def test_waits_while_discord_starts(monkeypatch):
+    monkeypatch.setattr("time.sleep", lambda s: None)
+    answers = [discord.Unavailable("no socket yet"), {"ok": True, "servers": []}, {"ok": True, "servers": ["BITNADE"]}]
+
+    def call(tool, timeout=10, **a):
+        r = answers.pop(0)
+        if isinstance(r, Exception):
+            raise r
+        return r
+
+    monkeypatch.setattr(discord, "call", call)
+    monkeypatch.setattr(discord, "_running", lambda: True)
+    real_wait_ready()
+    assert answers == []
+    monkeypatch.setattr(discord, "_running", lambda: False)  # not running at all: no waiting
+    answers.append(discord.Unavailable("closed"))
+    with pytest.raises(discord.Unavailable):
+        real_wait_ready()
 
 
 def test_spoken_names_are_cleaned_up():

@@ -62,6 +62,31 @@ def call(tool, timeout=10, **args):
     return out
 
 
+def _running():
+    import subprocess
+
+    try:
+        return subprocess.run(["pgrep", "-xi", "discord|vesktop"], capture_output=True).returncode == 0
+    except OSError:
+        return False
+
+
+def wait_ready(seconds=30):
+    """Wait while Discord is starting ("open discord and join staff vc": the plugin comes up seconds after the
+    window, and the servers a little later). Raises Unavailable at once if Discord isn't running."""
+    import time
+
+    deadline = time.monotonic() + seconds
+    while True:
+        try:
+            if call("servers", timeout=2)["servers"] or time.monotonic() > deadline:
+                return
+        except Unavailable:
+            if not _running() or time.monotonic() > deadline:
+                raise
+        time.sleep(1)
+
+
 def available():
     try:
         call("status", timeout=2)

@@ -460,6 +460,7 @@ def discord_confirm(ctx, a, from_model):
 
     act, text, name = a["action"], a.get("text", ""), discord.clean_name(a.get("target") or "")
     try:
+        discord.wait_ready()
         if act == "call":  # "call Rick" must not ring Nick: a name that was only close is asked about
             p = discord.call("call", name=name, dry=True)
             if (from_model or not p["exact"]) and not ctx.confirm(f"Call {p['calling']} on Discord?"):
@@ -524,6 +525,7 @@ def dispatch(ctx, action, from_model=False):
             from . import discord
 
             try:  # with the ZadeControl plugin: the person it will really go to, and sent without key presses
+                discord.wait_ready()
                 found = discord.call("find", name=discord.clean_name(a.get("to", "")))
             except discord.Unavailable:
                 found = None  # no plugin: Discord's quick switcher, by keyboard

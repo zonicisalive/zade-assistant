@@ -134,6 +134,12 @@ def parse_discord(text):
     if re.fullmatch(rf"(?:leave|disconnect(?: from)?|exit|quit|hang up(?: on)?|end|drop(?: out of)?) {_VC}{_DC}"
                     rf"|hang up|disconnect me{_DC}|(?:vc|call) (?:se )?(?:nikal|nikalo|chhodo|leave karo)", t):
         return {"action": "leave"}
+    # "join voice channel in bitnade called staff vc", "join the vc called staff vc in bitnade"
+    if m := re.fullmatch(rf"(?:join|connect to|hop in|hop into|get in|get into) (?:the |a )?(?:vc|voice channel|voice chat)"
+                         rf"(?: (?:in|on|of) (.+?))? (?:called|named)(?: to| the)? (.+?)(?: (?:in|on) (?!discord$)(.+?))?"
+                         rf"(?: server)?{_DC}", t):
+        server = m[1] or m[3]
+        return {"action": "join", "target": m[2] + (f" in {server}" if server else "")}
     # "join the gaming vc", "join a staff-vc channel in BITNADE (not bitnade server)": the server stays in the
     # target, and a trailing "not ..." only says which one it isn't. A plain "channel" also needs "join" and a
     # vc, voice or discord said: "go to the general channel" is no reason to go live on the mic.
