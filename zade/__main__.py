@@ -395,6 +395,29 @@ def guarded(step, *args):
             log.warning("%s failed: %s", step.__name__, e)
 
 
+def exit_on_sigterm():
+    """Stop cleanly on SIGTERM even when the main thread is stuck in C: at shutdown the audio server goes away
+    first, a microphone read never returns, and a Python signal handler (which only runs between bytecodes of
+    the main thread) never ran, so systemd waited 90 s and killed Zade. The signal now wakes a thread instead,
+    which runs the exit handlers and exits."""
+    import atexit as _atexit
+
+    r, w = os.pipe()
+    os.set_blocking(w, False)
+    signal.set_wakeup_fd(w)  # the C-level handler writes here as soon as the signal arrives
+    signal.signal(signal.SIGTERM, lambda *_: None)
+
+    def wait():
+        os.read(r, 1)
+        log.info("stopping")
+        try:
+            _atexit._run_exitfuncs()
+        finally:
+            os._exit(0)
+
+    threading.Thread(target=wait, daemon=True).start()
+
+
 def pump_discord(ctx):
     """New Discord messages and calls from the ZadeControl plugin, to announce (kinds as set in discord.*).
     During quiet hours, Do Not Disturb or a snooze they're dropped: Discord keeps them as unread anyway."""
@@ -939,7 +962,7 @@ def main():
     overlay = ui.start(cfg)
     if overlay:
         atexit.register(overlay.terminate)
-    signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))  # run exit handlers (close the overlay) on stop
+    exit_on_sigterm()  # run exit handlers (close the overlay, stop the recorders) on stop
 
     last_check = [0.0]
     typed = []  # commands typed in the desktop app

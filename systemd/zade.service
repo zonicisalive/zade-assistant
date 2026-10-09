@@ -6,6 +6,8 @@ After=graphical-session.target pipewire.service wireplumber.service pipewire-pul
 Wants=pipewire.service wireplumber.service
 
 [Service]
+# Zade stops within a second; never wait the default 90 s if something hangs
+TimeoutStopSec=10
 ExecStart=%h/Zade/.venv/bin/zade
 Restart=on-failure
 RestartSec=5

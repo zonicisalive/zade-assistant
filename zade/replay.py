@@ -113,14 +113,16 @@ class Screen:
 
     CHUNK = 5
 
-    def __init__(self, seconds, binary="wf-recorder", fps=30, height=1080):
+    def __init__(self, seconds, binary="wf-recorder", fps=30, height=1080, qp=28):
         for old in pathlib.Path("/dev/shm").glob("zade-screen-*"):  # left by a Zade that was killed: RAM held for nothing
             shutil.rmtree(old, ignore_errors=True)
         self.dir = pathlib.Path(tempfile.mkdtemp(prefix="zade-screen-", dir="/dev/shm"))
         # fps: every frame is copied off the desktop by the compositor, so 60 costs about twice the GPU of 30
         # height: scaled on the GPU while encoding (1440p -> 1080p: less to encode and store); 0 = as the screen
+        # -b 0: disable B-frames (IPPP), eliminating lookahead buffer and VRAM motion estimation overhead.
+        # -p qp={qp}: constant quantization avoiding unconstrained bitrate spikes and high encoder clock states.
         scale = f"scale_vaapi=w=-2:h={height}:format=nv12" if height else "scale_vaapi=format=nv12"
-        rec = [binary, "-c", "h264_vaapi", "-F", scale, "-r", str(fps), "-m", "mpegts", "-f", "/dev/stdout"]
+        rec = [binary, "-c", "h264_vaapi", "-b", "0", "-p", f"qp={qp}", "-F", scale, "-r", str(fps), "-m", "mpegts", "-f", "/dev/stdout"]
         if device := gpu_device():
             rec[1:1] = ["-d", device]
         if output := screen_output():  # the monitor focused now: a restart after it went off picks again
@@ -167,9 +169,9 @@ def mp3(samples, path):
 
 
 class Replay:
-    def __init__(self, seconds=30, sources="both", screen=False, hidden=False, fps=30, height=1080):
+    def __init__(self, seconds=30, sources="both", screen=False, hidden=False, fps=30, height=1080, qp=28):
         self.seconds, self.sources, self.screen_on, self.hidden = seconds, sources, screen, hidden
-        self.fps, self.height = fps, height
+        self.fps, self.height, self.qp = fps, height, qp
         names = ["system", "mic"] if sources == "both" else [sources]
         self.rings, self.screen, self.binary = {}, None, None
         try:  # a part that fails to start (ffmpeg missing, /dev/shm full) stops the ones already running
@@ -179,7 +181,7 @@ class Replay:
             if screen:
                 self.binary = recorder(hidden)
                 if self.binary:
-                    self.screen = Screen(seconds, self.binary, fps, height)
+                    self.screen = Screen(seconds, self.binary, fps, height, qp)
                 else:
                     log.warning("screen replay off: wf-recorder isn't installed")
         except BaseException:
@@ -196,7 +198,7 @@ class Replay:
         if self.screen and not self.screen.alive():
             dead.append("screen")
             self.screen.stop()
-            self.screen = Screen(self.seconds, self.binary, self.fps, self.height)
+            self.screen = Screen(self.seconds, self.binary, self.fps, self.height, self.qp)
         return dead
 
     def save(self, seconds=None, folder=FOLDER):

@@ -768,3 +768,21 @@ def test_hindi_goes_to_the_model_in_hindi_and_to_patterns_in_english_letters():
     z.handle(ctx, "तू पागल है क्या")
     assert got == ["तू पागल है क्या"]                       # the model answers in Hindi: the Hindi voice speaks it
     assert z.handle(ctx, "रुको") == "" and len(got) == 1      # "ruko": Zade's own stop phrase, in Devanagari
+
+
+def test_sigterm_stops_zade_even_when_the_main_thread_is_stuck(tmp_path):
+    import subprocess
+    import sys
+    import time
+
+    code = ("import atexit, time, pathlib\n"
+            "from zade import __main__ as z\n"
+            f"atexit.register(lambda: pathlib.Path({str(tmp_path / 'done')!r}).write_text('ok'))\n"
+            "z.exit_on_sigterm()\n"
+            "import threading; threading.Event().wait()  # stuck, like a microphone read that never returns\n")
+    p = subprocess.Popen([sys.executable, "-c", code])
+    time.sleep(1.5)
+    t = time.monotonic()
+    p.terminate()
+    assert p.wait(5) == 0 and time.monotonic() - t < 3
+    assert (tmp_path / "done").read_text() == "ok"  # the exit handlers ran
