@@ -46,20 +46,23 @@ def decide(levels, thr, silence_s, max_s, start_timeout_s, end_ratio=0.25):
     return "stop" if n - 1 - last >= round(silence_s / FRAME_S) else "wait"
 
 
-def open_stream(wait_s=120, retry_s=1.0):
-    """The microphone stream. Right after login the audio session may not be up yet: wait for it here
-    instead of crashing (a restart reloads every model)."""
+def open_stream(wait_s=None, retry_s=1.0):
+    """The microphone stream. Right after login the audio session may not be up yet, or PipeWire may not
+    have created the mic for minutes (it happened for 14): wait for it here, however long it takes, instead
+    of crashing and restarting every 2 minutes (each restart reloads every model). wait_s: give up after."""
     waited = 0.0
     while True:
         try:
             stream = sd.InputStream(samplerate=RATE, channels=1, dtype="int16", blocksize=FRAME)
             stream.start()
+            if waited:
+                log.info("microphone available after %.0fs", waited)
             return stream
         except sd.PortAudioError as e:
-            if waited >= wait_s:
+            if wait_s is not None and waited >= wait_s:
                 raise
-            if waited == 0:
-                log.warning("microphone not available yet, waiting: %s", e)
+            if waited % 60 == 0:  # at the start, then once a minute
+                log.warning("no microphone yet, waiting for it (%.0fs so far): %s", waited, e)
             time.sleep(retry_s)
             waited += retry_s
             sd._terminate()  # PortAudio lists devices once: re-initialise to see the new one
